@@ -1,0 +1,110 @@
+openapi: 3.1.0
+info:
+  title: DantShaant Orchestrator API
+  version: 0.1.0
+  description: |
+    Central FastAPI gateway. Composes Teeth Analyzer + Diagnosis for the
+    analyze_teeth_image MCP tool flow. Future phases add RAG, dentist, MCP.
+
+servers:
+  - url: http://localhost:8000
+    description: Local orchestrator
+
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Orchestrator and downstream service status
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrchestratorHealth"
+
+  /v1/teeth/analyze:
+    post:
+      operationId: analyzeTeethPipeline
+      summary: Full pipeline — vision analyze then clinical diagnose
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeethAnalyzePipelineRequest"
+      responses:
+        "200":
+          description: Pipeline complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeethAnalyzePipelineResponse"
+        "502":
+          description: Downstream service failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Downstream service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    OrchestratorHealth:
+      type: object
+      required: [status, service, version, dependencies]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        service:
+          type: string
+          const: orchestrator
+        version:
+          type: string
+        dependencies:
+          type: object
+          additionalProperties:
+            type: string
+            enum: [ok, unreachable, degraded]
+
+    TeethAnalyzePipelineRequest:
+      type: object
+      required: [user_id, image_base64]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        image_base64:
+          type: string
+        image_mime_type:
+          type: string
+          default: image/jpeg
+        locale:
+          type: string
+          default: en
+
+    TeethAnalyzePipelineResponse:
+      type: object
+      required: [analysis, diagnosis]
+      properties:
+        analysis:
+          type: object
+          description: Teeth Analyzer response (see teeth_analyzer.openapi.yaml)
+        diagnosis:
+          type: object
+          description: Diagnosis response (see diagnosis.openapi.yaml)
+
+    ErrorResponse:
+      type: object
+      required: [detail, code]
+      properties:
+        code:
+          type: string
+        detail:
+          type: string

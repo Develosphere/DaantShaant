@@ -1,0 +1,37 @@
+[project]
+name = "dantshaant-orchestrator"
+version = "0.1.0"
+description = "Central FastAPI gateway for DantShaant"
+requires-python = ">=3.11"
+dependencies = [
+    "dantshaant-common",
+    "fastapi>=0.115.0",
+    "httpx>=0.27.0",
+    "pydantic-settings>=2.2.0",
+    "uvicorn[standard]>=0.30.0",
+    "motor>=3.3.0",
+    "pymongo>=4.6.0",
+    # RAG dependencies
+    "sentence-transformers>=2.2.0",
+    "faiss-cpu>=1.7.0",
+    "PyPDF2>=3.0.0",
+    "python-docx>=0.8.11",
+    "numpy>=1.24.0",
+    # Dentist Portal auth
+    "bcrypt>=4.0.0",
+    "pyjwt>=2.8.0",
+    "email-validator>=2.0.0",
+    # Recommendation AI (LangGraph) — uses Gemini via TEETH_ANALYZER_GEMINI_* keys
+    "langgraph>=0.2.40",
+    "langchain-core>=0.3.0",
+]
+
+[tool.uv.sources]
+dantshaant-common = { path = "../packages/dantshaant_common", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/orchestrator"]

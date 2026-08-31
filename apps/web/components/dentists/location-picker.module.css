@@ -1,0 +1,218 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.modal {
+  width: 100%;
+  max-width: 520px;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 2px solid rgba(0, 162, 240, 0.25);
+  border-radius: 20px;
+  padding: 2rem;
+  box-shadow: 0 24px 80px rgba(0, 162, 240, 0.3);
+  overflow: visible;
+}
+
+.title {
+  margin: 0 0 0.5rem;
+  font-size: 1.4rem;
+  font-weight: 900;
+  font-family: var(--font-anton), var(--font-syne, var(--font-jakarta)), sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  color: #073564;
+}
+
+.sub {
+  margin: 0 0 1.5rem;
+  font-size: 0.92rem;
+  color: #5a5a5a;
+  line-height: 1.5;
+}
+
+.label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #073564;
+  margin-bottom: 0.65rem;
+}
+
+.inputRow {
+  display: flex;
+  gap: 0.65rem;
+  align-items: stretch;
+  margin-bottom: 0.65rem;
+}
+
+.inputWrap {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+}
+
+.placePicker {
+  display: block;
+  width: 100%;
+  color-scheme: light;
+  --gmpx-color-surface: #ffffff;
+  --gmpx-color-on-surface: #000000;
+  --gmpx-color-on-surface-variant: #5a5a5a;
+  --gmpx-color-primary: #00a2f0;
+  --gmpx-font-family-base: inherit;
+  --gmpx-font-size-base: 0.92rem;
+}
+
+.input {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  font-family: inherit;
+  font-size: 0.92rem;
+  color: #000000;
+  background: rgba(0, 162, 240, 0.03);
+  border: 2px solid rgba(0, 162, 240, 0.2);
+  border-radius: 10px;
+  outline: none;
+  box-sizing: border-box;
+  background-image: none !important;
+  transition: all 0.2s ease;
+}
+
+.input:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.input:focus {
+  border-color: #00a2f0;
+  box-shadow: 0 0 0 3px rgba(0, 162, 240, 0.1);
+  background: rgba(0, 162, 240, 0.05);
+}
+
+.gpsBtn {
+  flex-shrink: 0;
+  width: 52px;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  background: linear-gradient(135deg, #00a2f0, #073564);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 162, 240, 0.25);
+  transition: all 0.25s ease;
+}
+
+.gpsSpin {
+  animation: gpsSpin 0.9s linear infinite;
+}
+
+@keyframes gpsSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.gpsBtn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 162, 240, 0.35);
+}
+
+.gpsBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.hint {
+  font-size: 0.78rem;
+  color: #8a8a8a;
+  margin: 0 0 1.25rem;
+  line-height: 1.4;
+}
+
+.selected {
+  font-size: 0.85rem;
+  color: #16a34a;
+  font-weight: 600;
+  margin: 0 0 1.25rem;
+  padding: 0.75rem 1rem;
+  background: rgba(34, 197, 94, 0.1);
+  border-radius: 10px;
+  border: 2px solid rgba(34, 197, 94, 0.3);
+}
+
+.error {
+  font-size: 0.85rem;
+  color: #d32f2f;
+  font-weight: 500;
+  margin: 0 0 1.25rem;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 107, 122, 0.08);
+  border: 2px solid rgba(255, 107, 122, 0.3);
+  border-radius: 10px;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.btnPrimary {
+  flex: 1;
+  padding: 1rem 1.5rem;
+  font-weight: 900;
+  font-family: var(--font-anton), var(--font-syne, inherit), sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.95rem;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  background: linear-gradient(135deg, #00a2f0, #073564);
+  color: #ffffff;
+  box-shadow: 0 6px 20px rgba(0, 162, 240, 0.3);
+  transition: all 0.25s ease;
+}
+
+.btnPrimary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(0, 162, 240, 0.4);
+}
+
+.btnPrimary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btnGhost {
+  padding: 1rem 1.5rem;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  border-radius: 10px;
+  cursor: pointer;
+  background: rgba(0, 162, 240, 0.08);
+  border: 2px solid rgba(0, 162, 240, 0.25);
+  color: #073564;
+  transition: all 0.25s ease;
+}
+
+.btnGhost:hover:not(:disabled) {
+  background: rgba(0, 162, 240, 0.15);
+  border-color: #00a2f0;
+}

@@ -1,0 +1,147 @@
+openapi: 3.1.0
+info:
+  title: DantShaant Teeth Analyzer API
+  version: 0.1.0
+  description: |
+    Vision inference service. Accepts a teeth photo and returns raw visual
+    findings (regions, labels, scores). Does not apply clinical severity rules;
+    that is the Diagnosis service contract.
+
+servers:
+  - url: http://localhost:8001
+    description: Local teeth-analyzer service
+
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Service health
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /v1/analyze:
+    post:
+      operationId: analyzeTeethImage
+      summary: Run vision model on a teeth image
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalyzeRequest"
+      responses:
+        "200":
+          description: Visual analysis complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyzeResponse"
+        "400":
+          description: Invalid image or request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Image quality too low for analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, service, version]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        service:
+          type: string
+          const: teeth-analyzer
+        version:
+          type: string
+        model_id:
+          type: string
+          description: Loaded vision model identifier (e.g. stub, llava-lora-v1)
+
+    AnalyzeRequest:
+      type: object
+      required: [user_id, image_base64]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        image_base64:
+          type: string
+          description: Base64-encoded image (JPEG/PNG)
+        image_mime_type:
+          type: string
+          default: image/jpeg
+          enum: [image/jpeg, image/png, image/webp]
+        locale:
+          type: string
+          default: en
+          description: Hint for multilingual captioning (en, ur)
+
+    VisualFinding:
+      type: object
+      required: [label, confidence]
+      properties:
+        label:
+          type: string
+          description: Raw vision label (pre-clinical mapping)
+          examples: [plaque_detected, discoloration, cavity_suspect, healthy_tissue]
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        region:
+          type: string
+          description: Optional tooth/quadrant hint from model
+          examples: [upper_anterior, lower_molar_left]
+
+    AnalyzeResponse:
+      type: object
+      required: [analysis_id, user_id, findings, model_id, analyzed_at]
+      properties:
+        analysis_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        findings:
+          type: array
+          items:
+            $ref: "#/components/schemas/VisualFinding"
+        overall_quality_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Photo usability for diagnosis (lighting, blur, framing)
+        model_id:
+          type: string
+        inference_ms:
+          type: integer
+        analyzed_at:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      required: [detail, code]
+      properties:
+        code:
+          type: string
+        detail:
+          type: string

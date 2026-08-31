@@ -1,0 +1,186 @@
+openapi: 3.1.0
+info:
+  title: DantShaant Diagnosis API
+  version: 0.1.0
+  description: |
+    Clinical classification service. Maps Teeth Analyzer visual findings to
+    the DantShaant condition schema (severity, confidence thresholds, actions).
+    Independent of vision model implementation.
+
+servers:
+  - url: http://localhost:8002
+    description: Local diagnosis service
+
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Service health
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /v1/diagnose:
+    post:
+      operationId: diagnoseFromAnalysis
+      summary: Produce clinical condition from analyzer output
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DiagnoseRequest"
+      responses:
+        "200":
+          description: Diagnosis produced
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiagnoseResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, service, version]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        service:
+          type: string
+          const: diagnosis
+        version:
+          type: string
+
+    VisualFinding:
+      type: object
+      required: [label, confidence]
+      properties:
+        label:
+          type: string
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        region:
+          type: string
+
+    DiagnoseRequest:
+      type: object
+      required: [user_id, analysis_id, findings]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        analysis_id:
+          type: string
+          format: uuid
+        findings:
+          type: array
+          items:
+            $ref: "#/components/schemas/VisualFinding"
+        overall_quality_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        patient_history_summary:
+          type: string
+          description: Optional condensed history for severity adjustment
+
+    ConditionLabel:
+      type: string
+      enum:
+        - Healthy
+        - Plaque / Tartar
+        - Early Cavity
+        - Advanced Cavity
+        - Gingivitis
+        - Severe Gum Disease
+        - Discoloration
+        - Unknown
+
+    Severity:
+      type: string
+      enum: [None, Mild, Moderate, High, Critical]
+
+    ActionTrigger:
+      type: string
+      enum:
+        - maintenance_reminder
+        - product_suggest_brushing_alarm
+        - product_dentist_2_weeks
+        - dentist_urgent_1_week
+        - antibacterial_product_dentist
+        - immediate_dentist_referral
+        - whitening_product
+        - request_clearer_photo
+
+    DiagnoseResponse:
+      type: object
+      required:
+        - diagnosis_id
+        - user_id
+        - analysis_id
+        - condition_label
+        - severity
+        - confidence
+        - meets_threshold
+        - action_trigger
+        - diagnosed_at
+      properties:
+        diagnosis_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        analysis_id:
+          type: string
+          format: uuid
+        condition_label:
+          $ref: "#/components/schemas/ConditionLabel"
+        severity:
+          $ref: "#/components/schemas/Severity"
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        confidence_threshold:
+          type: number
+          format: float
+          description: Minimum confidence required for this condition (Table 8)
+        meets_threshold:
+          type: boolean
+        action_trigger:
+          $ref: "#/components/schemas/ActionTrigger"
+        disclaimer:
+          type: string
+          default: >-
+            This is an awareness tool, not a medical diagnosis. Please consult
+            a licensed dentist for confirmation.
+        diagnosed_at:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      required: [detail, code]
+      properties:
+        code:
+          type: string
+        detail:
+          type: string

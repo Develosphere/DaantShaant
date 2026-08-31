@@ -1,0 +1,554 @@
+/* ════════════════════════════════════════════════════
+   Role Selection Page — Matches Landing Page Theme
+   Colors: #00a2f0 (primary), #073564 (navy), #b1e5ff (light-blue)
+════════════════════════════════════════════════════ */
+
+.page {
+  --primary: #00a2f0;
+  --navy: #073564;
+  --light-blue: #b1e5ff;
+  --white: #ffffff;
+  --black: #000000;
+  --accent-orange: #ff5c00;
+  --accent-green: #39b54a;
+  --font-display: var(--font-anton), "Anton", sans-serif;
+  --font-body: var(--font-poppins), "Poppins", system-ui, sans-serif;
+  --nav-h: 80px;
+
+  min-height: 100vh;
+  background: linear-gradient(135deg, 
+    rgba(0, 162, 240, 0.03) 0%, 
+    rgba(255, 255, 255, 1) 40%,
+    rgba(7, 53, 100, 0.04) 100%
+  );
+  color: var(--black);
+  font-family: var(--font-body);
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* ═══════════════════════════════ NAVBAR ═══════════════════════════════ */
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  height: var(--nav-h);
+}
+
+.navInner {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 2.5rem;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.logoLink {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.logoImg {
+  height: 52px;
+  width: auto;
+  object-fit: contain;
+}
+
+/* ═══════════════════════════════ MAIN CONTENT ═══════════════════════════════ */
+.main {
+  position: relative;
+  z-index: 1;
+  min-height: calc(100vh - var(--nav-h));
+  display: flex;
+  align-items: center;
+  padding: 4rem 2rem;
+}
+
+.content {
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ═══════════════════════════════ HEADER ═══════════════════════════════ */
+.header {
+  text-align: center;
+  margin-bottom: 4rem;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: clamp(3rem, 7vw, 6rem);
+  font-weight: 900;
+  color: var(--primary);
+  text-transform: uppercase;
+  margin: 0 0 1rem;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+.subtitle {
+  font-family: var(--font-body);
+  font-size: clamp(1rem, 2vw, 1.5rem);
+  font-weight: 400;
+  color: var(--black);
+  margin: 0;
+  opacity: 0.85;
+}
+
+/* ═══════════════════════════════ ROLE CARDS ═══════════════════════════════ */
+.cardsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2.5rem;
+  margin-bottom: 3rem;
+}
+
+.card {
+  background: var(--white);
+  border-radius: 16px;
+  padding: 3rem 2rem;
+  text-align: center;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  border: 3px solid transparent;
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: var(--primary);
+  transition: height 0.3s ease;
+}
+
+.card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+}
+
+.card:hover::before {
+  height: 100%;
+  opacity: 0.03;
+}
+
+/* Card Color Variants */
+.cardBlue {
+  border-color: rgba(0, 162, 240, 0.2);
+}
+
+.cardBlue::before {
+  background: var(--primary);
+}
+
+.cardNavy {
+  border-color: rgba(7, 53, 100, 0.2);
+}
+
+.cardNavy::before {
+  background: var(--navy);
+}
+
+.cardPrimary {
+  border-color: rgba(0, 162, 240, 0.2);
+}
+
+.cardPrimary::before {
+  background: var(--primary);
+}
+
+/* Card Icon */
+.cardIcon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(0, 162, 240, 0.1), rgba(7, 53, 100, 0.08));
+  color: var(--navy);
+  transition: background 0.3s ease, transform 0.3s ease;
+}
+
+.cardBlue .cardIcon {
+  background: linear-gradient(135deg, rgba(0, 162, 240, 0.12), rgba(0, 162, 240, 0.06));
+  color: var(--primary);
+}
+
+.cardNavy .cardIcon {
+  background: linear-gradient(135deg, rgba(7, 53, 100, 0.15), rgba(7, 53, 100, 0.08));
+  color: var(--navy);
+}
+
+.cardPrimary .cardIcon {
+  background: linear-gradient(135deg, rgba(0, 162, 240, 0.12), rgba(57, 181, 74, 0.08));
+  color: var(--primary);
+}
+
+.card:hover .cardIcon {
+  transform: scale(1.1) rotate(5deg);
+}
+
+/* Card Title */
+.cardTitle {
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 3vw, 2.5rem);
+  font-weight: 900;
+  color: var(--navy);
+  text-transform: uppercase;
+  margin: 0 0 1rem;
+  line-height: 1;
+}
+
+.cardBlue .cardTitle {
+  color: var(--primary);
+}
+
+.cardNavy .cardTitle {
+  color: var(--navy);
+}
+
+.cardPrimary .cardTitle {
+  color: var(--primary);
+}
+
+/* Card Description */
+.cardDescription {
+  font-family: var(--font-body);
+  font-size: clamp(0.9rem, 1.2vw, 1rem);
+  font-weight: 400;
+  color: var(--black);
+  line-height: 1.6;
+  margin: 0 0 2rem;
+  opacity: 0.8;
+  min-height: 3.2em;
+}
+
+/* Card Actions */
+.cardActions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.btnPrimary,
+.btnSecondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem 2rem;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-decoration: none;
+  border-radius: 8px;
+  transition: all 0.25s ease;
+  cursor: pointer;
+  border: 3px solid transparent;
+}
+
+.btnPrimary {
+  color: var(--white);
+  background: var(--navy);
+  border-color: var(--navy);
+}
+
+.btnPrimary:hover {
+  background: var(--primary);
+  border-color: var(--primary);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 162, 240, 0.3);
+}
+
+.btnSecondary {
+  color: var(--navy);
+  background: transparent;
+  border-color: var(--navy);
+}
+
+.btnSecondary:hover {
+  color: var(--white);
+  background: var(--navy);
+  transform: translateY(-2px);
+}
+
+/* Specific button colors per card */
+.cardBlue .btnPrimary {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.cardBlue .btnPrimary:hover {
+  background: var(--navy);
+  border-color: var(--navy);
+}
+
+.cardBlue .btnSecondary {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.cardBlue .btnSecondary:hover {
+  background: var(--primary);
+  color: var(--white);
+}
+
+.cardNavy .btnPrimary {
+  background: var(--navy);
+  border-color: var(--navy);
+}
+
+.cardNavy .btnPrimary:hover {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.cardNavy .btnSecondary {
+  color: var(--navy);
+  border-color: var(--navy);
+}
+
+.cardNavy .btnSecondary:hover {
+  background: var(--navy);
+  color: var(--white);
+}
+
+.cardPrimary .btnPrimary {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.cardPrimary .btnPrimary:hover {
+  background: var(--navy);
+  border-color: var(--navy);
+}
+
+.cardPrimary .btnSecondary {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.cardPrimary .btnSecondary:hover {
+  background: var(--primary);
+  color: var(--white);
+}
+
+/* ═══════════════════════════════ BACK LINK ═══════════════════════════════ */
+.backLink {
+  text-align: center;
+}
+
+.backLink a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--navy);
+  text-decoration: none;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.backLink a:hover {
+  color: var(--primary);
+  transform: translateX(-4px);
+}
+
+.backLink svg {
+  transition: transform 0.2s ease;
+}
+
+.backLink a:hover svg {
+  transform: translateX(-4px);
+}
+
+/* ═══════════════════════════════ BACKGROUND DECORATION ═══════════════════════════════ */
+.bgDecoration {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.bgCircle1,
+.bgCircle2,
+.bgCircle3 {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0, 162, 240, 0.08), transparent 70%);
+  animation: float 20s ease-in-out infinite;
+}
+
+.bgCircle1 {
+  width: 400px;
+  height: 400px;
+  top: -10%;
+  right: -5%;
+  animation-delay: 0s;
+}
+
+.bgCircle2 {
+  width: 300px;
+  height: 300px;
+  bottom: -5%;
+  left: -8%;
+  background: radial-gradient(circle, rgba(7, 53, 100, 0.06), transparent 70%);
+  animation-delay: 5s;
+}
+
+.bgCircle3 {
+  width: 250px;
+  height: 250px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgba(0, 162, 240, 0.04), transparent 70%);
+  animation-delay: 10s;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translate(0, 0);
+  }
+  33% {
+    transform: translate(30px, -30px);
+  }
+  66% {
+    transform: translate(-20px, 20px);
+  }
+}
+
+/* ═══════════════════════════════ SCROLL ANIMATIONS ═══════════════════════════════ */
+.animateIn {
+  opacity: 0;
+  transform: translateY(32px);
+  animation: slideInUp 0.75s ease forwards;
+}
+
+@keyframes slideInUp {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ═══════════════════════════════ RESPONSIVE ═══════════════════════════════ */
+@media (max-width: 1024px) {
+  .cardsGrid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 2rem;
+  }
+
+  .cardPrimary {
+    grid-column: 1 / -1;
+    max-width: 500px;
+    margin: 0 auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .main {
+    padding: 3rem 1.5rem;
+  }
+
+  .header {
+    margin-bottom: 3rem;
+  }
+
+  .title {
+    font-size: clamp(2.5rem, 10vw, 4rem);
+  }
+
+  .cardsGrid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .cardPrimary {
+    grid-column: auto;
+  }
+
+  .card {
+    padding: 2.5rem 1.5rem;
+  }
+
+  .cardIcon {
+    width: 70px;
+    height: 70px;
+  }
+
+  .cardDescription {
+    min-height: auto;
+  }
+
+  .bgCircle1,
+  .bgCircle2,
+  .bgCircle3 {
+    width: 200px;
+    height: 200px;
+  }
+}
+
+@media (max-width: 480px) {
+  .nav {
+    height: 70px;
+  }
+
+  .navInner {
+    padding: 0 1.5rem;
+  }
+
+  .logoImg {
+    height: 45px;
+  }
+
+  .main {
+    padding: 2rem 1rem;
+    min-height: calc(100vh - 70px);
+  }
+
+  .title {
+    font-size: 2.5rem;
+  }
+
+  .subtitle {
+    font-size: 0.9rem;
+  }
+
+  .card {
+    padding: 2rem 1.25rem;
+  }
+
+  .cardTitle {
+    font-size: 1.5rem;
+  }
+
+  .cardDescription {
+    font-size: 0.85rem;
+  }
+
+  .btnPrimary,
+  .btnSecondary {
+    padding: 0.85rem 1.5rem;
+    font-size: 0.9rem;
+  }
+}

@@ -1,0 +1,634 @@
+/* Portal auth — Landing page theme (matching exact colors) */
+
+.shell {
+  --pa-bg: #ffffff;
+  --pa-surface: rgba(255, 255, 255, 0.98);
+  --pa-text: #000000;
+  --pa-muted: #5a5a5a;
+  --pa-dim: #8a8a8a;
+  --pa-primary: #00a2f0;
+  --pa-navy: #073564;
+  --pa-light-blue: #b1e5ff;
+  --pa-accent: #00a2f0;
+  --pa-accent-glow: rgba(0, 162, 240, 0.2);
+  --pa-violet: #073564;
+  --pa-violet-glow: rgba(7, 53, 100, 0.15);
+  --pa-warn: #ff5c00;
+  --pa-success: #39b54a;
+  --pa-danger: #ff6b7a;
+  --pa-border: rgba(0, 162, 240, 0.15);
+  --pa-highlight: rgba(0, 162, 240, 0.05);
+  --pa-radius: 16px;
+  --pa-radius-sm: 10px;
+  --pa-radius-lg: 24px;
+  --pa-shadow: 0 8px 32px rgba(0, 162, 240, 0.12);
+
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  background:
+    radial-gradient(ellipse 75% 80% at 72% 15%, rgba(0, 162, 240, 0.12), transparent 65%),
+    radial-gradient(ellipse 55% 60% at 10% 95%, rgba(7, 53, 100, 0.06), transparent 55%),
+    #ffffff;
+  color: var(--pa-text);
+  font-family: var(--font-poppins, system-ui), sans-serif;
+  line-height: 1.5;
+}
+
+.orbA,
+.orbB,
+.orbRole {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(140px);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.5;
+}
+
+.orbA {
+  width: 500px;
+  height: 500px;
+  top: -120px;
+  right: -100px;
+  background: radial-gradient(circle, rgba(0, 162, 240, 0.25), transparent 70%);
+  animation: floatA 18s ease-in-out infinite;
+}
+
+.orbB {
+  width: 420px;
+  height: 420px;
+  bottom: -100px;
+  left: -80px;
+  background: radial-gradient(circle, rgba(7, 53, 100, 0.18), transparent 70%);
+  animation: floatB 22s ease-in-out infinite;
+}
+
+.orbRole {
+  width: 380px;
+  height: 380px;
+  top: 35%;
+  left: 50%;
+  transform: translateX(-50%);
+  filter: blur(150px);
+  opacity: 0.3;
+}
+
+.shell[data-role="patient"] .orbRole {
+  background: radial-gradient(circle, rgba(0, 162, 240, 0.25), transparent 70%);
+}
+
+.shell[data-role="dentist"] .orbRole {
+  background: radial-gradient(circle, rgba(7, 53, 100, 0.2), transparent 70%);
+}
+
+.shell[data-role="admin"] .orbRole {
+  background: radial-gradient(circle, rgba(255, 92, 0, 0.15), transparent 70%);
+}
+
+.grid {
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0, 162, 240, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 162, 240, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+  mask-image: radial-gradient(ellipse 70% 50% at 50% 0%, black, transparent);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.layout {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 1rem 1.5rem 2.5rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  align-items: start;
+  animation: fadeUp 0.6s ease both;
+}
+
+.hero {
+  padding-top: 1rem;
+}
+
+.eyebrow {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin: 0 0 0.85rem;
+}
+
+.shell[data-role="patient"] .eyebrow {
+  color: var(--pa-primary);
+}
+
+.shell[data-role="dentist"] .eyebrow {
+  color: var(--pa-navy);
+}
+
+.shell[data-role="admin"] .eyebrow {
+  color: var(--pa-warn);
+}
+
+.heroTitle {
+  font-family: var(--font-anton, var(--font-syne, var(--font-jakarta))), sans-serif;
+  font-size: clamp(2rem, 4.5vw, 3rem);
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  margin: 0 0 0.85rem;
+  text-transform: uppercase;
+  color: var(--pa-text);
+}
+
+.heroGradient {
+  display: block;
+  background: linear-gradient(135deg, var(--pa-primary) 0%, var(--pa-navy) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.shell[data-role="dentist"] .heroGradient {
+  background: linear-gradient(135deg, var(--pa-navy) 0%, var(--pa-primary) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.shell[data-role="admin"] .heroGradient {
+  background: linear-gradient(135deg, var(--pa-warn) 0%, var(--pa-primary) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.heroDesc {
+  max-width: 540px;
+  color: var(--pa-muted);
+  font-size: 1.05rem;
+  margin: 0 0 1.25rem;
+}
+
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.75rem;
+}
+
+.pills li {
+  padding: 0.4rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--pa-navy);
+  background: rgba(0, 162, 240, 0.08);
+  border: 1px solid rgba(0, 162, 240, 0.2);
+  border-radius: 999px;
+}
+
+.roleSwitch {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--pa-border);
+}
+
+.roleSwitchLabel {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pa-dim);
+  margin-bottom: 0.65rem;
+}
+
+.roleLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.roleLink {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--pa-muted);
+  text-decoration: none;
+  border: 1px solid var(--pa-border);
+  border-radius: 999px;
+  background: var(--pa-highlight);
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.roleLink:hover {
+  color: var(--pa-text);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.panel {
+  padding: 2rem;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 2px solid rgba(0, 162, 240, 0.2);
+  border-radius: var(--pa-radius-lg);
+  box-shadow: 0 12px 48px rgba(0, 162, 240, 0.15);
+  animation: fadeUp 0.6s 0.1s ease both;
+}
+
+.panelHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.panelIcon {
+  width: 50px;
+  height: 50px;
+  display: grid;
+  place-items: center;
+  font-size: 1.5rem;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(0, 162, 240, 0.1), rgba(7, 53, 100, 0.05));
+  border: 2px solid var(--pa-border);
+  flex-shrink: 0;
+}
+
+.panelHead h2 {
+  font-family: var(--font-anton, var(--font-syne, var(--font-jakarta))), sans-serif;
+  font-size: 1.5rem;
+  font-weight: 900;
+  margin: 0 0 0.25rem;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: var(--pa-navy);
+}
+
+.panelHead p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--pa-muted);
+}
+
+.tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  padding: 0.3rem;
+  background: rgba(0, 162, 240, 0.05);
+  border-radius: var(--pa-radius-sm);
+  border: 2px solid var(--pa-border);
+}
+
+.tab {
+  text-align: center;
+  padding: 0.75rem 0.5rem;
+  border-radius: 8px;
+  color: var(--pa-muted);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  transition: all 0.25s ease;
+}
+
+.tabActive {
+  color: var(--pa-bg);
+  background: var(--pa-primary);
+  box-shadow: 0 4px 12px rgba(0, 162, 240, 0.25);
+  transform: translateY(-1px);
+}
+
+.shell[data-role="patient"] .tabActive {
+  background: var(--pa-primary);
+}
+
+.shell[data-role="dentist"] .tabActive {
+  background: var(--pa-navy);
+}
+
+.shell[data-role="admin"] .tabActive {
+  background: var(--pa-warn);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.formRegister {
+  max-height: min(62vh, 520px);
+  overflow-y: auto;
+  padding-right: 0.25rem;
+  scrollbar-width: thin;
+}
+
+.formGroup {
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.formGroup label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--pa-muted);
+}
+
+.formGroup input,
+.formGroup select,
+.formGroup textarea {
+  padding: 0.85rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--pa-text);
+  background: rgba(0, 162, 240, 0.02);
+  border: 2px solid var(--pa-border);
+  border-radius: var(--pa-radius-sm);
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.formGroup input:focus,
+.formGroup select:focus,
+.formGroup textarea:focus {
+  border-color: var(--pa-primary);
+  box-shadow: 0 0 0 3px rgba(0, 162, 240, 0.1);
+  background: rgba(0, 162, 240, 0.03);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.row .formGroup {
+  margin-bottom: 1rem;
+}
+
+.submit {
+  width: 100%;
+  margin-top: 1rem;
+  padding: 1rem 1.25rem;
+  font-size: 1rem;
+  font-weight: 900;
+  font-family: var(--font-anton, inherit);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--pa-bg);
+  background: var(--pa-primary);
+  border: 3px solid var(--pa-primary);
+  border-radius: var(--pa-radius-sm);
+  cursor: pointer;
+  box-shadow: 0 6px 24px rgba(0, 162, 240, 0.25);
+  transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.submit:hover:not(:disabled) {
+  transform: translateY(-2px);
+  background: var(--pa-navy);
+  border-color: var(--pa-navy);
+  box-shadow: 0 8px 32px rgba(7, 53, 100, 0.3);
+}
+
+.submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.shell[data-role="dentist"] .submit {
+  color: #fff;
+  background: var(--pa-navy);
+  border-color: var(--pa-navy);
+  box-shadow: 0 6px 24px rgba(7, 53, 100, 0.25);
+}
+
+.shell[data-role="dentist"] .submit:hover:not(:disabled) {
+  background: var(--pa-primary);
+  border-color: var(--pa-primary);
+  box-shadow: 0 8px 32px rgba(0, 162, 240, 0.3);
+}
+
+.shell[data-role="admin"] .submit {
+  color: var(--pa-bg);
+  background: var(--pa-warn);
+  border-color: var(--pa-warn);
+  box-shadow: 0 6px 24px rgba(255, 92, 0, 0.25);
+}
+
+.shell[data-role="admin"] .submit:hover:not(:disabled) {
+  background: var(--pa-primary);
+  border-color: var(--pa-primary);
+  box-shadow: 0 8px 32px rgba(0, 162, 240, 0.3);
+}
+
+.error {
+  padding: 0.85rem 1rem;
+  margin-bottom: 1rem;
+  border-radius: var(--pa-radius-sm);
+  background: rgba(255, 107, 122, 0.08);
+  border: 2px solid rgba(255, 107, 122, 0.3);
+  color: #d32f2f;
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+.hint,
+.optional {
+  font-size: 0.72rem;
+  color: var(--pa-dim);
+  font-weight: 400;
+}
+
+.sectionLabel {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--pa-violet);
+  margin: 0.5rem 0 0.75rem;
+}
+
+.dentistBlock {
+  padding: 1rem;
+  margin-bottom: 0.5rem;
+  border-radius: var(--pa-radius-sm);
+  background: rgba(124, 108, 240, 0.06);
+  border: 1px solid rgba(124, 108, 240, 0.2);
+}
+
+.avatarField {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border-radius: var(--pa-radius-sm);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed var(--pa-border);
+}
+
+.avatarRing {
+  padding: 3px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--pa-accent), var(--pa-violet));
+  flex-shrink: 0;
+}
+
+.shell[data-role="dentist"] .avatarRing {
+  background: linear-gradient(135deg, var(--pa-violet), #a78bfa);
+}
+
+.shell[data-role="admin"] .avatarRing {
+  background: linear-gradient(135deg, var(--pa-warn), #fbbf24);
+}
+
+.avatarPreview {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  background: #121826;
+}
+
+.avatarUpload {
+  margin-bottom: 0 !important;
+  flex: 1;
+}
+
+.fileInput {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.fileBtn {
+  display: inline-block;
+  margin-top: 0.35rem;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--pa-text);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--pa-border);
+  border-radius: var(--pa-radius-sm);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.fileBtn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.footer {
+  position: relative;
+  z-index: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 1rem 1.5rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--pa-muted);
+}
+
+.footerDot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--pa-dim);
+}
+
+.footer a {
+  color: var(--pa-muted);
+  text-decoration: none;
+}
+
+.footer a:hover {
+  color: var(--pa-accent);
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes floatA {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(-30px, 20px);
+  }
+}
+
+@keyframes floatB {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(25px, -15px);
+  }
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .hero {
+    text-align: center;
+  }
+
+  .heroDesc {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .pills,
+  .roleLinks {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 560px) {
+  .row {
+    grid-template-columns: 1fr;
+  }
+
+  .formRegister {
+    max-height: none;
+  }
+}

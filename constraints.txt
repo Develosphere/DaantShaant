@@ -1,0 +1,3 @@
+# OpenCV 4.9 + teeth analyzer require NumPy 1.x (NumPy 2 breaks cv2 import)
+numpy>=1.26.4,<2.0.0
+opencv-python-headless==4.9.0.80
