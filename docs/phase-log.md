@@ -281,4 +281,55 @@ Failure policy at the caller: configuration errors (`ProviderConfigurationError`
 
 ### Next
 
-Phase 2A.5 - Remaining Legacy AI Caller Migration (one small caller-specific task at a time; product description generator first).
+Phase 2A.5b - Remove Dead OpenRouter Infrastructure.
+
+---
+
+## Phase 2A.5a - Migrate Product Description Generator Off OpenRouter
+
+**Date:** September 2026
+
+**Status:** COMPLETE
+
+### Summary
+
+Migrated the last direct OpenRouter consumer — the dentist portal's product description generator — to the shared AI gateway (Qwen primary, Gemini technical fallback). No other module was touched.
+
+### Files Modified
+
+- `orchestrator/src/orchestrator/dentist_portal/description_generator.py` (replaced `openrouter_client` with `AIGateway.generate_text(TextRequest)`; lazy gateway resolution; preserved public signature, prompt content, JSON parsing, markdown-fence stripping, temperature/max_tokens, and deterministic fallback)
+
+### Files Created
+
+- `orchestrator/tests/test_description_gateway_migration.py` (12 tests using fake providers/gateways only)
+
+### Call path
+
+```text
+Old: generate_product_description -> openrouter_client.generate_chat_response -> OpenRouter API
+New: generate_product_description -> get_ai_gateway() -> AIGateway.generate_text(TextRequest)
+     -> QwenProvider (QWEN_CHAT_MODEL) PRIMARY
+     -> GeminiProvider (GEMINI_MODEL) FALLBACK (technical failure only)
+```
+
+### Failure behavior
+
+- Configuration errors (`ProviderConfigurationError`) and programming errors (`ProviderInternalError`) propagate; never masked by fallback.
+- `AllProvidersFailedError` (both providers fail technically) degrades to the existing deterministic product description fallback.
+- Empty or unparseable JSON responses also degrade to the deterministic fallback.
+
+### Validation
+
+- `test_description_gateway_migration.py`: 12 passed.
+- `test_ai_gateway_factory.py` + `test_chat_gateway_migration.py`: 27 passed (no regressions).
+- Zero external AI API calls: fake providers and spy gateways only.
+
+### OpenRouter status
+
+- `description_generator.py` no longer imports or calls `openrouter_client`.
+- `openrouter_client.py` still has one internal runtime reference: `llm_provider.py` imports it inside `LLMProvider.__init__()`, reached only by the recommendation system (out of scope for this phase).
+- `openrouter_client.py` cannot yet be safely removed; deletion belongs in Phase 2A.5b.
+
+### Next
+
+Phase 2A.5b - Remove Dead OpenRouter Infrastructure.

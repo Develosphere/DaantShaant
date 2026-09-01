@@ -18,7 +18,7 @@ Statuses describe the current runtime after Phase 1B.
 | Pydantic v2 | **ACTIVE** | API schemas and configuration |
 | httpx | **ACTIVE** | Service-to-service HTTP |
 | Gemini | **ACTIVE (fallback)** | Clinical vision baseline and recommendation AI paths still call Gemini directly; since 2A.4 `GeminiProvider` is the production gateway FALLBACK for the migrated conversational chat path. No Google SDK introduced (plain httpx `v1beta` `generateContent`) |
-| OpenRouter | **LEGACY - TO BE REMOVED** | No longer used by the conversational chat path (migrated in 2A.4). Still used by the dentist-portal product description generator; `openrouter_client.py` retained until Phase 2A.5 retires it |
+| OpenRouter | **LEGACY - TO BE REMOVED** | No longer used by the conversational chat path (migrated in 2A.4) or the product description generator (migrated in 2A.5a). `openrouter_client.py` still referenced internally by `llm_provider.py` for the recommendation system chain; full removal in Phase 2A.5b |
 | LangGraph / langchain-core | **ACTIVE** | Product and dentist recommendation graphs |
 | FAISS / sentence-transformers | **ACTIVE** | Local dental RAG |
 | OpenCV / Pillow | **ACTIVE** | Image processing |
