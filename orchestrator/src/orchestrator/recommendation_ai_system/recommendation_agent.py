@@ -5,7 +5,7 @@ function using the LangGraph framework.
 """
 
 import logging
-from typing import Any, Dict, List, TypedDict
+from typing import TYPE_CHECKING, Any, Dict, List, TypedDict
 from langgraph.graph import StateGraph, START, END
 
 from orchestrator.recommendation_ai_system.tools import (
@@ -14,9 +14,25 @@ from orchestrator.recommendation_ai_system.tools import (
     rank_recommendations,
     search_products_by_issue,
 )
-from orchestrator.llm_provider import llm_provider
+
+if TYPE_CHECKING:  # pragma: no cover - typing only, keeps runtime import cheap
+    from orchestrator.ai.gateway import AIGateway
 
 logger = logging.getLogger(__name__)
+
+# Module-level gateway handle; resolved lazily so no provider/HTTP client is
+# composed at import time. Business code depends only on the shared AIGateway.
+_gateway: "AIGateway | None" = None
+
+
+def _get_gateway() -> "AIGateway":
+    """Return the shared AI gateway, composing it on first use (never at import)."""
+    global _gateway
+    if _gateway is None:
+        from orchestrator.ai.factory import get_ai_gateway
+
+        _gateway = get_ai_gateway()
+    return _gateway
 
 # ---------------------------------------------------------------------------
 # LangGraph State Definition
@@ -105,26 +121,44 @@ async def generate_response_node(state: RecommendationState) -> Dict[str, Any]:
         "..."
     )
     
+    from orchestrator.ai.exceptions import AllProvidersFailedError
+    from orchestrator.ai.schemas import ChatMessage, TextRequest
+
+    request = TextRequest(
+        messages=[
+            ChatMessage(
+                role="system",
+                content="You are DentAssist, a friendly dental product advisor.",
+            ),
+            ChatMessage(role="user", content=prompt),
+        ],
+        temperature=0.4,
+        max_tokens=800,
+    )
+
     try:
-        response = await llm_provider.gemini.generate(
-            system_prompt="You are DentAssist, a friendly dental product advisor.",
-            user_message=prompt,
-            temperature=0.4,
-            max_tokens=800,
+        result = await _get_gateway().generate_text(request)
+        text = (result.content or "").strip()
+    except AllProvidersFailedError as exc:
+        logger.warning(
+            "[LANGGRAPH] All AI providers failed for recommendation formatting: %s — using fallback text formatting",
+            type(exc).__name__,
         )
-        return {"final_output": response}
-    except Exception as exc:
-        logger.warning("[LANGGRAPH] LLM final formatting failed: %s — using fallback text formatting", exc)
-        # Last resort fallback formatting
-        lines = [f"🦷 Recommended for: {state['issue']}\n"]
-        for i, r in enumerate(ranked[:5], 1):
-            problems_solved_str = ", ".join(r.get("problems_solved", []))
-            lines.append(
-                f"{i}. {r['name']} — ${r['price']:.2f}\n"
-                f"   Why: {r.get('recommendation_reason', r.get('ai_description', ''))}\n"
-                f"   Helps with: [{problems_solved_str}]\n"
-            )
-        return {"final_output": "\n".join(lines)}
+        text = ""
+
+    if text:
+        return {"final_output": text}
+
+    # Deterministic/template fallback (also used when the gateway returns empty).
+    lines = [f"🦷 Recommended for: {state['issue']}\n"]
+    for i, r in enumerate(ranked[:5], 1):
+        problems_solved_str = ", ".join(r.get("problems_solved", []))
+        lines.append(
+            f"{i}. {r['name']} — ${r['price']:.2f}\n"
+            f"   Why: {r.get('recommendation_reason', r.get('ai_description', ''))}\n"
+            f"   Helps with: [{problems_solved_str}]\n"
+        )
+    return {"final_output": "\n".join(lines)}
 
 
 async def terminate_low_similarity_node(state: RecommendationState) -> Dict[str, Any]:

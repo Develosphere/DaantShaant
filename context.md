@@ -1,7 +1,7 @@
 # DaantShaant Context
 
 > Current implementation state. Read this first in every engineering chat.
-> Last updated: Phase 2A.5a - Migrate Product Description Generator Off OpenRouter (COMPLETE), September 2026.
+> Last updated: Phase 2A.5b - Migrate Recommendation AI Off Legacy LLM Provider (COMPLETE), September 2026.
 
 ## Product
 
@@ -84,7 +84,7 @@ MongoDB and its runtime drivers/configuration are removed. There are no active r
 - Admin login and dashboard routes
 - Gemini vision baseline and rule-based diagnosis
 - Conversational chat now generates text through the shared AI gateway (Qwen primary, Gemini fallback); FAISS/sentence-transformers RAG behavior is unchanged
-- Product descriptions now use the shared AI gateway (Qwen primary, Gemini fallback); recommendation graphs still call Gemini directly
+- Product descriptions now use the shared AI gateway (Qwen primary, Gemini fallback); the product recommendation LangGraph also generates its reranking and final patient-facing text through the shared gateway
 - Product and dentist recommendation LangGraphs
 - Google Maps/Places baseline (scheduled for later removal)
 
@@ -99,13 +99,14 @@ Phases 2A.1-2A.4 built and now run the shared, provider-neutral AI stack at `orc
 - `create_ai_gateway(settings)` / `get_ai_gateway()` in `ai/factory.py` (Phase 2A.4) are the production composition: `PRIMARY_AI_PROVIDER=qwen` and `FALLBACK_AI_PROVIDER=gemini` build `AIGateway(primary=QwenProvider, fallback=GeminiProvider, timeout_seconds=AI_REQUEST_TIMEOUT_SECONDS)`. Only `qwen` and `gemini` are supported (an empty fallback is allowed); unknown, empty-primary, or identical primary/fallback names raise `ProviderConfigurationError` - nothing is silently substituted. Adapter modules are imported inside the builders and providers are built on first use, so no provider instance, HTTP client, or network call exists at import time.
 - First migrated real caller (Phase 2A.4): `conversation_engine.ConversationEngine` (the chat/conversational text-generation path behind `POST /v1/chat/message`) now calls `AIGateway.generate_text(TextRequest)` and reads only `AIResult.content`. The request carries no provider-specific model id: Qwen resolves `QWEN_CHAT_MODEL` (now actually used by `generate_text`) and the Gemini fallback resolves `GEMINI_MODEL`. RAG enhancement, conversation memory, state context, incomplete-tail completion, response cleaning, and the API response shape are unchanged; only the final provider invocation moved. Configuration and programming errors propagate (never masked by fallback); a technical failure of both providers, or an empty reply, falls back to the pre-existing deterministic issue-aware dental answer. Logging at this boundary is limited to `status/provider/model/latency_ms/fallback_used`.
 - Second migrated real caller (Phase 2A.5a): `dentist_portal/description_generator.generate_product_description` (the last direct OpenRouter consumer) now calls `AIGateway.generate_text(TextRequest)` through the same shared gateway. The public function signature, the returned `{"ai_description": ..., "problems_solved": [...]}` dict, the system/user prompt content, temperature/max_tokens, markdown-fence stripping, and the deterministic fallback on failure are all preserved. Configuration and programming errors propagate; a full double-provider technical failure or an empty/unparseable reply degrades to the pre-existing deterministic product description. The module no longer imports `openrouter_client`.
-- Remaining legacy AI callers (not yet migrated, deliberately): clinical vision in the Teeth Analyzer (direct Gemini) and `recommendation_ai_system/` (`llm_provider.gemini.generate`, direct Gemini). `llm_provider.py` still imports `openrouter_client` internally for its `LLMProvider.generate()` chain, which is reached only by the recommendation system; the description generator no longer reaches it. `llm_provider.get_deterministic_fallback` remains the home of the deterministic dental fallback table used by the chat path.
+- Third and fourth migrated real callers (Phase 2A.5b): the product recommendation AI path in `recommendation_ai_system/` now uses the shared gateway. `recommendation_agent.generate_response_node` (final patient-facing message) and `tools.rank_recommendations` (candidate reranking) each call `AIGateway.generate_text(TextRequest)` with `model=None` (Qwen resolves `QWEN_CHAT_MODEL`, Gemini fallback resolves `GEMINI_MODEL`). The gateway is resolved lazily via a module-level `_get_gateway()` handle and injected through an optional `gateway` kwarg for tests; neither module imports `llm_provider` or `openrouter_client`. The LangGraph topology (`START -> search_products -> conditional similarity -> get_details -> rank -> log_session -> generate_response -> END`), ranking/product-selection behavior, database queries, similarity behavior, session logging, and the public response contract are unchanged. Failure policy: technical double failure (`AllProvidersFailedError`) or empty gateway output degrades to the pre-existing deterministic template/ranking fallback; `ProviderConfigurationError`/`ProviderInternalError` propagate and are never masked. `rank_recommendations` still returns the JSON-array ranking the graph consumes, so it stayed on `generate_text` + existing parsing rather than being forced into `generate_structured` (the shared structured contract is a `dict`, and the array output would require restructuring).
+- Remaining legacy AI callers (not yet migrated, deliberately): clinical vision in the Teeth Analyzer (direct Gemini) and the recommendation embedding service (Gemini text-embedding capability — not a chat/gateway concern). No business module reaches `llm_provider.LLMProvider`'s OpenRouter→Gemini failover chain or `openrouter_client.generate_chat_response` anymore.
 - No automated test makes a real AI API call; `scripts/test_qwen_connection.py` and `scripts/test_gemini_connection.py` remain manual, developer-run smoke tests.
 - `AISettings` in `config.py` defines the Qwen-primary / Gemini-fallback contract; `.env`/`.env.example` carry the keys.
 
 ## Known Remaining Issues
 
-- AI usage is still partly fragmented: chat text generation and product descriptions go through the shared gateway, but clinical vision and both recommendation LangGraphs still use direct Gemini/OpenRouter paths.
+- AI usage is still partly fragmented: chat text generation, product descriptions, and the product recommendation graph now go through the shared gateway, but clinical vision (Teeth Analyzer) and clinical RAG still use direct Gemini paths.
 - Clinical scan-to-care flow is not yet a unified LangGraph.
 - Google Maps/Places remains active and paid-key dependent.
 - Clinical rule/evidence architecture still needs later phases.
@@ -123,13 +124,15 @@ Phases 2A.1-2A.4 built and now run the shared, provider-neutral AI stack at `orc
 | 2A.3 | Gemini Fallback Provider Adapter (gateway-level, no callers migrated) | COMPLETE |
 | 2A.4 | AI Gateway Composition + First Caller Migration (chat text generation) | COMPLETE |
 | 2A.5a | Migrate Product Description Generator Off OpenRouter | COMPLETE |
+| 2A.5b | Migrate Recommendation AI Off Legacy LLM Provider | COMPLETE |
 
 The former Phase 1C is obsolete because its domain migration scope was merged into Phase 1B.
 
 ## Next Phase
 
-**Phase 2A.5b - Remove Dead OpenRouter Infrastructure**
+**Phase 2A.5c - Remove Legacy OpenRouter / LLM Infrastructure**
 
-- Remove `openrouter_client.py`, OpenRouter env variables, and the OpenRouter dependency after confirming the recommendation system migration path.
+- OpenRouter was NOT dead before Phase 2A.5b — the recommendation system was its last live consumer. After 2A.5b, no business module calls `openrouter_client.generate_chat_response` or `llm_provider.LLMProvider` at runtime.
+- `llm_provider.py` cannot yet be deleted: `conversation_engine` still imports `get_deterministic_fallback` from it, and importing the module instantiates the module-level `llm_provider = LLMProvider()` global (which imports/instantiates `openrouter_client`). Plan 2A.5c to relocate the deterministic dental fallback table out of `llm_provider.py`, then remove `LLMProvider`, `openrouter_client.py`, and the `OPENROUTER_*` env variables.
 - Do not migrate clinical vision, redesign RAG, or start the master Clinical LangGraph in this phase.
 - Do not revisit database migration unless a proven defect requires it.

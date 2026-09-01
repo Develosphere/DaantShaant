@@ -333,3 +333,55 @@ New: generate_product_description -> get_ai_gateway() -> AIGateway.generate_text
 ### Next
 
 Phase 2A.5b - Remove Dead OpenRouter Infrastructure.
+
+> Correction (recorded in Phase 2A.5b below): OpenRouter was **not** dead before 2A.5b — the product recommendation system was still its last live consumer via `llm_provider.gemini.generate`. The next phase was therefore reframed as "Migrate Recommendation AI Off Legacy LLM Provider" (2A.5b), and legacy-infrastructure removal became 2A.5c.
+
+---
+
+## Phase 2A.5b - Migrate Recommendation AI Off Legacy LLM Provider
+
+**Date:** September 2026
+
+**Status:** COMPLETE
+
+### Summary
+
+Migrated the product recommendation system's two AI text-generation calls to the shared AI gateway (Qwen primary, Gemini technical fallback). This removed the recommendation system's dependency on `llm_provider`/`openrouter_client` and made the Product Recommendation LangGraph fully provider-neutral. No other subsystem was touched.
+
+### Files Modified
+
+- `orchestrator/src/orchestrator/recommendation_ai_system/recommendation_agent.py` (`generate_response_node` now builds a `TextRequest` and calls `AIGateway.generate_text(...)`; lazy `_get_gateway()`; removed `from orchestrator.llm_provider import llm_provider`; preserved prompt, temperature 0.4 / max_tokens 800, and the deterministic template fallback)
+- `orchestrator/src/orchestrator/recommendation_ai_system/tools.py` (`rank_recommendations` now builds a `TextRequest` and calls `AIGateway.generate_text(...)`; lazy `_get_gateway()` + injectable `gateway` kwarg; removed the `llm_provider` import; preserved prompt, product-summary context, temperature 0.2 / max_tokens 600, markdown-fence stripping, JSON-array parsing, and the deterministic reranking fallback)
+
+### Files Created
+
+- `orchestrator/tests/test_recommendation_gateway_migration.py` (14 tests using fake providers / spy gateways only)
+
+### Preserved behavior
+
+- LangGraph topology unchanged: `START -> search_products -> (conditional similarity) -> get_details -> rank -> log_session -> generate_response -> END`, plus `terminate_low_similarity`.
+- Ranking/product-selection logic, database queries, similarity behavior, session logging, and the public `RecommendResponse` contract are untouched.
+- Prompt intent and supplied product/issue context preserved; requests use `model=None` so Qwen resolves `QWEN_CHAT_MODEL` and Gemini resolves `GEMINI_MODEL`.
+
+### Failure behavior
+
+- Qwen technical failure -> Gemini fallback automatically through the gateway.
+- Technical double failure (`AllProvidersFailedError`) or empty gateway output -> pre-existing deterministic template/ranking fallback.
+- `ProviderConfigurationError` / `ProviderInternalError` propagate; never masked.
+- `rank_recommendations` kept on `generate_text` + existing JSON-array parsing (not forced into `generate_structured`, whose shared contract is a `dict`).
+
+### Validation
+
+- `test_recommendation_gateway_migration.py` + `test_ai_gateway.py`: 26 passed.
+- `test_description_gateway_migration.py` + `test_chat_gateway_migration.py`: 24 passed (no regressions).
+- Zero external AI API calls.
+
+### OpenRouter / legacy audit (post-migration)
+
+- `openrouter_client.generate_chat_response` runtime callers = **0**.
+- `llm_provider.LLMProvider` failover-chain runtime callers = **0**.
+- `llm_provider.py` still imported by `conversation_engine` for `get_deterministic_fallback` only, and its module-level `llm_provider = LLMProvider()` global still imports/instantiates `openrouter_client`. So `llm_provider.py` and `openrouter_client.py` cannot yet be deleted independently — cleanup is deferred to Phase 2A.5c.
+
+### Next
+
+Phase 2A.5c - Remove Legacy OpenRouter / LLM Infrastructure.

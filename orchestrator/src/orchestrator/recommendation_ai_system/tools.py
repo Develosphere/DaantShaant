@@ -2,6 +2,7 @@
 
 import json
 import logging
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from langchain_core.tools import tool
@@ -14,7 +15,24 @@ from orchestrator.recommendation_ai_system.embedding_service import (
 )
 from orchestrator.repositories import ProductRepository, RecommendationRepository
 
+if TYPE_CHECKING:  # pragma: no cover - typing only, keeps runtime import cheap
+    from orchestrator.ai.gateway import AIGateway
+
 logger = logging.getLogger(__name__)
+
+# Module-level gateway handle; resolved lazily so no provider/HTTP client is
+# composed at import time. Business code depends only on the shared AIGateway.
+_gateway: "AIGateway | None" = None
+
+
+def _get_gateway() -> "AIGateway":
+    """Return the shared AI gateway, composing it on first use (never at import)."""
+    global _gateway
+    if _gateway is None:
+        from orchestrator.ai.factory import get_ai_gateway
+
+        _gateway = get_ai_gateway()
+    return _gateway
 
 
 def function_tool(fn):
@@ -73,8 +91,14 @@ async def get_product_details(product_id: str) -> dict:
 
 
 @function_tool
-async def rank_recommendations(products: list[dict], patient_issue: str) -> list[dict]:
-    from orchestrator.llm_provider import llm_provider
+async def rank_recommendations(
+    products: list[dict],
+    patient_issue: str,
+    *,
+    gateway: "AIGateway | None" = None,
+) -> list[dict]:
+    from orchestrator.ai.exceptions import AllProvidersFailedError
+    from orchestrator.ai.schemas import ChatMessage, TextRequest
 
     product_summary = json.dumps(
         [
@@ -96,22 +120,21 @@ async def rank_recommendations(products: list[dict], patient_issue: str) -> list
         "recommendation_reason. Return only a valid JSON array with product_id, "
         "rank, and recommendation_reason."
     )
-    try:
-        raw = await llm_provider.gemini.generate(
-            system_prompt="You are a dental product ranking expert. Return only JSON.",
-            user_message=prompt,
-            temperature=0.2,
-            max_tokens=600,
-        )
-        text = raw.strip()
-        if text.startswith("```"):
-            text = text.split("```")[1]
-            if text.startswith("json"):
-                text = text[4:]
-        parsed = json.loads(text)
-        ranked = parsed if isinstance(parsed, list) else list(parsed.values())[0]
-    except Exception as exc:
-        logger.warning("Product reranking failed: %s", exc)
+
+    gw = gateway or _get_gateway()
+    request = TextRequest(
+        messages=[
+            ChatMessage(
+                role="system",
+                content="You are a dental product ranking expert. Return only JSON.",
+            ),
+            ChatMessage(role="user", content=prompt),
+        ],
+        temperature=0.2,
+        max_tokens=600,
+    )
+
+    def _deterministic_ranking() -> list[dict]:
         return [
             {
                 **product,
@@ -122,6 +145,26 @@ async def rank_recommendations(products: list[dict], patient_issue: str) -> list
             }
             for index, product in enumerate(products[:5])
         ]
+
+    try:
+        result = await gw.generate_text(request)
+    except AllProvidersFailedError as exc:
+        # Technical double failure degrades to the existing deterministic ranking.
+        logger.warning("Product reranking AI unavailable (%s): %s", type(exc).__name__, exc)
+        return _deterministic_ranking()
+
+    text = (result.content or "").strip()
+    if text.startswith("```"):
+        text = text.split("```")[1]
+        if text.startswith("json"):
+            text = text[4:]
+
+    try:
+        parsed = json.loads(text)
+        ranked = parsed if isinstance(parsed, list) else list(parsed.values())[0]
+    except Exception as exc:  # noqa: BLE001 - malformed model output stays recoverable
+        logger.warning("Product reranking failed: %s", exc)
+        return _deterministic_ranking()
 
     product_map = {product["product_id"]: product for product in products}
     return [
