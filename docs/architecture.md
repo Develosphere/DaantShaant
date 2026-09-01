@@ -16,7 +16,7 @@ FastAPI Orchestrator
     +--> Diagnosis service (rule classifier)
     +--> FAISS + sentence-transformers RAG
     +--> Shared AI Gateway (chat: Qwen primary / Gemini fallback)
-    +--> Legacy direct AI paths (vision Gemini, OpenRouter descriptions)
+    +--> Legacy direct AI paths (Teeth Analyzer: vision Gemini + clinical OpenRouter)
     +--> Product and Dentist LangGraphs
     +--> Google Maps / Places
     |
@@ -55,21 +55,25 @@ MongoDB is REMOVED: no connection module, runtime dependency, configuration, hea
 - Public admin signup is absent; controlled admin creation uses `scripts/create_admin.py`.
 - Patient and dentist resource ownership is checked against the authenticated UUID.
 
-### AI Gateway (Phase 2A.1-2A.4 - Composed, One Caller Migrated)
+### AI Gateway (Phase 2A - COMPLETE)
 
 The shared, provider-neutral gateway lives at `orchestrator/src/orchestrator/ai/`:
 
 ```text
-Conversation engine (chat text generation)   <-- migrated in 2A.4
+All migrated business callers:
+    - Conversation engine (chat text generation)
+    - Product description generator
+    - Product recommendation LangGraph (reranking + final message)
     -> ai/factory.create_ai_gateway(settings) / get_ai_gateway()   [lazy, no import-time I/O]
         -> AIGateway (routing, timeout, normalization, fallback policy)
             -> PRIMARY  QwenProvider   (QWEN_CHAT_MODEL)
             -> FALLBACK GeminiProvider (GEMINI_MODEL)
 
-Still on legacy direct paths (2A.5+ targets)
-    -> Teeth Analyzer / clinical vision   -> direct Gemini
-    -> Product description generator      -> OpenRouter
-    -> Recommendation LangGraphs          -> llm_provider.gemini (direct Gemini)
+Deterministic fallback (provider-independent):
+    - ai/fallbacks.get_deterministic_fallback() — issue-aware dental answer
+
+Still on legacy direct paths (Phase 2C targets)
+    -> Teeth Analyzer / clinical vision   -> direct Gemini + separate OpenRouter backend
 ```
 
 Composition is driven by `PRIMARY_AI_PROVIDER=qwen` / `FALLBACK_AI_PROVIDER=gemini`; an unsupported name raises `ProviderConfigurationError` instead of silently selecting another provider. Providers are constructed on first use, so no HTTP client, no provider instance, and no network call exist at import time.

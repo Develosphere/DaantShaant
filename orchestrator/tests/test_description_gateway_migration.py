@@ -2,7 +2,7 @@
 
 The dentist portal's product description generation now goes through the
 shared ``AIGateway`` (Qwen primary -> Gemini technical fallback). These tests
-use fake gateways/providers only: ZERO external Qwen/Gemini/OpenRouter calls.
+use fake gateways/providers only: ZERO external Qwen/Gemini calls.
 """
 
 from __future__ import annotations
@@ -81,13 +81,6 @@ def _run(coro):
 # 1. Description generator uses AIGateway
 # ---------------------------------------------------------------------------
 def test_description_generator_uses_gateway_and_not_openrouter(monkeypatch):
-    import orchestrator.openrouter_client as legacy_openrouter
-
-    def _never(*args, **kwargs):  # pragma: no cover - guard must not be reached
-        raise AssertionError("Migrated description path must not call OpenRouter")
-
-    monkeypatch.setattr(legacy_openrouter.openrouter_client, "generate_chat_response", _never)
-
     gateway = SpyGateway()
     result = _run(generate_product_description("SoftBrush", "Gentle bristles", "Toothbrushes", gateway=gateway))
 
@@ -153,7 +146,6 @@ def test_markdown_fenced_response_is_still_stripped():
 def test_openrouter_client_is_not_imported_at_runtime(monkeypatch):
     """The migrated module must not import openrouter_client at all."""
     import orchestrator.dentist_portal.description_generator as dg_module
-    import sys
 
     # Verify no openrouter_client import in the module's namespace
     assert not hasattr(dg_module, "openrouter_client")

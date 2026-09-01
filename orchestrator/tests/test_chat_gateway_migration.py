@@ -2,7 +2,7 @@
 
 The orchestrator's chat text generation now goes through the shared
 ``AIGateway`` (Qwen primary -> Gemini technical fallback). These tests use
-fake gateways/providers only: ZERO external Qwen/Gemini/OpenRouter calls and
+fake gateways/providers only: ZERO external Qwen/Gemini calls and
 no FAISS/embedding work (retrieval is stubbed at its existing boundary).
 """
 
@@ -100,15 +100,6 @@ def _keep_rag_offline(monkeypatch):
 # The migrated caller depends only on the gateway contract
 # ---------------------------------------------------------------------------
 def test_chat_uses_gateway_and_not_the_legacy_chain(monkeypatch):
-    import orchestrator.llm_provider as legacy_llm
-    import orchestrator.openrouter_client as legacy_openrouter
-
-    def _never(*args, **kwargs):  # pragma: no cover - guard must not be reached
-        raise AssertionError("Migrated chat path must not call the legacy provider chain")
-
-    monkeypatch.setattr(legacy_llm.llm_provider, "generate", _never)
-    monkeypatch.setattr(legacy_openrouter.openrouter_client, "generate_chat_response", _never)
-
     gateway = SpyGateway(_reply("Bleeding gums usually mean plaque is irritating the gumline."))
     engine = ConversationEngine(gateway=gateway)
 

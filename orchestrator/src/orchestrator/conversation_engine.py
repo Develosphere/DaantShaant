@@ -2,9 +2,8 @@
 
 All assistant text generation flows through the shared, provider-neutral
 :class:`~orchestrator.ai.gateway.AIGateway` (Phase 2A.4): Qwen primary with a
-Gemini technical fallback. This module never talks to a provider SDK, the
-legacy ``llm_provider`` chain, or OpenRouter directly, and it composes the
-gateway lazily so importing it costs no AI-adapter work.
+Gemini technical fallback. This module never talks to a provider SDK, and it
+composes the gateway lazily so importing it costs no AI-adapter work.
 """
 
 import logging
@@ -129,7 +128,7 @@ class ConversationEngine:
         try:
             result = await self.gateway.generate_text(request)
         except AllProvidersFailedError as exc:
-            from orchestrator.llm_provider import get_deterministic_fallback
+            from orchestrator.ai.fallbacks import get_deterministic_fallback
 
             logger.warning(
                 "[CHAT] status=all_providers_failed reason=%s latency_ms=%s",
@@ -148,7 +147,7 @@ class ConversationEngine:
             result.fallback_used,
         )
         if not content:
-            from orchestrator.llm_provider import get_deterministic_fallback
+            from orchestrator.ai.fallbacks import get_deterministic_fallback
 
             return get_deterministic_fallback(user_raw_message or user_message, active_issue)
         return content

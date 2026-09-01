@@ -384,4 +384,73 @@ Migrated the product recommendation system's two AI text-generation calls to the
 
 ### Next
 
-Phase 2A.5c - Remove Legacy OpenRouter / LLM Infrastructure.
+Phase 2B — Semantic Dental Relevance.
+
+---
+
+## Phase 2A.5c - Remove Legacy OpenRouter / LLM Infrastructure
+
+**Date:** September 2026
+
+**Status:** COMPLETE
+
+### Summary
+
+Relocated the deterministic dental fallback out of the legacy `llm_provider.py` into a provider-independent module (`ai/fallbacks.py`), then deleted `llm_provider.py` and `openrouter_client.py`. This removed the last vestiges of the OpenRouter → Gemini failover chain from the orchestrator. No business module was affected — both files had zero active runtime callers after Phase 2A.5b.
+
+### Files Created
+
+- `orchestrator/src/orchestrator/ai/fallbacks.py` — provider-independent deterministic dental fallback table and `get_deterministic_fallback(user_message, active_issue)` function. No AI provider, no networking, no HTTP client.
+- `orchestrator/tests/test_deterministic_fallback.py` (9 tests verifying fallback behavior, import isolation, and no networking dependency)
+
+### Files Modified
+
+- `orchestrator/src/orchestrator/conversation_engine.py` (updated both `get_deterministic_fallback` imports from `orchestrator.llm_provider` to `orchestrator.ai.fallbacks`; removed legacy docstring reference)
+- `orchestrator/tests/test_chat_gateway_migration.py` (removed legacy `llm_provider`/`openrouter_client` imports and monkeypatches from guard test)
+- `orchestrator/tests/test_description_gateway_migration.py` (removed legacy `openrouter_client` import and monkeypatch from guard test)
+- `orchestrator/tests/test_recommendation_gateway_migration.py` (removed legacy `openrouter_client` import and monkeypatch from guard test)
+- Docs: `context.md`, `docs/phase-log.md`, `docs/third-party-usage.md`, `docs/architecture.md`
+
+### Files Deleted
+
+- `orchestrator/src/orchestrator/llm_provider.py` — `LLMProvider`, `_GeminiClient`, module-level `llm_provider = LLMProvider()` global, and the old deterministic fallback table
+- `orchestrator/src/orchestrator/openrouter_client.py` — `OpenRouterClient` and module-level `openrouter_client = OpenRouterClient()` global
+
+### Env / Config
+
+- No `OPENROUTER_*` entries existed in `.env.example` or orchestrator `config.py` — no env cleanup was needed.
+- Teeth Analyzer retains its own separate `TEETH_ANALYZER_OPENROUTER_API_KEY` / `TEETH_ANALYZER_OPENROUTER_MODEL` config (out of scope; Phase 2C target).
+- `httpx` retained (required by `QwenProvider` and `GeminiProvider`).
+
+### Targeted Legacy Audit (post-cleanup)
+
+- `from orchestrator.llm_provider` / `import orchestrator.llm_provider` in orchestrator source: **0**
+- `from orchestrator.openrouter_client` / `import orchestrator.openrouter_client` in orchestrator source: **0**
+- `LLMProvider(` / `llm_provider.` in orchestrator source: **0**
+- `openrouter_client` / `generate_chat_response(` in orchestrator source: **0**
+- `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` in orchestrator source: **0**
+- Teeth Analyzer (`services/teeth_analyzer/`) retains its own `backends/openrouter.py`, `TEETH_ANALYZER_OPENROUTER_API_KEY`, and `openrouter_model` config — clinical vision legacy OpenRouter path remains for Phase 2C.
+
+### Validation
+
+- `test_deterministic_fallback.py`: 9 passed.
+- `test_chat_gateway_migration.py`: 12 passed.
+- `test_description_gateway_migration.py`: 12 passed.
+- `test_recommendation_gateway_migration.py`: 13 passed.
+- `test_ai_gateway_factory.py` + `test_ai_gateway.py`: 26 passed.
+- Total: 72 passed. Zero external AI API calls.
+
+### Phase 2A Completion
+
+All Phase 2A acceptance criteria satisfied:
+
+- Shared AIGateway exists and is composed in production.
+- Qwen adapter (primary) and Gemini adapter (fallback) exist.
+- Chat text generation, product description generation, and product recommendation text generation all use the gateway.
+- Legacy orchestrator `LLMProvider` is REMOVED.
+- Legacy orchestrator `openrouter_client.py` is REMOVED.
+- Deterministic fallback relocated and behavior preserved.
+
+### Next
+
+Phase 2B — Semantic Dental Relevance.

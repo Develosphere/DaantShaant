@@ -4,7 +4,7 @@ The product recommendation graph's two text-generation calls —
 ``rank_recommendations`` (reranking) and ``generate_response_node`` (final
 patient-facing message) — now run through the shared ``AIGateway``
 (Qwen primary -> Gemini technical fallback). These tests use fake gateways and
-in-memory providers only: ZERO external Qwen/Gemini/OpenRouter calls, and no
+in-memory providers only: ZERO external Qwen/Gemini calls, and no
 database / FAISS / embedding execution.
 """
 
@@ -134,13 +134,6 @@ def _response_state() -> dict:
 # 1. rank_recommendations uses AIGateway (and never OpenRouter)
 # ---------------------------------------------------------------------------
 def test_rank_uses_gateway(monkeypatch):
-    import orchestrator.openrouter_client as legacy_openrouter
-
-    def _never(*args, **kwargs):  # pragma: no cover - guard must not be reached
-        raise AssertionError("Migrated recommendation path must not call OpenRouter")
-
-    monkeypatch.setattr(legacy_openrouter.openrouter_client, "generate_chat_response", _never)
-
     gateway = SpyGateway(result=AIResult(content=RANKING_JSON, provider="qwen", model="qwen3.7-plus"))
     ranked = _run(tools.rank_recommendations(_products(), "sensitive teeth", gateway=gateway))
 
