@@ -179,3 +179,46 @@ Implemented the first concrete AI provider adapter (Qwen / Alibaba Model Studio)
 ### Next
 
 Phase 2A.3 — Gemini Fallback Adapter.
+
+---
+
+## Phase 2A.3 - Gemini Fallback Provider Adapter
+
+**Date:** September 2026
+
+**Status:** COMPLETE
+
+### Summary
+
+Implemented the Gemini technical-fallback provider adapter behind the shared Phase 2A.1 gateway contract, mirroring the Qwen adapter. No existing caller was migrated and no automated test performs a real external AI call.
+
+### Files Created
+
+- `orchestrator/src/orchestrator/ai/gemini.py` (`GeminiProvider`)
+- `orchestrator/tests/test_gemini_provider.py` (httpx.MockTransport only)
+- `scripts/test_gemini_connection.py` (manual, developer-run smoke test)
+
+### Files Modified
+
+- `orchestrator/src/orchestrator/ai/__init__.py` (export `GeminiProvider`)
+- `orchestrator/src/orchestrator/config.py` (added optional `GEMINI_BASE_URL`)
+
+### Design
+
+- Plain `httpx.AsyncClient` against the Gemini `v1beta` `generateContent` REST endpoint; no Google SDK introduced (reuses the same REST transport shape as the legacy `_GeminiClient`). The API key travels in the `x-goog-api-key` header, never in the URL.
+- Text (system turns -> `systemInstruction`, `assistant` -> `model` role, ordering preserved), multimodal vision (`inlineData` with `mimeType`/base64 `data`), and structured generation (`responseMimeType=application/json` plus schema instruction; parsed into `AIResult.data`; `jsonschema` validated; `StructuredOutputError` on malformed/invalid JSON) — consistent with the Qwen adapter from the gateway caller's perspective.
+- Model selection from `GEMINI_MODEL` config default with an optional per-request `model` override.
+- Error mapping: 400/401/403 -> `ProviderConfigurationError`, 429 -> `ProviderRateLimitError`, 5xx -> `ProviderServerError`, transport/DNS -> `ProviderUnavailableError`, HTTP timeout -> `ProviderTimeoutError`, malformed success payload -> `InvalidProviderResponseError`. Arbitrary programming errors remain the gateway's non-fallback-eligible `ProviderInternalError`. No retries/backoff/fallback inside the adapter (the gateway decides).
+- Secrets: API key and image base64 never appear in exception messages or logs; error bodies are truncated and the key is redacted if ever echoed.
+
+### Validation
+
+- `test_ai_gateway.py` (13) + `test_qwen_provider.py` (18) + `test_gemini_provider.py` (25): 56 passed. Zero real API calls. Includes a gateway integration test proving Qwen technical failure falls back to Gemini (`fallback_used=True`, `provider="gemini"`).
+
+### Status of callers
+
+- No active business callers migrated. `GeminiProvider` is a technical-fallback adapter only. Qwen remains intended PRIMARY, Gemini intended FALLBACK.
+
+### Next
+
+Phase 2A.4 - AI Gateway Composition + First Caller Migration.

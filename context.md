@@ -1,7 +1,7 @@
 # DaantShaant Context
 
 > Current implementation state. Read this first in every engineering chat.
-> Last updated: Phase 2A.2 - Alibaba Qwen Provider Adapter (COMPLETE), September 2026.
+> Last updated: Phase 2A.3 - Gemini Fallback Provider Adapter (COMPLETE), September 2026.
 
 ## Product
 
@@ -94,12 +94,13 @@ Phase 2A.1 introduced a shared, provider-neutral AI gateway core at `orchestrato
 - `AIProvider` abstract async interface (text/vision/structured), normalized `AIResult` and request schemas, and a small exception hierarchy.
 - `AIGateway` routes by capability, enforces `AI_REQUEST_TIMEOUT_SECONDS`, normalizes provider/model/latency metadata, and performs controlled fallback only for explicitly typed technical failures (timeout, connection, 429, 5xx, malformed response). Configuration, structured-output, and unexpected programming errors (wrapped in `ProviderInternalError`) never silently fall back; both providers failing raises `AllProvidersFailedError`.
 - `QwenProvider` (Phase 2A.2) implements the `AIProvider` contract against Alibaba Model Studio's OpenAI-compatible `/chat/completions` endpoint using plain `httpx` (no SDKs). It supports text, multimodal vision (base64 data URLs), and structured JSON output (`response_format=json_object` + parse into `AIResult.data`, `StructuredOutputError` on malformed output). Models come from `QWEN_*` configuration with optional per-request `model` override; provider/HTTP errors are mapped to the gateway exception hierarchy; API keys and image data never appear in errors or logs.
-- No active caller has been migrated yet: Qwen is NOT wired as the application-wide provider. All current AI still runs through the legacy Gemini/OpenRouter paths unchanged. No automated test makes a real AI API call; `scripts/test_qwen_connection.py` is a manual, developer-run smoke test.
+- `GeminiProvider` (Phase 2A.3) is the technical-fallback adapter. It targets Google's `v1beta` `generateContent` REST endpoint over plain `httpx` (no Google SDK introduced; the API key is sent in the `x-goog-api-key` header, never the URL). It supports text (system turns mapped to `systemInstruction`, `assistant`→`model`, ordering preserved), multimodal vision (`inlineData` mime_type + base64), and structured JSON output (`responseMimeType=application/json` + parse into `AIResult.data` + `jsonschema` validation, `StructuredOutputError` on invalid output) — behaviorally consistent with `QwenProvider` from the gateway caller's perspective. Models come from `GEMINI_MODEL` (optional `GEMINI_BASE_URL`) with per-request `model` override; errors map to the same gateway exception hierarchy; keys and image bytes never leak into errors/logs.
+- No active caller has been migrated yet: neither Qwen nor Gemini is wired as the application-wide provider. All current AI still runs through the legacy Gemini/OpenRouter paths unchanged. No automated test makes a real AI API call; `scripts/test_qwen_connection.py` and `scripts/test_gemini_connection.py` are manual, developer-run smoke tests.
 - `AISettings` in `config.py` defines the Qwen-primary / Gemini-fallback contract; `.env`/`.env.example` carry the keys.
 
 ## Known Remaining Issues
 
-- AI calls remain fragmented across Gemini/OpenRouter; the shared provider-neutral gateway core and the Qwen adapter exist, but no caller has been migrated to the gateway and the Gemini fallback adapter is not yet implemented.
+- AI calls remain fragmented across Gemini/OpenRouter; the shared provider-neutral gateway core, the Qwen primary adapter, and the Gemini fallback adapter now exist, but no caller has been migrated to the gateway yet.
 - Clinical scan-to-care flow is not yet a unified LangGraph.
 - Google Maps/Places remains active and paid-key dependent.
 - Clinical rule/evidence architecture still needs later phases.
@@ -114,14 +115,14 @@ Phase 2A.1 introduced a shared, provider-neutral AI gateway core at `orchestrato
 | 1B | Full Supabase PostgreSQL Cutover (identity/auth/domain migration) | COMPLETE |
 | 2A.1 | Shared AI Gateway Core (provider-neutral, no callers migrated) | COMPLETE |
 | 2A.2 | Alibaba Qwen Provider Adapter (gateway-level, no callers migrated) | COMPLETE |
+| 2A.3 | Gemini Fallback Provider Adapter (gateway-level, no callers migrated) | COMPLETE |
 
 The former Phase 1C is obsolete because its domain migration scope was merged into Phase 1B.
 
 ## Next Phase
 
-**Phase 2A.3 - Gemini Fallback Adapter**
+**Phase 2A.4 - AI Gateway Composition + First Caller Migration**
 
-- Implement a Gemini `AIProvider` adapter for the technical-fallback role.
-- Map Gemini/native API errors to the existing gateway exception hierarchy.
-- Still do not migrate every caller until the gateway is proven.
+- Compose the concrete primary (Qwen) + fallback (Gemini) providers into a gateway instance and migrate the first application caller to the shared gateway.
+- Still do not migrate every caller until the gateway is proven in production paths.
 - Do not revisit database migration unless a proven defect requires it.

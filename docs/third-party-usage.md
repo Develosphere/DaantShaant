@@ -17,7 +17,7 @@ Statuses describe the current runtime after Phase 1B.
 | FastAPI / Uvicorn | **ACTIVE** | API and service runtime |
 | Pydantic v2 | **ACTIVE** | API schemas and configuration |
 | httpx | **ACTIVE** | Service-to-service HTTP |
-| Gemini | **ACTIVE** | Vision and existing recommendation AI paths |
+| Gemini | **ACTIVE** | Vision and existing recommendation AI paths; 2A.3 added `GeminiProvider` gateway fallback adapter (httpx, `v1beta` `generateContent`) — not yet caller-wired, no Google SDK introduced |
 | OpenRouter | **ACTIVE - TO BE REMOVED** | Existing chat path; replaced in Phase 2A |
 | LangGraph / langchain-core | **ACTIVE** | Product and dentist recommendation graphs |
 | FAISS / sentence-transformers | **ACTIVE** | Local dental RAG |

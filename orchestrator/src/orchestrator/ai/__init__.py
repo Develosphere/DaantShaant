@@ -21,6 +21,7 @@ from orchestrator.ai.exceptions import (
     StructuredOutputError,
 )
 from orchestrator.ai.gateway import DEFAULT_AI_TIMEOUT_SECONDS, AIGateway
+from orchestrator.ai.gemini import GeminiProvider
 from orchestrator.ai.qwen import QwenProvider
 from orchestrator.ai.schemas import (
     AIResult,
@@ -54,4 +55,5 @@ __all__ = [
     "StructuredOutputError",
     "AllProvidersFailedError",
     "QwenProvider",
+    "GeminiProvider",
 ]

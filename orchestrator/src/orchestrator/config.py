@@ -133,6 +133,8 @@ class AISettings(BaseSettings):
     # Google Gemini (technical fallback) — LEGACY keys below remain in use
     gemini_api_key: str = ""
     gemini_model: str = "gemini-flash-lite-latest"
+    # Optional override; the Gemini adapter defaults to Google's v1beta base URL.
+    gemini_base_url: str = ""
 
 
 # Combine service, PostgreSQL, authentication, AI gateway, and map settings.
