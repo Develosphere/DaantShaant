@@ -1,15 +1,24 @@
-"""LLM-powered conversational engine for DaantShaant assistant."""
+"""LLM-powered conversational engine for DaantShaant assistant.
+
+All assistant text generation flows through the shared, provider-neutral
+:class:`~orchestrator.ai.gateway.AIGateway` (Phase 2A.4): Qwen primary with a
+Gemini technical fallback. This module never talks to a provider SDK, the
+legacy ``llm_provider`` chain, or OpenRouter directly, and it composes the
+gateway lazily so importing it costs no AI-adapter work.
+"""
 
 import logging
 import re
-from typing import Optional, List, Dict, Any
+import time
 from datetime import datetime
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from orchestrator.chat_schemas import AnalysisHistoryContext, MessageContext
-from orchestrator.openrouter_client import openrouter_client
-from orchestrator.llm_provider import llm_provider
 from orchestrator.rag.retrieval_service import retrieval_service
 from orchestrator import conversation_state as cs
+
+if TYPE_CHECKING:  # pragma: no cover - typing only, keeps runtime import cheap
+    from orchestrator.ai.gateway import AIGateway
 
 logger = logging.getLogger(__name__)
 
@@ -69,11 +78,81 @@ BANNED_PHRASES = [
 
 
 class ConversationEngine:
-    """LLM-powered conversation engine using OpenRouter."""
-    
-    def __init__(self):
-        self.client = openrouter_client
-        self.llm = llm_provider
+    """Conversation engine backed by the shared DaantShaant AI gateway."""
+
+    def __init__(self, gateway: "AIGateway | None" = None) -> None:
+        # Injectable for tests; production resolves the lazily composed
+        # process-wide gateway on first generation (never at import time).
+        self._gateway = gateway
+
+    @property
+    def gateway(self) -> "AIGateway":
+        if self._gateway is None:
+            from orchestrator.ai.factory import get_ai_gateway
+
+            self._gateway = get_ai_gateway()
+        return self._gateway
+
+    async def _generate_text(
+        self,
+        *,
+        system_prompt: str,
+        user_message: str,
+        temperature: float = 0.7,
+        max_tokens: int = 600,
+        user_raw_message: str = "",
+        active_issue: Optional[str] = None,
+    ) -> str:
+        """Generate assistant text through :class:`AIGateway` (Qwen -> Gemini).
+
+        The model is intentionally not set on the request: each provider
+        resolves its own configured model (``QWEN_CHAT_MODEL`` primary,
+        ``GEMINI_MODEL`` fallback), which keeps this caller provider-neutral.
+
+        Configuration and programming errors propagate untouched (they must
+        never be masked by a provider switch). Only a fully technical
+        double-provider failure degrades to the historic issue-aware
+        deterministic dental answer, so the patient still gets a reply.
+        """
+        from orchestrator.ai.exceptions import AllProvidersFailedError
+        from orchestrator.ai.schemas import ChatMessage, TextRequest
+
+        request = TextRequest(
+            messages=[
+                ChatMessage(role="system", content=system_prompt),
+                ChatMessage(role="user", content=user_message),
+            ],
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        started = time.perf_counter()
+        try:
+            result = await self.gateway.generate_text(request)
+        except AllProvidersFailedError as exc:
+            from orchestrator.llm_provider import get_deterministic_fallback
+
+            logger.warning(
+                "[CHAT] status=all_providers_failed reason=%s latency_ms=%s",
+                type(exc).__name__,
+                round((time.perf_counter() - started) * 1000.0, 1),
+            )
+            return get_deterministic_fallback(user_raw_message or user_message, active_issue)
+
+        content = (result.content or "").strip()
+        logger.info(
+            "[CHAT] status=%s provider=%s model=%s latency_ms=%s fallback_used=%s",
+            "ok" if content else "empty",
+            result.provider,
+            result.model,
+            result.latency_ms,
+            result.fallback_used,
+        )
+        if not content:
+            from orchestrator.llm_provider import get_deterministic_fallback
+
+            return get_deterministic_fallback(user_raw_message or user_message, active_issue)
+        return content
+
     def _is_incomplete(self, text: str) -> bool:
         """Check if a text represents an incomplete, truncated, or dangling response."""
         if not text:
@@ -129,7 +208,7 @@ The assistant generated this partial response: "{partial_response}"
 Finish the final sentence naturally and completely. Do not repeat what was already written. Respond with ONLY the missing tail part to make it a complete sentence. Output plain text only."""
         
         try:
-            tail = await self.llm.generate(
+            tail = await self._generate_text(
                 system_prompt="You complete half-finished sentences from another assistant. Output only the completion. No repeating. Keep it extremely brief.",
                 user_message=continuation_prompt,
                 temperature=0.5,
@@ -247,7 +326,7 @@ Finish the final sentence naturally and completely. Do not repeat what was alrea
         logger.info("[LLM] Generating greeting")
         prompt = "User just greeted you. Respond naturally in 1-2 sentences. Be friendly and casual. Don't introduce yourself or list what you can do."
         
-        response = await self.llm.generate(
+        response = await self._generate_text(
             system_prompt=ASSISTANT_SYSTEM_PROMPT,
             user_message=prompt,
             temperature=0.9,
@@ -367,8 +446,8 @@ Respond naturally in 2-4 sentences. Stay on the active topic. Reference what the
             state = cs.get_state(str(conversation_id))
             active_issue = state.active_dental_issue
         
-        # Generate response via multi-provider chain
-        response = await self.llm.generate(
+        # Generate response via the shared AI gateway (Qwen -> Gemini fallback)
+        response = await self._generate_text(
             system_prompt=ASSISTANT_SYSTEM_PROMPT,
             user_message=enhanced_prompt,
             temperature=0.8,
@@ -437,8 +516,8 @@ Respond with empathy in 3-5 sentences. Be conversational and supportive. Plain t
             logger.warning(f"[RAG] Failed to enhance prompt: {e}")
             enhanced_prompt = prompt
         
-        # Generate via multi-provider chain
-        response = await self.llm.generate(
+        # Generate via the shared AI gateway (Qwen -> Gemini fallback)
+        response = await self._generate_text(
             system_prompt=ASSISTANT_SYSTEM_PROMPT,
             user_message=enhanced_prompt,
             temperature=0.8,
@@ -488,7 +567,7 @@ Respond with empathy in 3-5 sentences. Be conversational and supportive. Plain t
 
 Explain what you see in 4-6 sentences. Be conversational and honest but not alarming. Give practical advice. Keep it natural. Plain text only."""
         
-        response = await self.llm.generate(
+        response = await self._generate_text(
             system_prompt=ASSISTANT_SYSTEM_PROMPT,
             user_message=prompt,
             temperature=0.8,
@@ -557,7 +636,7 @@ Respond naturally in 1-3 sentences based on the conversation context. Remember w
         if conversation_id:
             active_issue = state.active_dental_issue if hasattr(state, 'active_dental_issue') else None
         
-        response = await self.llm.generate(
+        response = await self._generate_text(
             system_prompt=ASSISTANT_SYSTEM_PROMPT,
             user_message=prompt,
             temperature=0.8,
@@ -614,7 +693,7 @@ Previous results (from {latest_prev.created_at.strftime('%Y-%m-%d')}):
 
 Analyze if their condition got better, worse, or stayed the same, and respond in 3-4 friendly sentences. Be encouraging, conversational, and direct. Plain text only."""
         
-        response = await self.llm.generate(
+        response = await self._generate_text(
             system_prompt=ASSISTANT_SYSTEM_PROMPT,
             user_message=prompt,
             temperature=0.8,

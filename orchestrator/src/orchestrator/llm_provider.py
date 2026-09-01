@@ -121,7 +121,7 @@ GENERIC_DENTAL_FALLBACK = (
 )
 
 
-def _get_deterministic_fallback(user_message: str, active_issue: Optional[str] = None) -> str:
+def get_deterministic_fallback(user_message: str, active_issue: Optional[str] = None) -> str:
     """Return a deterministic, issue-aware dental response.
     
     Tries to match the active conversation issue first, then scans
@@ -354,7 +354,7 @@ class LLMProvider:
 
         # --- Provider 3: Deterministic dental fallback ---
         logger.info("[LLM_PROVIDER] Using deterministic dental fallback")
-        return _get_deterministic_fallback(user_raw_message or user_message, active_issue)
+        return get_deterministic_fallback(user_raw_message or user_message, active_issue)
 
 
 # Global instance

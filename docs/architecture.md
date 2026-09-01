@@ -15,6 +15,8 @@ FastAPI Orchestrator
     +--> Teeth Analyzer (OpenCV + Gemini vision)
     +--> Diagnosis service (rule classifier)
     +--> FAISS + sentence-transformers RAG
+    +--> Shared AI Gateway (chat: Qwen primary / Gemini fallback)
+    +--> Legacy direct AI paths (vision Gemini, OpenRouter descriptions)
     +--> Product and Dentist LangGraphs
     +--> Google Maps / Places
     |
@@ -53,19 +55,26 @@ MongoDB is REMOVED: no connection module, runtime dependency, configuration, hea
 - Public admin signup is absent; controlled admin creation uses `scripts/create_admin.py`.
 - Patient and dentist resource ownership is checked against the authenticated UUID.
 
-### AI Gateway (Phase 2A.1 - Core Implemented)
+### AI Gateway (Phase 2A.1-2A.4 - Composed, One Caller Migrated)
 
-A shared, provider-neutral gateway core now exists at `orchestrator/src/orchestrator/ai/`:
+The shared, provider-neutral gateway lives at `orchestrator/src/orchestrator/ai/`:
 
 ```text
-Business/Agent Module (future callers)
-    -> AIGateway (routing, timeout, normalization, fallback policy)
-        -> AIProvider (abstract async contract)
-            -> Qwen adapter (primary, Phase 2A.2 - not yet built)
-            -> Gemini adapter (fallback, later - not yet built)
+Conversation engine (chat text generation)   <-- migrated in 2A.4
+    -> ai/factory.create_ai_gateway(settings) / get_ai_gateway()   [lazy, no import-time I/O]
+        -> AIGateway (routing, timeout, normalization, fallback policy)
+            -> PRIMARY  QwenProvider   (QWEN_CHAT_MODEL)
+            -> FALLBACK GeminiProvider (GEMINI_MODEL)
+
+Still on legacy direct paths (2A.5+ targets)
+    -> Teeth Analyzer / clinical vision   -> direct Gemini
+    -> Product description generator      -> OpenRouter
+    -> Recommendation LangGraphs          -> llm_provider.gemini (direct Gemini)
 ```
 
-Only the contract/abstraction layer is implemented. No provider adapter exists, no caller has been migrated, and no external AI request is made from this layer. Current AI still flows through the legacy direct Gemini/OpenRouter paths shown above.
+Composition is driven by `PRIMARY_AI_PROVIDER=qwen` / `FALLBACK_AI_PROVIDER=gemini`; an unsupported name raises `ProviderConfigurationError` instead of silently selecting another provider. Providers are constructed on first use, so no HTTP client, no provider instance, and no network call exist at import time.
+
+The migrated chat caller builds a neutral `TextRequest` (system + user turns, temperature, max_tokens) and reads only `AIResult.content`, keeping the `POST /v1/chat/message` response contract unchanged. Configuration and programming errors propagate rather than being masked by fallback; only a technical failure of both providers degrades to the existing deterministic dental answer.
 
 ## Target Architecture (Planned)
 

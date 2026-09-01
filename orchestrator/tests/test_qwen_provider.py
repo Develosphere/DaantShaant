@@ -119,6 +119,29 @@ def test_text_success_normalization():
     assert result.fallback_used is False
 
 
+def test_text_generation_defaults_to_chat_model():
+    """Conversational text uses QWEN_CHAT_MODEL, not the general default model."""
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return _json_response(_completion_body("ok", model="qwen-chat-special"))
+
+    provider = QwenProvider(
+        api_key=FAKE_KEY,
+        base_url=BASE_URL,
+        default_model="qwen-general-model",
+        chat_model="qwen-chat-special",
+        timeout_seconds=5.0,
+        transport=httpx.MockTransport(handler),
+    )
+    result = asyncio.run(provider.generate_text(TextRequest(prompt="hi")))
+
+    payload = json.loads(captured[0].content.decode())
+    assert payload["model"] == "qwen-chat-special"
+    assert result.model == "qwen-chat-special"
+
+
 def test_messages_passthrough_and_model_override():
     captured: list[httpx.Request] = []
 

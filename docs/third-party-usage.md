@@ -17,13 +17,13 @@ Statuses describe the current runtime after Phase 1B.
 | FastAPI / Uvicorn | **ACTIVE** | API and service runtime |
 | Pydantic v2 | **ACTIVE** | API schemas and configuration |
 | httpx | **ACTIVE** | Service-to-service HTTP |
-| Gemini | **ACTIVE** | Vision and existing recommendation AI paths; 2A.3 added `GeminiProvider` gateway fallback adapter (httpx, `v1beta` `generateContent`) — not yet caller-wired, no Google SDK introduced |
-| OpenRouter | **ACTIVE - TO BE REMOVED** | Existing chat path; replaced in Phase 2A |
+| Gemini | **ACTIVE (fallback)** | Clinical vision baseline and recommendation AI paths still call Gemini directly; since 2A.4 `GeminiProvider` is the production gateway FALLBACK for the migrated conversational chat path. No Google SDK introduced (plain httpx `v1beta` `generateContent`) |
+| OpenRouter | **LEGACY - TO BE REMOVED** | No longer used by the conversational chat path (migrated in 2A.4). Still used by the dentist-portal product description generator; `openrouter_client.py` retained until Phase 2A.5 retires it |
 | LangGraph / langchain-core | **ACTIVE** | Product and dentist recommendation graphs |
 | FAISS / sentence-transformers | **ACTIVE** | Local dental RAG |
 | OpenCV / Pillow | **ACTIVE** | Image processing |
 | Google Maps / Places / Geocoding | **ACTIVE - TO BE REMOVED** | Existing dentist discovery/map path |
-| Alibaba Model Studio / Qwen | **ACTIVE (adapter built, not yet caller-wired)** | Shared primary AI gateway; 2A.1 built the provider-neutral core, 2A.2 added `QwenProvider` (httpx, OpenAI-compatible `/chat/completions`); no application caller migrated yet |
+| Alibaba Model Studio / Qwen | **ACTIVE (production primary)** | Shared primary AI gateway. 2A.1 built the provider-neutral core, 2A.2 added `QwenProvider` (httpx, OpenAI-compatible `/chat/completions`), 2A.4 added the production composition `ai/factory.py` (`create_ai_gateway` / `get_ai_gateway`) and migrated the conversational chat text-generation caller to Qwen primary with Gemini technical fallback |
 | MapLibre / OpenFreeMap / OSM / Overpass | **TARGET** | Open map replacement |
 | Vercel | **TARGET** | Frontend hosting |
 

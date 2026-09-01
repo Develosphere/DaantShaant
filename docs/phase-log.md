@@ -222,3 +222,63 @@ Implemented the Gemini technical-fallback provider adapter behind the shared Pha
 ### Next
 
 Phase 2A.4 - AI Gateway Composition + First Caller Migration.
+
+---
+
+## Phase 2A.4 - AI Gateway Composition + First Real Caller Migration
+
+**Date:** September 2026
+
+**Status:** COMPLETE
+
+### Summary
+
+Composed the production AI gateway (Qwen primary + Gemini technical fallback) and migrated exactly one real business caller to it: the orchestrator's conversational/chat text-generation path. Clinical vision, product descriptions, and the recommendation LangGraphs were deliberately left untouched.
+
+### Files Created
+
+- `orchestrator/src/orchestrator/ai/factory.py` (`create_ai_gateway(settings)`, lazy cached `get_ai_gateway()`, `SUPPORTED_AI_PROVIDERS`)
+- `orchestrator/tests/test_ai_gateway_factory.py`
+- `orchestrator/tests/test_chat_gateway_migration.py`
+
+### Files Modified
+
+- `orchestrator/src/orchestrator/conversation_engine.py` (all assistant text generation now goes through `AIGateway.generate_text`; legacy `openrouter_client` / `llm_provider` chain removed from this module)
+- `orchestrator/src/orchestrator/ai/qwen.py` (`generate_text` now defaults to `QWEN_CHAT_MODEL` instead of leaving that field unused)
+- `orchestrator/src/orchestrator/ai/__init__.py` (export factory surface)
+- `orchestrator/src/orchestrator/llm_provider.py` (`_get_deterministic_fallback` renamed to the public `get_deterministic_fallback`; behavior unchanged)
+- Docs: `context.md`, `docs/architecture.md`, `docs/third-party-usage.md`
+
+### Composition
+
+```text
+create_ai_gateway(settings)
+  PRIMARY  = QwenProvider    (QWEN_CHAT_MODEL)
+  FALLBACK = GeminiProvider  (GEMINI_MODEL)
+  timeout  = AI_REQUEST_TIMEOUT_SECONDS
+```
+
+`PRIMARY_AI_PROVIDER` / `FALLBACK_AI_PROVIDER` accept only `qwen` / `gemini` (plus an empty fallback). Unknown, empty-primary, or identical primary/fallback values raise `ProviderConfigurationError`; nothing is ever silently substituted. Adapter modules are imported inside the builders and providers are built on first use, so importing the factory composes no provider, creates no HTTP client, and performs no network I/O (verified by a test that fails if `httpx.AsyncClient` is constructed during composition).
+
+### Caller migration
+
+`ConversationEngine` now depends only on `AIGateway` + normalized contracts: `TextRequest(messages=[system,user], temperature, max_tokens)` -> `AIResult.content`. The request carries no provider-specific model id, so each provider resolves its own configured model. RAG (`retrieval_service.get_enhanced_prompt`), conversation memory, state context, incomplete-response completion, banned-phrase cleaning, and dentist-recommendation logic are unchanged; only the final provider invocation moved. `POST /v1/chat/message` still returns the same `SendMessageResponse` shape (no new fields). Minimal structured logging at the boundary records `status/provider/model/latency_ms/fallback_used` only - no keys, no image data, no prompt text.
+
+Failure policy at the caller: configuration errors (`ProviderConfigurationError`) and programming errors (gateway-wrapped `ProviderInternalError`) propagate and are never masked by a provider switch. Only `AllProvidersFailedError` (both providers failing technically) - or an empty reply - degrades to the pre-existing deterministic issue-aware dental answer, so the patient still receives a message.
+
+### Validation
+
+- `test_ai_gateway.py` + `test_qwen_provider.py` + `test_gemini_provider.py` + `test_ai_gateway_factory.py`: 72 passed.
+- `test_chat_gateway_migration.py`: 12 passed.
+- Zero external AI API calls: fake gateways, in-memory `AIProvider` fakes, `httpx.MockTransport`, and a stubbed RAG boundary. The full backend suite was intentionally not run.
+
+### Remaining legacy AI callers (untouched by design)
+
+- Teeth Analyzer / clinical vision: direct Gemini (Phase 2B target).
+- `dentist_portal/description_generator.py`: `openrouter_client` (last OpenRouter consumer).
+- `recommendation_ai_system/`: `llm_provider.gemini.generate` (direct Gemini).
+- `llm_provider.generate()` (OpenRouter -> Gemini -> deterministic chain) now has no callers; the module remains as the home of the deterministic dental fallback table until Phase 2A.5.
+
+### Next
+
+Phase 2A.5 - Remaining Legacy AI Caller Migration (one small caller-specific task at a time; product description generator first).

@@ -107,7 +107,10 @@ class QwenProvider(AIProvider):
         messages = self._plain_messages(request.messages, request.prompt)
         return await self._chat(
             messages,
-            model=request.model or self._default_model,
+            # Plain text generation is conversational generation: it defaults to
+            # QWEN_CHAT_MODEL, overridable per request. Vision/structured keep
+            # their own configured models.
+            model=request.model or self._chat_model or self._default_model,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
         )
