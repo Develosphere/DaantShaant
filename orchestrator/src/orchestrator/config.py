@@ -102,8 +102,41 @@ class GoogleMapsSettings(BaseSettings):
     google_maps_api_key: str = ""
 
 
-# Combine service, PostgreSQL, authentication, and map settings.
-class CombinedSettings(Settings, PostgresSettings, AuthSettings, GoogleMapsSettings):
+class AISettings(BaseSettings):
+    """Shared DaantShaant AI Gateway configuration contract (Phase 2A.1).
+
+    Provider-neutral: primary provider (Qwen / Alibaba Model Studio) and a
+    technical fallback (Gemini). These fields define the contract only; the
+    concrete provider adapters that consume the keys are added in later 2A.x
+    phases. No HTTP calls are made from this layer.
+    """
+    model_config = SettingsConfigDict(
+        env_file=_ENV_FILE,
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    # Provider selection
+    primary_ai_provider: str = "qwen"
+    fallback_ai_provider: str = "gemini"
+    ai_request_timeout_seconds: float = 60.0
+
+    # Alibaba Model Studio / Qwen (primary)
+    dashscope_api_key: str = ""
+    qwen_base_url: str = ""
+    qwen_default_model: str = "qwen3.7-plus"
+    qwen_vision_model: str = "qwen3.7-plus"
+    qwen_relevance_model: str = "qwen3.7-plus"
+    qwen_reasoning_model: str = "qwen3.7-plus"
+    qwen_chat_model: str = "qwen3.7-plus"
+
+    # Google Gemini (technical fallback) — LEGACY keys below remain in use
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-flash-lite-latest"
+
+
+# Combine service, PostgreSQL, authentication, AI gateway, and map settings.
+class CombinedSettings(Settings, PostgresSettings, AuthSettings, AISettings, GoogleMapsSettings):
     pass
 
 

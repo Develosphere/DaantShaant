@@ -53,6 +53,20 @@ MongoDB is REMOVED: no connection module, runtime dependency, configuration, hea
 - Public admin signup is absent; controlled admin creation uses `scripts/create_admin.py`.
 - Patient and dentist resource ownership is checked against the authenticated UUID.
 
+### AI Gateway (Phase 2A.1 - Core Implemented)
+
+A shared, provider-neutral gateway core now exists at `orchestrator/src/orchestrator/ai/`:
+
+```text
+Business/Agent Module (future callers)
+    -> AIGateway (routing, timeout, normalization, fallback policy)
+        -> AIProvider (abstract async contract)
+            -> Qwen adapter (primary, Phase 2A.2 - not yet built)
+            -> Gemini adapter (fallback, later - not yet built)
+```
+
+Only the contract/abstraction layer is implemented. No provider adapter exists, no caller has been migrated, and no external AI request is made from this layer. Current AI still flows through the legacy direct Gemini/OpenRouter paths shown above.
+
 ## Target Architecture (Planned)
 
 The persistence/auth target is complete. Remaining architecture work is:

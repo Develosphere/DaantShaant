@@ -109,3 +109,39 @@ The former Phase 1B identity/auth scope and Phase 1C domain scope were merged an
 ### Next
 
 Phase 2A — Shared DaantShaant AI Gateway.
+
+---
+
+## Phase 2A.1 — Shared AI Gateway Core
+
+**Date:** September 2026  
+**Status:** COMPLETE
+
+### Summary
+
+Created a provider-neutral AI gateway foundation. No existing caller was migrated and no real external AI request was added.
+
+### Files Created
+
+- `orchestrator/src/orchestrator/ai/{__init__,base,schemas,exceptions,gateway}.py`
+- `orchestrator/tests/test_ai_gateway.py` (fake providers only)
+
+### Design
+
+- `AIProvider` abstract async contract: `generate_text` / `generate_vision` / `generate_structured`.
+- Normalized `AIResult` (content, provider, model, usage, latency_ms, finish_reason, raw_metadata, fallback_used, data) and `TextRequest`/`VisionRequest`/`StructuredRequest` schemas; no SDK object leaks.
+- `AIGateway` routes by capability, enforces a request timeout, normalizes metadata, and applies the fallback policy.
+- Exception hierarchy: technical failures (timeout/rate-limit/server/unavailable/invalid-response) are fallback-eligible; configuration, invalid-request, and structured-parse failures never fall back. Both providers failing raises `AllProvidersFailedError`.
+
+### Configuration Contract
+
+- Added `AISettings` to `orchestrator/src/orchestrator/config.py` (primary/fallback selection, timeout, Qwen keys/models, Gemini fallback keys). `.env` / `.env.example` already carried these keys.
+- Legacy direct Gemini/OpenRouter env and runtime paths left intact and unchanged.
+
+### Validation
+
+- `test_ai_gateway.py` (11 tests) + `test_auth_security.py` (config import smoke, 6 tests): 17 passed. Zero external AI calls.
+
+### Next
+
+Phase 2A.2 — Alibaba Qwen Provider Adapter.

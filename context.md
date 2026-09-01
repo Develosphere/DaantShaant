@@ -1,7 +1,7 @@
 # DaantShaant Context
 
 > Current implementation state. Read this first in every engineering chat.
-> Last updated: Phase 1B - Full Supabase PostgreSQL Cutover (COMPLETE), September 2026.
+> Last updated: Phase 2A.1 - Shared AI Gateway Core (COMPLETE), September 2026.
 
 ## Product
 
@@ -87,9 +87,18 @@ MongoDB and its runtime drivers/configuration are removed. There are no active r
 - Product and dentist recommendation LangGraphs
 - Google Maps/Places baseline (scheduled for later removal)
 
+## AI Gateway
+
+Phase 2A.1 introduced a shared, provider-neutral AI gateway core at `orchestrator/src/orchestrator/ai/`:
+
+- `AIProvider` abstract async interface (text/vision/structured), normalized `AIResult` and request schemas, and a small exception hierarchy.
+- `AIGateway` routes by capability, enforces `AI_REQUEST_TIMEOUT_SECONDS`, normalizes provider/model/latency metadata, and performs controlled fallback only for technical failures (timeout, connection, 429, 5xx, malformed response). Configuration/invalid-request/schema errors never silently fall back; both providers failing raises `AllProvidersFailedError`.
+- No real provider adapter exists yet and no active caller has been migrated. All current AI still runs through the legacy Gemini/OpenRouter paths unchanged.
+- `AISettings` in `config.py` defines the Qwen-primary / Gemini-fallback contract; `.env`/`.env.example` carry the keys.
+
 ## Known Remaining Issues
 
-- AI calls remain fragmented across Gemini/OpenRouter; no shared Qwen-primary gateway yet.
+- AI calls remain fragmented across Gemini/OpenRouter; the shared provider-neutral gateway core exists but no caller has been migrated to it and no Qwen adapter is implemented yet.
 - Clinical scan-to-care flow is not yet a unified LangGraph.
 - Google Maps/Places remains active and paid-key dependent.
 - Clinical rule/evidence architecture still needs later phases.
@@ -102,14 +111,15 @@ MongoDB and its runtime drivers/configuration are removed. There are no active r
 | 0 | Hackathon Rebaseline | COMPLETE |
 | 1A | Supabase PostgreSQL Foundation | COMPLETE |
 | 1B | Full Supabase PostgreSQL Cutover (identity/auth/domain migration) | COMPLETE |
+| 2A.1 | Shared AI Gateway Core (provider-neutral, no callers migrated) | COMPLETE |
 
 The former Phase 1C is obsolete because its domain migration scope was merged into Phase 1B.
 
 ## Next Phase
 
-**Phase 2A - Shared DaantShaant AI Gateway**
+**Phase 2A.2 - Alibaba Qwen Provider Adapter**
 
-- Qwen primary through Alibaba Model Studio
-- Gemini technical fallback
-- Shared provider abstraction, structured outputs, timeouts, and errors
-- Do not revisit database migration unless a proven defect requires it
+- Implement a Qwen `AIProvider` adapter against Alibaba Model Studio (OpenAI-compatible `/chat/completions`).
+- Wire text/vision/structured methods and map provider errors to gateway exceptions.
+- Still do not migrate every caller until the gateway is proven.
+- Do not revisit database migration unless a proven defect requires it.
