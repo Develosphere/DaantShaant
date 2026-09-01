@@ -12,6 +12,7 @@ from orchestrator.ai.exceptions import (
     InvalidProviderRequestError,
     InvalidProviderResponseError,
     ProviderConfigurationError,
+    ProviderInternalError,
     ProviderRateLimitError,
     ProviderServerError,
     ProviderTechnicalError,
@@ -20,6 +21,7 @@ from orchestrator.ai.exceptions import (
     StructuredOutputError,
 )
 from orchestrator.ai.gateway import DEFAULT_AI_TIMEOUT_SECONDS, AIGateway
+from orchestrator.ai.qwen import QwenProvider
 from orchestrator.ai.schemas import (
     AIResult,
     ChatMessage,
@@ -48,6 +50,8 @@ __all__ = [
     "InvalidProviderResponseError",
     "ProviderConfigurationError",
     "InvalidProviderRequestError",
+    "ProviderInternalError",
     "StructuredOutputError",
     "AllProvidersFailedError",
+    "QwenProvider",
 ]

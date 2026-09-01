@@ -23,7 +23,7 @@ Statuses describe the current runtime after Phase 1B.
 | FAISS / sentence-transformers | **ACTIVE** | Local dental RAG |
 | OpenCV / Pillow | **ACTIVE** | Image processing |
 | Google Maps / Places / Geocoding | **ACTIVE - TO BE REMOVED** | Existing dentist discovery/map path |
-| Alibaba Model Studio / Qwen | **TARGET (Phase 2A)** | Shared primary AI gateway; 2A.1 built the provider-neutral core (no adapter/caller yet), 2A.2 adds the Qwen adapter |
+| Alibaba Model Studio / Qwen | **ACTIVE (adapter built, not yet caller-wired)** | Shared primary AI gateway; 2A.1 built the provider-neutral core, 2A.2 added `QwenProvider` (httpx, OpenAI-compatible `/chat/completions`); no application caller migrated yet |
 | MapLibre / OpenFreeMap / OSM / Overpass | **TARGET** | Open map replacement |
 | Vercel | **TARGET** | Frontend hosting |
 

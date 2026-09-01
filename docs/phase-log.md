@@ -145,3 +145,37 @@ Created a provider-neutral AI gateway foundation. No existing caller was migrate
 ### Next
 
 Phase 2A.2 — Alibaba Qwen Provider Adapter.
+
+---
+
+## Phase 2A.2 - Alibaba Qwen Provider Adapter
+
+**Date:** September 2026
+
+**Status:** COMPLETE
+
+### Summary
+
+Implemented the first concrete AI provider adapter (Qwen / Alibaba Model Studio) behind the shared Phase 2A.1 gateway contract. No existing caller was migrated and no automated test performs a real external AI call.
+
+### Files Created
+
+- `orchestrator/src/orchestrator/ai/qwen.py` (`QwenProvider`)
+- `orchestrator/tests/test_qwen_provider.py` (httpx.MockTransport only)
+- `scripts/test_qwen_connection.py` (manual, developer-run smoke test)
+
+### Design
+
+- Plain `httpx.AsyncClient` against the OpenAI-compatible `/chat/completions` endpoint; `QWEN_BASE_URL` is treated as a base URL (trailing slash handled, `/chat/completions` appended in the adapter). No Alibaba/OpenAI SDK.
+- Text, multimodal vision (base64 `data:` URL parts, `QWEN_VISION_MODEL`), and structured generation (`response_format={"type":"json_object"}` plus schema instruction; parsed into `AIResult.data`; `StructuredOutputError` on malformed JSON).
+- Model selection from `QWEN_*` config defaults, with an optional per-request `model` override added to the normalized request schemas.
+- Error mapping: 401/403 → `ProviderConfigurationError`, 429 → `ProviderRateLimitError`, 5xx → `ProviderServerError`, transport/DNS → `ProviderUnavailableError`, HTTP timeout → `ProviderTimeoutError`, malformed success payload → `InvalidProviderResponseError`. Arbitrary programming errors are left to the gateway's non-fallback-eligible `ProviderInternalError`. No retries/backoff/fallback inside the adapter.
+- Secrets: API key and image base64 never appear in exception messages or logs; error bodies are truncated and sanitized.
+
+### Validation
+
+- `test_ai_gateway.py` (13 tests) + `test_qwen_provider.py` (18 tests): 31 passed. Zero real API calls.
+
+### Next
+
+Phase 2A.3 — Gemini Fallback Adapter.

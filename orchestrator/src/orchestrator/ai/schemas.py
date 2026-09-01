@@ -33,6 +33,8 @@ class TextRequest(BaseModel):
     messages: list[ChatMessage] = Field(default_factory=list)
     temperature: float | None = None
     max_tokens: int | None = None
+    model: str | None = None
+    """Optional explicit model id; providers fall back to their configured default."""
 
 
 class VisionRequest(BaseModel):
@@ -48,6 +50,8 @@ class VisionRequest(BaseModel):
     content_type: str = "image/jpeg"
     temperature: float | None = None
     max_tokens: int | None = None
+    model: str | None = None
+    """Optional explicit model id; providers fall back to their configured default."""
 
 
 class StructuredRequest(BaseModel):
@@ -64,6 +68,8 @@ class StructuredRequest(BaseModel):
     content_type: str = "image/jpeg"
     temperature: float | None = None
     max_tokens: int | None = None
+    model: str | None = None
+    """Optional explicit model id; providers fall back to their configured default."""
 
 
 class AIResult(BaseModel):
