@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -19,7 +19,6 @@ class MessageSender(str, Enum):
 
 class CreateConversationRequest(BaseModel):
     """Request to create a new conversation."""
-    user_id: UUID
     title: Optional[str] = None
 
 
@@ -34,7 +33,6 @@ class CreateConversationResponse(BaseModel):
 class SendMessageRequest(BaseModel):
     """Request to send a message in a conversation."""
     conversation_id: Optional[UUID] = None  # If None, creates new conversation
-    user_id: UUID
     text: str
     image_base64: Optional[str] = None
     image_mime_type: str = "image/jpeg"
@@ -80,35 +78,11 @@ class ConversationHistoryResponse(BaseModel):
     messages: list[MessageResponse]
 
 
-# --- MongoDB Document Models ---
+# --- Internal conversation context models ---
 
 
-class UserDocument(BaseModel):
-    """User document stored in MongoDB."""
-    user_id: UUID = Field(default_factory=uuid4, alias="_id")
-    username: Optional[str] = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    profile: dict[str, Any] = Field(default_factory=dict)
-    
-    class Config:
-        populate_by_name = True
-
-
-class ConversationDocument(BaseModel):
-    """Conversation document stored in MongoDB."""
-    conversation_id: UUID = Field(default_factory=uuid4, alias="_id")
-    user_id: UUID
-    title: str = "New Conversation"
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    
-    class Config:
-        populate_by_name = True
-
-
-class MessageDocument(BaseModel):
-    """Message document stored in MongoDB."""
-    message_id: UUID = Field(default_factory=uuid4, alias="_id")
+class MessageContext(BaseModel):
+    message_id: UUID
     conversation_id: UUID
     user_id: UUID
     sender: MessageSender
@@ -116,23 +90,16 @@ class MessageDocument(BaseModel):
     image_base64: Optional[str] = None
     image_mime_type: Optional[str] = None
     analysis_result: Optional[dict[str, Any]] = None
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    
-    class Config:
-        populate_by_name = True
+    timestamp: datetime
 
 
-class AnalysisHistoryDocument(BaseModel):
-    """Analysis history document stored in MongoDB."""
-    analysis_history_id: UUID = Field(default_factory=uuid4, alias="_id")
+class AnalysisHistoryContext(BaseModel):
+    analysis_history_id: UUID
     user_id: UUID
-    message_id: UUID
-    conversation_id: UUID
+    message_id: UUID | None = None
+    conversation_id: UUID | None = None
     findings: list[dict[str, Any]]
     condition_label: str
     severity: str
     confidence: float
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    
-    class Config:
-        populate_by_name = True
+    created_at: datetime

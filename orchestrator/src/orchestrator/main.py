@@ -2,13 +2,18 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, HTTPException, WebSocket
+from fastapi import Depends
 from fastapi.middleware.cors import CORSMiddleware
 from uuid import UUID
 
 from orchestrator.config import settings
-from orchestrator.database import Database
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+from orchestrator.db.session import engine, get_db_session
+from orchestrator.dentist_portal.auth import decode_access_token, get_current_patient
 from orchestrator.live_session import handle_live_websocket
 from orchestrator.pipeline import (
+    AuthenticatedTeethAnalyzeRequest,
     TeethAnalyzePipelineRequest,
     TeethAnalyzePipelineResponse,
     check_dependencies,
@@ -39,16 +44,6 @@ from orchestrator.dentist_recommendation.routes_geocode import router as geocode
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.settings = settings
-    # Connect to MongoDB
-    await Database.connect()
-
-    # Initialize Dentist Portal indexes
-    try:
-        from orchestrator.dentist_portal.db import init_portal_indexes
-        await init_portal_indexes()
-    except Exception as e:
-        print(f"[PORTAL] Index init failed: {e}")
-    
     # Initialize RAG system
     try:
         from orchestrator.rag.vector_store import vector_store
@@ -58,8 +53,7 @@ async def lifespan(app: FastAPI):
         print(f"[RAG] RAG vector store not available: {e}")
     
     yield
-    # Disconnect from MongoDB
-    await Database.disconnect()
+    await engine.dispose()
 
 
 app = FastAPI(
@@ -71,7 +65,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=settings.get_cors_origins(),
     allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_credentials=True,
     allow_methods=["*"],
@@ -93,12 +87,12 @@ app.include_router(geocode_router)
 async def health() -> dict:
     deps = await check_dependencies()
     
-    # Check MongoDB connection
     try:
-        await Database.get_db().command("ping")
-        deps["mongodb"] = "ok"
+        async with engine.connect() as connection:
+            await connection.execute(text("SELECT 1"))
+        deps["postgresql"] = "ok"
     except Exception:
-        deps["mongodb"] = "unreachable"
+        deps["postgresql"] = "unreachable"
     
     status = "ok" if all(v == "ok" for v in deps.values()) else "degraded"
     return {
@@ -114,10 +108,23 @@ async def health() -> dict:
 
 @app.post("/v1/teeth/analyze", response_model=TeethAnalyzePipelineResponse)
 async def analyze_teeth(
-    request: TeethAnalyzePipelineRequest,
+    request: AuthenticatedTeethAnalyzeRequest,
+    user: dict = Depends(get_current_patient),
+    session: AsyncSession = Depends(get_db_session),
 ) -> TeethAnalyzePipelineResponse:
     try:
-        return await run_teeth_analysis_pipeline(request)
+        owned_request = TeethAnalyzePipelineRequest(
+            user_id=user["user_id"], **request.model_dump()
+        )
+        result = await run_teeth_analysis_pipeline(owned_request)
+        from orchestrator.repositories import ScanRepository
+        await ScanRepository(session).add_result(
+            patient_user_id=user["user_id"],
+            input_mode="snapshot",
+            analysis=result.analysis,
+            diagnosis=result.diagnosis,
+        )
+        return result
     except httpx.HTTPStatusError as exc:
         detail = exc.response.text
         try:
@@ -137,7 +144,16 @@ async def analyze_teeth(
 
 @app.websocket("/v1/live/session")
 async def live_session_ws(websocket: WebSocket) -> None:
-    await handle_live_websocket(websocket)
+    token = websocket.query_params.get("access_token", "")
+    try:
+        payload = decode_access_token(token)
+        if payload.get("role") != "patient":
+            raise ValueError("patient role required")
+        user_id = UUID(payload["sub"])
+    except Exception:
+        await websocket.close(code=4401, reason="Not authenticated")
+        return
+    await handle_live_websocket(websocket, user_id)
 
 
 # --- Chat API Endpoints ---
@@ -146,28 +162,39 @@ async def live_session_ws(websocket: WebSocket) -> None:
 @app.post("/v1/chat/conversation", response_model=CreateConversationResponse)
 async def create_new_conversation(
     request: CreateConversationRequest,
+    user: dict = Depends(get_current_patient),
+    session: AsyncSession = Depends(get_db_session),
 ) -> CreateConversationResponse:
     """Create a new conversation."""
     try:
-        return await create_conversation(request)
+        return await create_conversation(request, user["user_id"], session)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@app.get("/v1/chat/conversations/{user_id}", response_model=list[ConversationSummary])
-async def list_user_conversations(user_id: UUID) -> list[ConversationSummary]:
+@app.get("/v1/chat/conversations", response_model=list[ConversationSummary])
+async def list_current_user_conversations(
+    user: dict = Depends(get_current_patient),
+    session: AsyncSession = Depends(get_db_session),
+) -> list[ConversationSummary]:
     """Get all conversations for a user."""
     try:
-        return await get_user_conversations(user_id)
+        return await get_user_conversations(user["user_id"], session)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/v1/chat/messages/{conversation_id}", response_model=ConversationHistoryResponse)
-async def get_conversation_history(conversation_id: UUID) -> ConversationHistoryResponse:
+async def get_conversation_history(
+    conversation_id: UUID,
+    user: dict = Depends(get_current_patient),
+    session: AsyncSession = Depends(get_db_session),
+) -> ConversationHistoryResponse:
     """Get all messages in a conversation."""
     try:
-        return await get_conversation_messages(conversation_id)
+        return await get_conversation_messages(
+            conversation_id, user["user_id"], session
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
@@ -175,12 +202,38 @@ async def get_conversation_history(conversation_id: UUID) -> ConversationHistory
 
 
 @app.post("/v1/chat/message", response_model=SendMessageResponse)
-async def send_chat_message(request: SendMessageRequest) -> SendMessageResponse:
+async def send_chat_message(
+    request: SendMessageRequest,
+    user: dict = Depends(get_current_patient),
+    session: AsyncSession = Depends(get_db_session),
+) -> SendMessageResponse:
     """Send a message and get assistant response."""
     try:
-        return await send_message(request)
+        return await send_message(request, user["user_id"], session)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/v1/scans", response_model=list[dict])
+async def list_scans(
+    user: dict = Depends(get_current_patient),
+    session: AsyncSession = Depends(get_db_session),
+) -> list[dict]:
+    from orchestrator.repositories import ScanRepository
+
+    scans = await ScanRepository(session).list_owned(user["user_id"])
+    return [
+        {
+            "scan_id": str(scan.id),
+            "input_mode": scan.input_mode,
+            "status": scan.status,
+            "quality_score": scan.mechanical_quality_score,
+            "created_at": scan.created_at.isoformat(),
+        }
+        for scan in scans
+    ]
 
 
 def run() -> None:

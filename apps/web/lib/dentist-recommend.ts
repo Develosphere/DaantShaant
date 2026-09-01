@@ -1,4 +1,4 @@
-import { API_BASE, getStoredUser } from "./portal-auth";
+import { API_BASE, authorizedFetch } from "./portal-auth";
 
 export type DentistPin = {
   tier: "platform" | "general";
@@ -30,15 +30,6 @@ export type DentistRecommendResponse = {
   dentists: DentistPin[];
 };
 
-function authHeaders(): HeadersInit {
-  const user = getStoredUser("patient");
-  if (!user?.access_token) throw new Error("Please sign in as a patient");
-  return {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${user.access_token}`,
-  };
-}
-
 export async function fetchDentistRecommendations(params: {
   issue: string;
   lat?: number;
@@ -47,9 +38,9 @@ export async function fetchDentistRecommendations(params: {
   scan_id?: string;
   session_id?: string;
 }): Promise<DentistRecommendResponse> {
-  const res = await fetch(`${API_BASE}/portal/recommend/dentists/`, {
+  const res = await authorizedFetch("patient", `${API_BASE}/portal/recommend/dentists/`, {
     method: "POST",
-    headers: authHeaders(),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
   });
   if (!res.ok) {
@@ -66,9 +57,9 @@ export async function bookConsultation(params: {
   session_id?: string;
   message?: string;
 }): Promise<{ appointment_id: string; status: string; message: string }> {
-  const res = await fetch(`${API_BASE}/portal/recommend/dentists/appointments`, {
+  const res = await authorizedFetch("patient", `${API_BASE}/portal/recommend/dentists/appointments`, {
     method: "POST",
-    headers: authHeaders(),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
   });
   if (!res.ok) {

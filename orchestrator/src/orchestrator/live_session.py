@@ -198,6 +198,18 @@ async def finalize_session(ws: WebSocket, session: LiveSessionState) -> None:
         },
     )
 
+    from orchestrator.db.session import async_session_factory
+    from orchestrator.repositories import ScanRepository
+
+    async with async_session_factory() as db_session:
+        async with db_session.begin():
+            await ScanRepository(db_session).add_result(
+                patient_user_id=session.user_id,
+                input_mode="live",
+                analysis=final.analysis,
+                diagnosis=final.diagnosis,
+            )
+
     await send_json(
         ws,
         {
@@ -210,7 +222,7 @@ async def finalize_session(ws: WebSocket, session: LiveSessionState) -> None:
     )
 
 
-async def handle_live_websocket(ws: WebSocket) -> None:
+async def handle_live_websocket(ws: WebSocket, authenticated_user_id: UUID) -> None:
     await ws.accept()
     session: LiveSessionState | None = None
 
@@ -223,9 +235,8 @@ async def handle_live_websocket(ws: WebSocket) -> None:
             msg_type = data.get("type")
 
             if msg_type == "session.start":
-                user_id = UUID(data["user_id"])
                 locale = data.get("locale", "en")
-                session = live_sessions.start(user_id, locale)
+                session = live_sessions.start(authenticated_user_id, locale)
                 await send_json(
                     ws,
                     {

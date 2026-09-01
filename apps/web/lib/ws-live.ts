@@ -1,5 +1,6 @@
 import type { PipelineResult } from "./types";
-import { getUserId, getWsUrl } from "./api";
+import { getWsUrl } from "./api";
+import { getAccessToken } from "./portal-auth";
 
 export type LiveCallbacks = {
   onReady?: (sessionId: string) => void;
@@ -19,14 +20,18 @@ export class LiveSessionClient {
 
   connect(callbacks: LiveCallbacks): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.ws = new WebSocket(getWsUrl());
+      const token = getAccessToken("patient");
+      if (!token) {
+        reject(new Error("Please sign in as a patient"));
+        return;
+      }
+      this.ws = new WebSocket(`${getWsUrl()}?access_token=${encodeURIComponent(token)}`);
 
       this.ws.onopen = () => {
         callbacks.onStatus?.("Connected");
         this.ws?.send(
           JSON.stringify({
             type: "session.start",
-            user_id: getUserId(),
             locale: "en",
           })
         );

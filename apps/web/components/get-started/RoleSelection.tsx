@@ -47,7 +47,7 @@ const ROLES = [
         <path d="M2 12l10 5 10-5" />
       </svg>
     ),
-    registerPath: "/admin/register",
+    registerPath: "/admin/login",
     loginPath: "/admin/login",
     color: "primary",
     hidden: true, // Hidden from UI but route still accessible

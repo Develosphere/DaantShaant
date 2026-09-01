@@ -42,3 +42,70 @@ Existing DaantShaant repository adopted as hackathon baseline. Rebuild-from-scra
 ### Next
 
 Phase 1A — Supabase PostgreSQL Foundation
+
+---
+
+## Phase 1A — Supabase PostgreSQL Foundation
+
+**Date:** September 2026  
+**Status:** COMPLETE
+
+### Summary
+
+- Added SQLAlchemy 2, asyncpg, Alembic, async engine/session factory, 15 relational models, and the `001_baseline` migration.
+- Added safe PostgreSQL connection validation.
+- Verified the configured Supabase PostgreSQL 17.6 development database.
+
+### Note
+
+Phase 1A was present as uncommitted implementation work when Phase 1B began. Phase 1B fixed its Alembic environment loading/async URL issue and applied it remotely.
+
+---
+
+## Phase 1B — Full Supabase PostgreSQL Cutover
+
+**Date:** September 2026  
+**Status:** COMPLETE
+
+### Summary
+
+The former Phase 1B identity/auth scope and Phase 1C domain scope were merged and completed as one cutover. Supabase PostgreSQL is now the sole application database.
+
+### Database
+
+- Fixed Alembic to load the repository-root `.env`, prefer `DATABASE_MIGRATION_URL`, fall back to `DATABASE_URL`, normalize asyncpg URLs, and preserve percent-encoded credentials.
+- Applied `001_baseline` and `002_domain_compatibility`; remote database reports migration head.
+- Activated AsyncSession repositories for identity, sessions, scans/reports, chat, dentists, products, orders, recommendations, and appointments.
+- Verified remote `SELECT 1` and safe create/read/delete cleanup.
+
+### Identity and Auth
+
+- Unified all ownership on `users.id` UUID; removed the random browser clinical UUID mapping.
+- Replaced bcrypt/default-secret auth with Argon2id, required-config access JWTs, opaque rotating refresh tokens, hashed `auth_sessions`, and HttpOnly refresh cookies.
+- Enforced disabled accounts and patient/dentist/admin role/ownership checks.
+- Removed public admin registration and added the controlled `scripts/create_admin.py` path.
+- Moved frontend access tokens to memory with cookie-based session restoration.
+
+### Domain Cutover
+
+- Migrated users/profiles, dentists, scans/findings/reports, conversations/messages, products, product/dentist recommendations, orders, and appointments.
+- Snapshot, chat-image, and finalized live scans persist relational history.
+- Product/order ownership resolves through the authenticated dentist owner.
+- Chat and appointment APIs no longer trust arbitrary patient IDs.
+
+### Removal
+
+- Deleted the runtime database connection modules for the removed datastore.
+- Removed Motor, PyMongo, BSON/ObjectId usage, bcrypt, environment settings, health checks, and browser compatibility mappings.
+- The old local datastore was not reachable; no accessible demo dataset required an import script.
+
+### Validation
+
+- Local backend suite: 60 passed, 1 opt-in integration test skipped.
+- Supabase transactional integration: 1 passed (auth rotation, CRUD, FK ownership, cross-user denial, disabled account).
+- Next.js production build: passed.
+- Alembic: `002_domain_compatibility (head)`.
+
+### Next
+
+Phase 2A — Shared DaantShaant AI Gateway.

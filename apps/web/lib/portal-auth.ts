@@ -2,45 +2,80 @@ import type { PortalRole, PortalUser, RegisterPayload } from "./portal-types";
 
 const API_BASE = process.env.NEXT_PUBLIC_ORCHESTRATOR_URL ?? "http://127.0.0.1:8000";
 
-const ALL_ROLES: PortalRole[] = ["patient", "dentist", "admin"];
-
-function storageKey(role: PortalRole) {
-  return `dantshaant_portal_${role}`;
-}
+let activeUser: PortalUser | null = null;
 
 export function getStoredUser(role: PortalRole): PortalUser | null {
-  if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem(storageKey(role));
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as PortalUser;
-  } catch {
-    return null;
-  }
+  return activeUser?.role === role ? activeUser : null;
 }
 
 export function getActivePortalRole(): PortalRole | null {
-  for (const role of ALL_ROLES) {
-    if (getStoredUser(role)) return role;
-  }
-  return null;
+  return activeUser?.role ?? null;
+}
+
+export function getAccessToken(role: PortalRole): string | null {
+  return getStoredUser(role)?.access_token ?? null;
 }
 
 export function clearAllPortalSessions() {
-  for (const role of ALL_ROLES) {
-    clearPortalUser(role);
-  }
+  activeUser = null;
 }
 
-export function savePortalUser(role: PortalRole, user: PortalUser) {
-  for (const r of ALL_ROLES) {
-    if (r !== role) localStorage.removeItem(storageKey(r));
-  }
-  localStorage.setItem(storageKey(role), JSON.stringify(user));
+export function savePortalUser(_role: PortalRole, user: PortalUser) {
+  activeUser = user;
 }
 
 export function clearPortalUser(role: PortalRole) {
-  localStorage.removeItem(storageKey(role));
+  if (activeUser?.role === role) activeUser = null;
+}
+
+async function readUserResponse(res: Response): Promise<PortalUser> {
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(formatApiError(err));
+  }
+  return (await res.json()) as PortalUser;
+}
+
+export async function refreshPortalSession(
+  expectedRole?: PortalRole
+): Promise<PortalUser | null> {
+  const res = await fetch(`${API_BASE}/portal/auth/refresh`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    activeUser = null;
+    return null;
+  }
+  const user = (await res.json()) as PortalUser;
+  if (expectedRole && user.role !== expectedRole) {
+    activeUser = user;
+    return null;
+  }
+  activeUser = user;
+  return user;
+}
+
+export async function authorizedFetch(
+  role: PortalRole,
+  input: RequestInfo | URL,
+  init: RequestInit = {}
+): Promise<Response> {
+  let user = getStoredUser(role) ?? (await refreshPortalSession(role));
+  if (!user) throw new Error(`Please sign in as a ${role}`);
+
+  const makeRequest = (token: string) => {
+    const headers = new Headers(init.headers);
+    headers.set("Authorization", `Bearer ${token}`);
+    return fetch(input, { ...init, headers, credentials: "include" });
+  };
+
+  let response = await makeRequest(user.access_token);
+  if (response.status === 401) {
+    user = await refreshPortalSession(role);
+    if (user) response = await makeRequest(user.access_token);
+  }
+  return response;
 }
 
 export async function loginPortal(
@@ -51,13 +86,10 @@ export async function loginPortal(
   const res = await fetch(`${API_BASE}/portal/auth/${role}/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify({ email, password }),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(formatApiError(err));
-  }
-  const user = (await res.json()) as PortalUser;
+  const user = await readUserResponse(res);
   savePortalUser(role, user);
   return user;
 }
@@ -66,29 +98,26 @@ export async function registerPortal(
   role: PortalRole,
   payload: RegisterPayload
 ): Promise<PortalUser> {
+  if (role === "admin") throw new Error("Public admin registration is disabled");
   const res = await fetch(`${API_BASE}/portal/auth/${role}/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(payload),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(formatApiError(err));
-  }
-  const user = (await res.json()) as PortalUser;
+  const user = await readUserResponse(res);
   savePortalUser(role, user);
   return user;
 }
 
-export async function fetchPortalProfile(token: string): Promise<PortalUser> {
-  const res = await fetch(`${API_BASE}/portal/auth/me`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+export async function fetchPortalProfile(role: PortalRole): Promise<PortalUser> {
+  const user = getStoredUser(role) ?? (await refreshPortalSession(role));
+  if (!user) throw new Error("Session expired");
+  const res = await authorizedFetch(role, `${API_BASE}/portal/auth/me`);
   if (!res.ok) throw new Error("Session expired");
   const profile = await res.json();
-  return {
-    access_token: token,
-    token_type: "bearer",
+  const updated = {
+    ...user,
     role: profile.role,
     user_id: profile.user_id,
     name: profile.name,
@@ -96,7 +125,20 @@ export async function fetchPortalProfile(token: string): Promise<PortalUser> {
     first_name: profile.first_name,
     last_name: profile.last_name,
     profile_image: profile.profile_image,
-  };
+  } as PortalUser;
+  activeUser = updated;
+  return updated;
+}
+
+export async function logoutPortal(role: PortalRole): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/portal/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+    });
+  } finally {
+    clearPortalUser(role);
+  }
 }
 
 export function readImageAsDataUrl(file: File): Promise<string> {
@@ -113,7 +155,9 @@ function formatApiError(body: { detail?: unknown }): string {
   if (typeof detail === "string") return detail;
   if (Array.isArray(detail)) {
     return detail
-      .map((item) => (typeof item === "object" && item && "msg" in item ? String(item.msg) : String(item)))
+      .map((item) =>
+        typeof item === "object" && item && "msg" in item ? String(item.msg) : String(item)
+      )
       .join(", ");
   }
   return "Request failed";

@@ -21,6 +21,14 @@ class TeethAnalyzePipelineRequest(BaseModel):
     locale: str = "en"
 
 
+class AuthenticatedTeethAnalyzeRequest(BaseModel):
+    """External scan payload; patient identity comes from the access token."""
+
+    image_base64: str
+    image_mime_type: str = "image/jpeg"
+    locale: str = "en"
+
+
 class TeethAnalyzePipelineResponse(BaseModel):
     analysis: AnalyzeResponse
     diagnosis: DiagnoseResponse

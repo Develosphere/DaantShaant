@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 from typing import Any, TypedDict
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from langgraph.graph import END, START, StateGraph
 
-from orchestrator.dentist_portal.db import get_portal_dentist_recommendations_col
+from orchestrator.db.models import DentistRecommendation
+from orchestrator.db.session import async_session_factory
+from orchestrator.repositories import RecommendationRepository
 from orchestrator.dentist_recommendation.places_service import search_nearby_dentists
 from orchestrator.dentist_recommendation.platform_query import search_platform_dentists
 
@@ -92,18 +93,21 @@ async def merge_rank_node(state: DentistRecState) -> dict[str, Any]:
 
 async def log_session_node(state: DentistRecState) -> dict[str, Any]:
     logger.info("[DENTIST-GRAPH] log_session")
-    col = get_portal_dentist_recommendations_col()
-    await col.insert_one({
-        "session_id": state["session_id"],
-        "patient_id": state["patient_id"],
-        "scan_id": state.get("scan_id"),
-        "issue": state["issue"],
-        "severity": state.get("severity", ""),
-        "lat": state["lat"],
-        "lng": state["lng"],
-        "dentists": state.get("merged", []),
-        "created_at": datetime.now(timezone.utc),
-    })
+    scan_id = UUID(state["scan_id"]) if state.get("scan_id") else None
+    async with async_session_factory() as session:
+        async with session.begin():
+            await RecommendationRepository(session).add_dentist(
+                DentistRecommendation(
+                    session_id=UUID(state["session_id"]),
+                    patient_user_id=UUID(state["patient_id"]),
+                    scan_id=scan_id,
+                    specialist=state["issue"],
+                    severity=state.get("severity", ""),
+                    patient_lat=state["lat"],
+                    patient_lng=state["lng"],
+                    results={"dentists": state.get("merged", [])},
+                )
+            )
     return {}
 
 

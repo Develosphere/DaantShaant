@@ -1,16 +1,23 @@
-"""Portal user registration, login, and profile helpers."""
+"""Unified user registration, login, profile, and refresh-session services."""
 
-import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
+from uuid import UUID
 
 from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from orchestrator.dentist_portal.auth import create_token, hash_password, verify_password
+from orchestrator.config import settings
+from orchestrator.db.models import AuthSession, Dentist, PatientProfile, User
+from orchestrator.dentist_portal.auth import (
+    create_access_token,
+    generate_refresh_token,
+    hash_password,
+    hash_refresh_token,
+    verify_password,
+)
 from orchestrator.dentist_portal.constants import DEFAULT_PROFILE_IMAGE
-from orchestrator.dentist_portal.db import get_portal_users_col
 from orchestrator.dentist_portal.models import (
-    AdminRegisterRequest,
     DentistRegisterRequest,
     LoginRequest,
     PatientRegisterRequest,
@@ -18,8 +25,7 @@ from orchestrator.dentist_portal.models import (
     UserProfileResponse,
     UserRole,
 )
-
-logger = logging.getLogger(__name__)
+from orchestrator.repositories import AuthSessionRepository, DentistRepository, UserRepository
 
 _MAX_IMAGE_CHARS = 500_000
 
@@ -34,46 +40,67 @@ def _resolve_profile_image(profile_image: Optional[str]) -> str:
     value = profile_image.strip()
     if len(value) > _MAX_IMAGE_CHARS:
         raise HTTPException(status_code=400, detail="Profile image is too large")
-    if value.startswith("/"):
+    if value.startswith("/") or value.startswith("data:image/"):
         return value
-    if value.startswith("data:image/"):
-        return value
-    raise HTTPException(status_code=400, detail="Profile image must be a data URL or default path")
-
-
-def _user_to_profile(user: dict[str, Any]) -> UserProfileResponse:
-    first = user.get("first_name") or ""
-    last = user.get("last_name") or ""
-    name = user.get("name") or _full_name(first, last)
-    if not first and name:
-        parts = name.split(" ", 1)
-        first = parts[0]
-        last = parts[1] if len(parts) > 1 else ""
-
-    return UserProfileResponse(
-        user_id=str(user["_id"]),
-        email=user["email"],
-        role=user["role"],
-        first_name=first,
-        last_name=last,
-        name=name,
-        phone=user.get("phone", ""),
-        location=user.get("location", ""),
-        profile_image=user.get("profile_image", DEFAULT_PROFILE_IMAGE),
-        degree=user.get("degree"),
-        degree_year=user.get("degree_year"),
-        institution=user.get("institution"),
-        specialized_training=user.get("specialized_training"),
-        is_verified=user.get("is_verified", False),
-        created_at=user.get("created_at"),
+    raise HTTPException(
+        status_code=400, detail="Profile image must be a data URL or default path"
     )
 
 
-def _to_token_response(user: dict[str, Any]) -> TokenResponse:
-    profile = _user_to_profile(user)
-    token = create_token(profile.user_id, profile.email, profile.role)
-    return TokenResponse(
-        access_token=token,
+async def _profile(session: AsyncSession, user: User) -> UserProfileResponse:
+    location = ""
+    degree = degree_year = institution = specialized_training = None
+    is_verified = False
+    if user.role == UserRole.PATIENT.value:
+        patient = await UserRepository(session).get_patient_profile(user.id)
+        location = patient.location_text if patient and patient.location_text else ""
+    elif user.role == UserRole.DENTIST.value:
+        dentist = await DentistRepository(session).get_by_owner(user.id)
+        if dentist:
+            location = dentist.address or ""
+            degree = dentist.degree
+            degree_year = dentist.degree_year
+            institution = dentist.institution
+            specialized_training = dentist.specialized_training
+            is_verified = dentist.is_verified
+    return UserProfileResponse(
+        user_id=str(user.id),
+        email=user.email,
+        role=user.role,
+        first_name=user.first_name or "",
+        last_name=user.last_name or "",
+        name=_full_name(user.first_name or "", user.last_name or ""),
+        phone=user.phone or "",
+        location=location,
+        profile_image=user.profile_image_url or DEFAULT_PROFILE_IMAGE,
+        degree=degree,
+        degree_year=degree_year,
+        institution=institution,
+        specialized_training=specialized_training,
+        is_verified=is_verified,
+        created_at=user.created_at,
+    )
+
+
+async def _issue_tokens(
+    session: AsyncSession,
+    user: User,
+    *,
+    user_agent: str | None = None,
+) -> tuple[TokenResponse, str]:
+    refresh_token = generate_refresh_token()
+    await AuthSessionRepository(session).add(
+        AuthSession(
+            user_id=user.id,
+            refresh_token_hash=hash_refresh_token(refresh_token),
+            expires_at=datetime.now(timezone.utc)
+            + timedelta(days=settings.refresh_token_expire_days),
+            user_agent=user_agent,
+        )
+    )
+    profile = await _profile(session, user)
+    response = TokenResponse(
+        access_token=create_access_token(user.id, user.email, user.role),
         role=profile.role,
         user_id=profile.user_id,
         name=profile.name,
@@ -82,96 +109,128 @@ def _to_token_response(user: dict[str, Any]) -> TokenResponse:
         last_name=profile.last_name,
         profile_image=profile.profile_image,
     )
+    return response, refresh_token
 
 
-async def register_patient(req: PatientRegisterRequest) -> TokenResponse:
-    return await _register_user(req, UserRole.PATIENT)
-
-
-async def register_dentist(req: DentistRegisterRequest) -> TokenResponse:
-    extra: dict[str, Any] = {
-        "degree": req.degree.strip(),
-        "degree_year": req.degree_year,
-        "institution": req.institution.strip(),
-        "specialized_training": req.specialized_training.strip() if req.specialized_training else None,
-        "clinic_name": req.institution.strip(),
-        "is_partner": True,
-    }
-    from orchestrator.dentist_recommendation.geocoding import geocode_address
-
-    coords = await geocode_address(req.location.strip())
-    if coords:
-        lat, lng = coords
-        extra["lat"] = lat
-        extra["lng"] = lng
-        extra["coordinates"] = {"type": "Point", "coordinates": [lng, lat]}
-
-    return await _register_user(req, UserRole.DENTIST, extra=extra)
-
-
-async def register_admin(req: AdminRegisterRequest) -> TokenResponse:
-    return await _register_user(req, UserRole.ADMIN)
-
-
-async def _register_user(
+async def register_patient(
     req: PatientRegisterRequest,
-    role: UserRole,
-    extra: Optional[dict[str, Any]] = None,
-) -> TokenResponse:
-    users = get_portal_users_col()
-    existing = await users.find_one({"email": req.email.lower()})
-    if existing:
+    session: AsyncSession,
+    *,
+    user_agent: str | None = None,
+) -> tuple[TokenResponse, str]:
+    user_repo = UserRepository(session)
+    if await user_repo.get_by_email(req.email):
         raise HTTPException(status_code=400, detail="Email already registered")
-
-    doc: dict[str, Any] = {
-        "email": req.email.lower(),
-        "hashed_password": hash_password(req.password),
-        "role": role.value,
-        "first_name": req.first_name.strip(),
-        "last_name": req.last_name.strip(),
-        "name": _full_name(req.first_name, req.last_name),
-        "phone": req.phone.strip(),
-        "location": req.location.strip(),
-        "profile_image": _resolve_profile_image(req.profile_image),
-        "created_at": datetime.now(timezone.utc),
-        "is_verified": False,
-    }
-    if extra:
-        doc.update(extra)
-
-    result = await users.insert_one(doc)
-    doc["_id"] = result.inserted_id
-    logger.info("[PORTAL AUTH] Registered %s as %s", doc["email"], role.value)
-    return _to_token_response(doc)
+    user = await user_repo.add(
+        User(
+            email=req.email.lower(),
+            password_hash=hash_password(req.password),
+            role=UserRole.PATIENT.value,
+            first_name=req.first_name.strip(),
+            last_name=req.last_name.strip(),
+            phone=req.phone.strip(),
+            profile_image_url=_resolve_profile_image(req.profile_image),
+        )
+    )
+    await user_repo.add_patient_profile(
+        PatientProfile(user_id=user.id, location_text=req.location.strip())
+    )
+    return await _issue_tokens(session, user, user_agent=user_agent)
 
 
-async def login_user(req: LoginRequest, expected_role: UserRole) -> TokenResponse:
-    users = get_portal_users_col()
-    user = await users.find_one({"email": req.email.lower()})
-    if not user or not verify_password(req.password, user["hashed_password"]):
+async def register_dentist(
+    req: DentistRegisterRequest,
+    session: AsyncSession,
+    *,
+    user_agent: str | None = None,
+) -> tuple[TokenResponse, str]:
+    user_repo = UserRepository(session)
+    if await user_repo.get_by_email(req.email):
+        raise HTTPException(status_code=400, detail="Email already registered")
+    user = await user_repo.add(
+        User(
+            email=req.email.lower(),
+            password_hash=hash_password(req.password),
+            role=UserRole.DENTIST.value,
+            first_name=req.first_name.strip(),
+            last_name=req.last_name.strip(),
+            phone=req.phone.strip(),
+            profile_image_url=_resolve_profile_image(req.profile_image),
+        )
+    )
+    dentist = Dentist(
+        owner_user_id=user.id,
+        source="platform",
+        name=_full_name(req.first_name, req.last_name),
+        clinic_name=req.institution.strip(),
+        email=user.email,
+        phone=user.phone,
+        address=req.location.strip(),
+        degree=req.degree.strip(),
+        degree_year=req.degree_year,
+        institution=req.institution.strip(),
+        specialized_training=(
+            req.specialized_training.strip() if req.specialized_training else None
+        ),
+        is_verified=False,
+        is_partner=False,
+    )
+    await DentistRepository(session).add(dentist)
+    return await _issue_tokens(session, user, user_agent=user_agent)
+
+
+async def login_user(
+    req: LoginRequest,
+    expected_role: UserRole,
+    session: AsyncSession,
+    *,
+    user_agent: str | None = None,
+) -> tuple[TokenResponse, str]:
+    user = await UserRepository(session).get_by_email(req.email)
+    if not user or not verify_password(req.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
-
-    if user.get("role") != expected_role.value:
+    if user.role != expected_role.value:
         raise HTTPException(
             status_code=403,
             detail=f"This account is not registered as a {expected_role.value}",
         )
+    if user.status != "active":
+        raise HTTPException(status_code=403, detail="Account is disabled")
+    return await _issue_tokens(session, user, user_agent=user_agent)
 
-    logger.info("[PORTAL AUTH] Login: %s (%s)", req.email, expected_role.value)
-    return _to_token_response(user)
+
+async def rotate_refresh_token(
+    raw_token: str,
+    session: AsyncSession,
+    *,
+    user_agent: str | None = None,
+) -> tuple[TokenResponse, str]:
+    now = datetime.now(timezone.utc)
+    auth_repo = AuthSessionRepository(session)
+    old = await auth_repo.get_active_by_hash(
+        hash_refresh_token(raw_token), now, lock=True
+    )
+    if not old:
+        raise HTTPException(status_code=401, detail="Invalid refresh session")
+    user = await UserRepository(session).get(old.user_id)
+    if not user or user.status != "active":
+        await auth_repo.revoke(old, now)
+        raise HTTPException(status_code=403, detail="Account is disabled")
+    await auth_repo.revoke(old, now)
+    return await _issue_tokens(session, user, user_agent=user_agent)
 
 
-async def get_user_profile(user_id: str) -> UserProfileResponse:
-    from bson import ObjectId
-    from bson.errors import InvalidId
+async def revoke_refresh_token(raw_token: str, session: AsyncSession) -> None:
+    now = datetime.now(timezone.utc)
+    auth_session = await AuthSessionRepository(session).get_active_by_hash(
+        hash_refresh_token(raw_token), now, lock=True
+    )
+    if auth_session:
+        await AuthSessionRepository(session).revoke(auth_session, now)
 
-    users = get_portal_users_col()
-    try:
-        oid = ObjectId(user_id)
-    except InvalidId as exc:
-        raise HTTPException(status_code=404, detail="User not found") from exc
 
-    user = await users.find_one({"_id": oid})
+async def get_user_profile(user_id: UUID, session: AsyncSession) -> UserProfileResponse:
+    user = await UserRepository(session).get(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return _user_to_profile(user)
+    return await _profile(session, user)

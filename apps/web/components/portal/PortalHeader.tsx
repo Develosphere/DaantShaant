@@ -97,12 +97,14 @@ export function PortalHeader({ role, user, onLogout }: Props) {
               >
                 Sign in
               </Link>
-              <Link
-                href={`/${role}/register`}
-                className={`${styles.navLink} ${pathname === `/${role}/register` ? styles.navLinkActive : ""}`}
-              >
-                Register
-              </Link>
+              {role !== "admin" && (
+                <Link
+                  href={`/${role}/register`}
+                  className={`${styles.navLink} ${pathname === `/${role}/register` ? styles.navLinkActive : ""}`}
+                >
+                  Register
+                </Link>
+              )}
             </>
           )}
         </nav>

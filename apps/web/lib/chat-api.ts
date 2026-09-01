@@ -1,11 +1,8 @@
 import type { ChatMessage, ConversationSummary, SendMessageResponse } from "./types";
+import { authorizedFetch } from "./portal-auth";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_ORCHESTRATOR_URL ?? "http://127.0.0.1:8000";
-
-import { getUserId } from "./user-id";
-
-export { getUserId };
 
 export async function sendChatMessage(
   text: string,
@@ -13,14 +10,11 @@ export async function sendChatMessage(
   imageBase64?: string,
   imageMimeType = "image/jpeg"
 ): Promise<SendMessageResponse> {
-  const userId = getUserId();
-  
-  const res = await fetch(`${API_BASE}/v1/chat/message`, {
+  const res = await authorizedFetch("patient", `${API_BASE}/v1/chat/message`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       conversation_id: conversationId || null,
-      user_id: userId,
       text,
       image_base64: imageBase64 || null,
       image_mime_type: imageMimeType,
@@ -41,9 +35,7 @@ export async function sendChatMessage(
 }
 
 export async function getUserConversations(): Promise<ConversationSummary[]> {
-  const userId = getUserId();
-  
-  const res = await fetch(`${API_BASE}/v1/chat/conversations/${userId}`, {
+  const res = await authorizedFetch("patient", `${API_BASE}/v1/chat/conversations`, {
     method: "GET",
     headers: { "Content-Type": "application/json" },
   });
@@ -58,7 +50,7 @@ export async function getUserConversations(): Promise<ConversationSummary[]> {
 export async function getConversationMessages(
   conversationId: string
 ): Promise<ChatMessage[]> {
-  const res = await fetch(`${API_BASE}/v1/chat/messages/${conversationId}`, {
+  const res = await authorizedFetch("patient", `${API_BASE}/v1/chat/messages/${conversationId}`, {
     method: "GET",
     headers: { "Content-Type": "application/json" },
   });
@@ -72,13 +64,10 @@ export async function getConversationMessages(
 }
 
 export async function createConversation(title?: string): Promise<string> {
-  const userId = getUserId();
-  
-  const res = await fetch(`${API_BASE}/v1/chat/conversation`, {
+  const res = await authorizedFetch("patient", `${API_BASE}/v1/chat/conversation`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      user_id: userId,
       title: title || "New Conversation",
     }),
   });

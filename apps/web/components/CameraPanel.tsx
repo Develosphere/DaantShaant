@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { analyzeSnapshot, getUserId } from "@/lib/api";
+import { analyzeSnapshot } from "@/lib/api";
 import { fileToImagePayload, type ImagePayload } from "@/lib/image";
 import { LiveSessionClient } from "@/lib/ws-live";
 import type { PipelineResult } from "@/lib/types";
@@ -96,7 +96,7 @@ export function CameraPanel() {
     setHint("");
     setStatus(statusMsg);
     try {
-      const result = await analyzeSnapshot(base64, getUserId(), mimeType);
+      const result = await analyzeSnapshot(base64, mimeType);
       setReport(result);
       setStatus("Analysis complete");
     } catch (e) {

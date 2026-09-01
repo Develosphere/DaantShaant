@@ -5,7 +5,7 @@ import re
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
-from orchestrator.chat_schemas import AnalysisHistoryDocument, MessageDocument
+from orchestrator.chat_schemas import AnalysisHistoryContext, MessageContext
 from orchestrator.openrouter_client import openrouter_client
 from orchestrator.llm_provider import llm_provider
 from orchestrator.rag.retrieval_service import retrieval_service
@@ -170,7 +170,7 @@ Finish the final sentence naturally and completely. Do not repeat what was alrea
                 
         return partial_response
     
-    def _build_conversation_memory(self, recent_messages: List[MessageDocument]) -> str:
+    def _build_conversation_memory(self, recent_messages: List[MessageContext]) -> str:
         """Build conversational memory with priority on recent context."""
         if not recent_messages:
             return "No previous conversation."
@@ -305,8 +305,8 @@ Finish the final sentence naturally and completely. Do not repeat what was alrea
     async def generate_conversational_response(
         self,
         user_message: str,
-        recent_messages: List[MessageDocument],
-        previous_analyses: Optional[List[AnalysisHistoryDocument]] = None,
+        recent_messages: List[MessageContext],
+        previous_analyses: Optional[List[AnalysisHistoryContext]] = None,
         context_info: Optional[Dict[str, Any]] = None,
         conversation_id: Optional[str] = None
     ) -> str:
@@ -395,8 +395,8 @@ Respond naturally in 2-4 sentences. Stay on the active topic. Reference what the
     async def generate_symptom_response(
         self,
         user_message: str,
-        recent_messages: List[MessageDocument],
-        previous_analyses: Optional[List[AnalysisHistoryDocument]] = None,
+        recent_messages: List[MessageContext],
+        previous_analyses: Optional[List[AnalysisHistoryContext]] = None,
         context_info: Optional[Dict[str, Any]] = None,
         conversation_id: Optional[str] = None
     ) -> str:
@@ -466,8 +466,8 @@ Respond with empathy in 3-5 sentences. Be conversational and supportive. Plain t
         self,
         user_message: str,
         analysis_result: dict,
-        recent_messages: List[MessageDocument],
-        previous_analyses: Optional[List[AnalysisHistoryDocument]] = None
+        recent_messages: List[MessageContext],
+        previous_analyses: Optional[List[AnalysisHistoryContext]] = None
     ) -> str:
         """Generate conversational response for image analysis."""
         logger.info("[LLM] Generating analysis response")
@@ -516,7 +516,7 @@ Explain what you see in 4-6 sentences. Be conversational and honest but not alar
     async def generate_follow_up_response(
         self,
         user_message: str,
-        recent_messages: List[MessageDocument],
+        recent_messages: List[MessageContext],
         conversation_id: Optional[str] = None
     ) -> str:
         """Generate natural follow-up response with active issue context."""
@@ -579,7 +579,7 @@ Respond naturally in 1-3 sentences based on the conversation context. Remember w
         self,
         user_message: str,
         analysis_result: Optional[dict],
-        previous_analyses: Optional[List[AnalysisHistoryDocument]]
+        previous_analyses: Optional[List[AnalysisHistoryContext]]
     ) -> str:
         """Generate a response comparing current teeth photo findings with history."""
         logger.info("[LLM] Generating comparison response")

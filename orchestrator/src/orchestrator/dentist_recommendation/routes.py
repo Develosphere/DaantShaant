@@ -1,17 +1,15 @@
-"""Dentist recommendation + appointment routes."""
+"""Dentist recommendation and appointment routes."""
 
 from __future__ import annotations
 
-import logging
-from datetime import datetime, timezone
-from uuid import uuid4
+from uuid import UUID
 
-from bson import ObjectId
-from bson.errors import InvalidId
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from orchestrator.dentist_portal.auth import get_current_patient
-from orchestrator.dentist_portal.db import get_portal_appointments_col, get_portal_users_col
+from orchestrator.db.models import AppointmentRequest
+from orchestrator.db.session import get_db_session
+from orchestrator.dentist_portal.auth import get_current_patient, get_current_user
 from orchestrator.dentist_portal.models import (
     BookConsultationRequest,
     BookConsultationResponse,
@@ -21,8 +19,12 @@ from orchestrator.dentist_portal.models import (
 )
 from orchestrator.dentist_recommendation.dentist_agent import run_dentist_recommendation
 from orchestrator.dentist_recommendation.geocoding import geocode_address
-
-logger = logging.getLogger(__name__)
+from orchestrator.repositories import (
+    AppointmentRepository,
+    DentistRepository,
+    ScanRepository,
+    UserRepository,
+)
 
 router = APIRouter(prefix="/portal/recommend/dentists", tags=["dentist-recommendation"])
 
@@ -31,34 +33,29 @@ router = APIRouter(prefix="/portal/recommend/dentists", tags=["dentist-recommend
 async def recommend_dentists(
     req: DentistRecommendRequest,
     user: dict = Depends(get_current_patient),
+    session: AsyncSession = Depends(get_db_session),
 ):
     lat, lng = req.lat, req.lng
-
     if lat is None or lng is None:
-        users = get_portal_users_col()
-        try:
-            patient = await users.find_one({"_id": ObjectId(user["sub"])})
-        except InvalidId:
-            patient = None
-        if patient and patient.get("location"):
-            coords = await geocode_address(patient["location"])
+        profile = await UserRepository(session).get_patient_profile(user["user_id"])
+        if profile and profile.location_text:
+            coords = await geocode_address(profile.location_text)
             if coords:
                 lat, lng = coords
-
     if lat is None or lng is None:
         raise HTTPException(
             status_code=400,
-            detail="Location required — enable browser location or set location on your profile",
+            detail="Location required - enable browser location or set profile location",
         )
-
-    patient_id = user["sub"]
-    logger.info(
-        "[DENTIST-REC] issue=%s patient=%s lat=%s lng=%s",
-        req.issue, patient_id, lat, lng,
-    )
-
+    if req.scan_id:
+        try:
+            scan_id = UUID(req.scan_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid scan id") from exc
+        if not await ScanRepository(session).get_owned(scan_id, user["user_id"]):
+            raise HTTPException(status_code=404, detail="Scan not found")
     result = await run_dentist_recommendation(
-        patient_id=patient_id,
+        patient_id=str(user["user_id"]),
         issue=req.issue,
         lat=lat,
         lng=lng,
@@ -67,14 +64,12 @@ async def recommend_dentists(
         session_id=req.session_id,
         radius_km=req.radius_km or 25.0,
     )
-
-    dentists = [DentistPin(**d) for d in result["dentists"]]
     return DentistRecommendResponse(
         session_id=result["session_id"],
         issue=result["issue"],
         patient_lat=result["patient_lat"],
         patient_lng=result["patient_lng"],
-        dentists=dentists,
+        dentists=[DentistPin(**item) for item in result["dentists"]],
     )
 
 
@@ -82,35 +77,53 @@ async def recommend_dentists(
 async def book_consultation(
     req: BookConsultationRequest,
     user: dict = Depends(get_current_patient),
+    session: AsyncSession = Depends(get_db_session),
 ):
-    """Request a consultation with a platform dentist (MVP — stores request)."""
-    users = get_portal_users_col()
     try:
-        dentist_oid = ObjectId(req.dentist_id)
-    except InvalidId as exc:
-        raise HTTPException(status_code=400, detail="Invalid dentist id") from exc
-
-    dentist = await users.find_one({"_id": dentist_oid, "role": "dentist"})
-    if not dentist:
+        dentist_id = UUID(req.dentist_id)
+        scan_id = UUID(req.scan_id) if req.scan_id else None
+        recommendation_session_id = UUID(req.session_id) if req.session_id else None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid UUID") from exc
+    if not await DentistRepository(session).get(dentist_id):
         raise HTTPException(status_code=404, detail="Dentist not found")
-
-    appt_id = str(uuid4())
-    col = get_portal_appointments_col()
-    await col.insert_one({
-        "appointment_id": appt_id,
-        "patient_id": user["sub"],
-        "dentist_id": req.dentist_id,
-        "issue": req.issue,
-        "scan_id": req.scan_id,
-        "session_id": req.session_id,
-        "message": req.message,
-        "status": "pending",
-        "created_at": datetime.now(timezone.utc),
-    })
-
-    logger.info("[APPOINTMENT] patient=%s dentist=%s appt=%s", user["sub"], req.dentist_id, appt_id)
+    if scan_id and not await ScanRepository(session).get_owned(scan_id, user["user_id"]):
+        raise HTTPException(status_code=404, detail="Scan not found")
+    appointment = await AppointmentRepository(session).add(
+        AppointmentRequest(
+            patient_user_id=user["user_id"],
+            dentist_id=dentist_id,
+            scan_id=scan_id,
+            recommendation_session_id=recommendation_session_id,
+            issue=req.issue,
+            message=req.message,
+            status="pending",
+        )
+    )
     return BookConsultationResponse(
-        appointment_id=appt_id,
-        status="pending",
+        appointment_id=str(appointment.id),
+        status=appointment.status,
         message="Consultation request sent. The dentist will contact you shortly.",
     )
+
+
+@router.get("/appointments", response_model=list[dict])
+async def list_appointments(
+    user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    appointments = await AppointmentRepository(session).list_for_principal(
+        user_id=user["user_id"], role=user["role"]
+    )
+    return [
+        {
+            "appointment_id": str(item.id),
+            "patient_user_id": str(item.patient_user_id),
+            "dentist_id": str(item.dentist_id),
+            "scan_id": str(item.scan_id) if item.scan_id else None,
+            "issue": item.issue,
+            "status": item.status,
+            "created_at": item.created_at.isoformat(),
+        }
+        for item in appointments
+    ]

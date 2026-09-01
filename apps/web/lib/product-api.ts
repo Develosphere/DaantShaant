@@ -1,4 +1,4 @@
-import { API_BASE, getStoredUser } from "./portal-auth";
+import { API_BASE, authorizedFetch } from "./portal-auth";
 
 export type ProductCategory =
   | "toothbrush"
@@ -39,21 +39,12 @@ export type ProductUpdate = {
   status?: ProductStatus;
 };
 
-function authHeaders(role: "dentist" | "patient" = "dentist"): HeadersInit {
-  const user = getStoredUser(role);
-  if (!user?.access_token) throw new Error(`Please sign in as a ${role}`);
-  return {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${user.access_token}`,
-  };
-}
-
 export async function uploadProduct(
   product: ProductUpload
 ): Promise<{ product_id: string; ai_description: string; problems_solved: string[] }> {
-  const res = await fetch(`${API_BASE}/portal/products/upload`, {
+  const res = await authorizedFetch("dentist", `${API_BASE}/portal/products/upload`, {
     method: "POST",
-    headers: authHeaders("dentist"),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(product),
   });
   if (!res.ok) {
@@ -64,9 +55,7 @@ export async function uploadProduct(
 }
 
 export async function listMyProducts(): Promise<Product[]> {
-  const res = await fetch(`${API_BASE}/portal/products/my`, {
-    headers: authHeaders("dentist"),
-  });
+  const res = await authorizedFetch("dentist", `${API_BASE}/portal/products/my`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(
@@ -113,9 +102,9 @@ export async function updateProduct(
   productId: string,
   updates: ProductUpdate
 ): Promise<{ message: string }> {
-  const res = await fetch(`${API_BASE}/portal/products/${productId}`, {
+  const res = await authorizedFetch("dentist", `${API_BASE}/portal/products/${productId}`, {
     method: "PATCH",
-    headers: authHeaders("dentist"),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(updates),
   });
   if (!res.ok) {
@@ -126,9 +115,9 @@ export async function updateProduct(
 }
 
 export async function deleteProduct(productId: string): Promise<{ message: string }> {
-  const res = await fetch(`${API_BASE}/portal/products/${productId}`, {
+  const res = await authorizedFetch("dentist", `${API_BASE}/portal/products/${productId}`, {
     method: "DELETE",
-    headers: authHeaders("dentist"),
+    headers: { "Content-Type": "application/json" },
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

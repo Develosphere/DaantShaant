@@ -27,6 +27,8 @@ paths:
     post:
       operationId: analyzeTeethPipeline
       summary: Full pipeline — vision analyze then clinical diagnose
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -54,6 +56,11 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   schemas:
     OrchestratorHealth:
       type: object
@@ -75,11 +82,8 @@ components:
 
     TeethAnalyzePipelineRequest:
       type: object
-      required: [user_id, image_base64]
+      required: [image_base64]
       properties:
-        user_id:
-          type: string
-          format: uuid
         image_base64:
           type: string
         image_mime_type:

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { authorizedFetch } from "@/lib/portal-auth";
 
 interface CheckoutModalProps {
   product: {
@@ -53,7 +54,7 @@ export function CheckoutModal({ product, isOpen, onClose }: CheckoutModalProps) 
     }
 
     try {
-      const res = await fetch(`${API_BASE}/portal/products/${pid}/buy`, {
+      const res = await authorizedFetch("patient", `${API_BASE}/portal/products/${pid}/buy`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"

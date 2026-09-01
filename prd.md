@@ -436,9 +436,9 @@ Build a real master **DaantShaant Clinical LangGraph**.
 
 ---
 
-## 6.3 MongoDB Persistence Is Fragmented
+## 6.3 Legacy Persistence Fragmentation — RESOLVED
 
-Current Mongo collections include concepts such as:
+The pre-Phase-1 implementation stored these concepts in separate document collections:
 
 - users,
 - conversations,
@@ -453,15 +453,15 @@ Current Mongo collections include concepts such as:
 
 This creates duplicate identity concepts and weak relational integrity.
 
-### New decision
+### Implemented decision
 
-Migrate persistence to **Supabase PostgreSQL**, accessed through SQLAlchemy/Alembic rather than tying core code to the Supabase SDK.
+Persistence is now **Supabase PostgreSQL**, accessed through SQLAlchemy/Alembic rather than tying core code to the Supabase SDK. The legacy runtime and drivers are removed.
 
 ---
 
-## 6.4 Patient Identity Is Split
+## 6.4 Patient Identity Was Split — RESOLVED
 
-The old frontend maps a portal Mongo user to a separate random local clinical UUID.
+The old frontend mapped a portal user to a separate random local clinical UUID.
 
 Conceptually:
 
@@ -1098,9 +1098,9 @@ metadata JSONB
 
 ---
 
-# 11. Migration From MongoDB
+# 11. Legacy-to-PostgreSQL Migration — COMPLETE
 
-Existing Mongo concepts should map into PostgreSQL.
+The legacy concepts now map into PostgreSQL as follows.
 
 | Existing Mongo concept | New PostgreSQL target |
 |---|---|
@@ -1116,16 +1116,7 @@ Existing Mongo concepts should map into PostgreSQL.
 | portal_dentist_recommendations | dentist_recommendations |
 | portal_appointments | appointment_requests |
 
-The project does not appear to depend on irreplaceable production Mongo data.
-
-Therefore the migration may use:
-
-1. schema creation,
-2. seed/optional migration script,
-3. switch persistence code,
-4. remove Mongo dependency after verification.
-
-Do not spend hackathon time building a complex zero-downtime enterprise migration.
+The old local datastore was not reachable and no accessible demo dataset required import. Schema creation, persistence cutover, dependency removal, and Supabase verification completed in Phase 1B.
 
 ---
 
@@ -2411,7 +2402,7 @@ Recommended Qoder:
 
 ---
 
-# 55. Phase 1A — Supabase PostgreSQL Foundation
+# 55. Phase 1A — Supabase PostgreSQL Foundation (COMPLETE)
 
 Goals:
 
@@ -2432,10 +2423,11 @@ Recommended Qoder:
 
 ---
 
-# 56. Phase 1B — Identity / Auth Migration
+# 56. Phase 1B — Full Supabase PostgreSQL Cutover (COMPLETE)
 
 Goals:
 
+- merge the former identity/auth and domain-migration scopes,
 - create users/auth_sessions,
 - patient/dentist/admin roles,
 - migrate registration/login,
@@ -2445,6 +2437,14 @@ Goals:
 - eliminate random clinical UUID mapping,
 - authenticated ownership,
 - remove public admin registration.
+
+Also completed in this phase:
+
+- conversations and messages,
+- scans, findings, and reports,
+- products, orders, and recommendation history,
+- dentist records and appointment requests,
+- complete runtime MongoDB/driver/configuration removal.
 
 Recommended Qoder:
 
@@ -2456,9 +2456,9 @@ Touches backend + frontend + security.
 
 ---
 
-# 57. Phase 1C — Mongo Domain Migration
+# 57. Phase 1C — REMOVED / MERGED INTO PHASE 1B
 
-Goals:
+Historical goals (completed as part of Phase 1B):
 
 Migrate repositories/services for:
 
@@ -2482,7 +2482,7 @@ Recommended Qoder:
 
 **Qwen3.8-Flash — 0.1x**
 
-May split further if scope becomes large.
+This is not a future phase.
 
 ---
 
@@ -2922,11 +2922,11 @@ Because the old project is already functional, the partial submission can truthf
 - marketplace/map baseline,
 - dentist portal.
 
-The submission should explain that hackathon upgrades are actively migrating:
+The submission should explain completed and active hackathon upgrades:
 
 ```text
-MongoDB
-→ Supabase PostgreSQL
+Legacy document persistence
+→ Supabase PostgreSQL (complete)
 
 Gemini/OpenRouter fragmented AI
 → Qwen-primary gateway
@@ -3100,19 +3100,11 @@ If old documentation conflicts with current code and this new plan, the old docu
 
 # 85. Immediate Next Step
 
-After this PRD is approved:
+Phase 0, Phase 1A, and the merged Phase 1B cutover are complete.
 
-> **Start Phase 0 / Phase 1A in a brand-new Qoder chat.**
+> **Start Phase 2A — Shared DaantShaant AI Gateway in a new chat.**
 
-The first implementation objective is:
-
-```text
-Existing MongoDB persistence
-↓
-Supabase PostgreSQL foundation
-```
-
-Do not begin Qwen refactoring before the database foundation is stable unless the project lead explicitly changes the phase order.
+The PostgreSQL database, unified identity, authentication, ownership, and domain repositories are stable prerequisites for that work.
 
 ---
 
@@ -3133,10 +3125,10 @@ Do not begin Qwen refactoring before the database foundation is stable unless th
 [x] Dentist portal
 [x] Product/order capabilities
 
-[ ] Phase 0  — Hackathon rebaseline + context/Qoder rules
-[ ] Phase 1A — Supabase PostgreSQL foundation
-[ ] Phase 1B — Identity/auth migration
-[ ] Phase 1C — Mongo domain migration
+[x] Phase 0  — Hackathon rebaseline + context/Qoder rules
+[x] Phase 1A — Supabase PostgreSQL foundation
+[x] Phase 1B — Full Supabase PostgreSQL cutover (identity/auth/domain)
+[x] Phase 1C — removed; scope merged into Phase 1B
 [ ] Phase 2A — Qwen-primary AI gateway
 [ ] Phase 2B — Semantic dental relevance
 [ ] Phase 2C — Qwen clinical vision

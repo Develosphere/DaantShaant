@@ -5,10 +5,9 @@ import { useRouter } from "next/navigation";
 import type { PortalRole } from "@/lib/portal-types";
 import { PORTAL_META } from "@/lib/portal-types";
 import {
-  clearPortalUser,
   fetchPortalProfile,
-  getActivePortalRole,
   getStoredUser,
+  logoutPortal,
 } from "@/lib/portal-auth";
 import { PortalHeader } from "./PortalHeader";
 import styles from "./portal-auth.module.css";
@@ -26,29 +25,16 @@ export function PortalDashboard({ role, children, maxWidth = 960 }: Props) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const active = getActivePortalRole();
-    if (active && active !== role) {
-      router.replace(`/${active}/dashboard`);
-      return;
-    }
-
-    const stored = getStoredUser(role);
-    if (!stored) {
-      router.replace(`/${role}/login`);
-      return;
-    }
-
-    fetchPortalProfile(stored.access_token)
+    fetchPortalProfile(role)
       .then(setUser)
       .catch(() => {
-        clearPortalUser(role);
         router.replace(`/${role}/login`);
       })
       .finally(() => setLoading(false));
   }, [role, router]);
 
-  function logout() {
-    clearPortalUser(role);
+  async function logout() {
+    await logoutPortal(role);
     router.push(`/${role}/login`);
   }
 

@@ -66,7 +66,7 @@ async def rank_node(state: RecommendationState) -> Dict[str, Any]:
 
 
 async def log_session_node(state: RecommendationState) -> Dict[str, Any]:
-    """Log the recommendation session to MongoDB."""
+    """Log the recommendation session to PostgreSQL."""
     logger.info("[LANGGRAPH] Node: log_session")
     ranked = state.get("ranked_candidates", [])
     top_ids = [r["product_id"] for r in ranked[:5]]
