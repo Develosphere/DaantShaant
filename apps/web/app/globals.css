@@ -1,15 +1,69 @@
-/* ─── DantShaant demo design system ─── */
-:root {
+/* ─── DaantShaant Design System Tokens ─── */
+:root,
+[data-theme="light"] {
+  --bg-deep: #f1f5f9;
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-solid: #ffffff;
+  --bg-surface: #ffffff;
+  --bg-surface-raised: #f8fafc;
+  --bg-input: #ffffff;
+  --glass-border: rgba(0, 50, 100, 0.1);
+  --glass-highlight: rgba(0, 50, 100, 0.04);
+
+  --text: #0f172a;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #475569;
+  --text-dim: #64748b;
+  --text-inverse: #ffffff;
+
+  --border-default: rgba(0, 50, 100, 0.12);
+  --border-strong: rgba(0, 50, 100, 0.25);
+
+  --accent: #0284c7;
+  --accent-dim: #0369a1;
+  --accent-glow: rgba(2, 132, 199, 0.2);
+  --violet: #6366f1;
+  --violet-glow: rgba(99, 102, 241, 0.2);
+
+  --warn: #d97706;
+  --danger: #dc2626;
+  --success: #16a34a;
+
+  --radius: 16px;
+  --radius-sm: 10px;
+  --radius-lg: 24px;
+
+  --font: var(--font-jakarta), system-ui, sans-serif;
+  --font-display: var(--font-syne), var(--font-jakarta), system-ui, sans-serif;
+  --font-urdu: "Noto Nastaliq Urdu", "Noto Sans Arabic", var(--font-jakarta), system-ui, Arial, sans-serif;
+
+  --shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.08);
+  --shadow-glow: 0 0 40px rgba(2, 132, 199, 0.15);
+  --shadow-card: 0 8px 30px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="dark"] {
   --bg-deep: #06080f;
   --bg: #0a0e18;
-  --surface: rgba(18, 24, 38, 0.72);
+  --surface: rgba(18, 24, 38, 0.85);
   --surface-solid: #121826;
+  --bg-surface: rgba(18, 24, 38, 0.85);
+  --bg-surface-raised: #161e2e;
+  --bg-input: #121826;
   --glass-border: rgba(255, 255, 255, 0.08);
   --glass-highlight: rgba(255, 255, 255, 0.04);
 
-  --text: #f0f4fc;
-  --text-muted: #8b9bb8;
-  --text-dim: #5c6b85;
+  --text: #f8fafc;
+  --text-primary: #f8fafc;
+  --text-secondary: #e2e8f0;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+  --text-inverse: #0f172a;
+
+  --border-default: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.22);
 
   --accent: #2ee8d4;
   --accent-dim: #1a9e90;
@@ -21,15 +75,9 @@
   --danger: #ff6b7a;
   --success: #3dd68c;
 
-  --radius: 16px;
-  --radius-sm: 10px;
-  --radius-lg: 24px;
-
-  --font: var(--font-jakarta), system-ui, sans-serif;
-  --font-display: var(--font-syne), var(--font-jakarta), sans-serif;
-
   --shadow-lg: 0 24px 80px rgba(0, 0, 0, 0.55);
   --shadow-glow: 0 0 60px var(--accent-glow);
+  --shadow-card: 0 16px 48px rgba(0, 0, 0, 0.4);
 }
 
 *,
@@ -45,11 +93,32 @@ html {
 body {
   margin: 0;
   font-family: var(--font);
-  background: #ffffff;
+  background: var(--bg);
   color: var(--text);
   min-height: 100vh;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+}
+
+/* ─── RTL / Urdu Typography Support ─── */
+html[dir="rtl"],
+body.lang-ur,
+[dir="rtl"] {
+  font-family: var(--font-urdu);
+  line-height: 1.7;
+}
+
+[dir="rtl"] .report-header,
+[dir="rtl"] .hero-copy,
+[dir="rtl"] .stat-card,
+[dir="rtl"] .findings-block,
+[dir="rtl"] .triage-block {
+  text-align: right;
+}
+
+[dir="rtl"] .triage-list {
+  padding-left: 0;
+  padding-right: 1.25rem;
 }
 
 /* ─── Background ─── */
@@ -699,19 +768,20 @@ body {
 /* ─── Report panel ─── */
 .report-panel {
   padding: 2rem;
-  background: rgba(255, 255, 255, 0.75);
+  background: var(--surface);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 2px solid rgba(0, 162, 240, 0.2);
+  border: 2px solid var(--border-default);
   border-radius: 24px;
-  box-shadow: 0 12px 48px rgba(0, 162, 240, 0.15);
+  box-shadow: var(--shadow-card);
   min-height: 420px;
+  color: var(--text);
   animation: fade-up 0.5s ease both;
 }
 
 .report-panel--live {
-  border-color: rgba(0, 162, 240, 0.4);
-  box-shadow: 0 16px 56px rgba(0, 162, 240, 0.25);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-glow);
 }
 
 .report-header {
@@ -728,7 +798,7 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.01em;
   margin: 0;
-  color: #073564;
+  color: var(--text-primary);
 }
 
 .chip {
@@ -770,28 +840,29 @@ body {
   padding: 1.1rem;
   margin-bottom: 1rem;
   border-radius: var(--radius);
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid var(--glass-border);
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-default);
+  color: var(--text);
 }
 
 .condition-hero.severity-none {
-  border-color: rgba(61, 214, 140, 0.25);
-  background: linear-gradient(135deg, rgba(61, 214, 140, 0.08), transparent);
+  border-color: rgba(61, 214, 140, 0.35);
+  background: linear-gradient(135deg, rgba(61, 214, 140, 0.1), var(--bg-surface-raised));
 }
 
 .condition-hero.severity-mild {
-  border-color: rgba(245, 185, 66, 0.25);
-  background: linear-gradient(135deg, rgba(245, 185, 66, 0.08), transparent);
+  border-color: rgba(245, 185, 66, 0.35);
+  background: linear-gradient(135deg, rgba(245, 185, 66, 0.1), var(--bg-surface-raised));
 }
 
 .condition-hero.severity-moderate {
-  border-color: rgba(255, 160, 60, 0.25);
-  background: linear-gradient(135deg, rgba(255, 160, 60, 0.08), transparent);
+  border-color: rgba(255, 160, 60, 0.35);
+  background: linear-gradient(135deg, rgba(255, 160, 60, 0.1), var(--bg-surface-raised));
 }
 
 .condition-hero.severity-high {
-  border-color: rgba(255, 107, 122, 0.3);
-  background: linear-gradient(135deg, rgba(255, 107, 122, 0.1), transparent);
+  border-color: rgba(255, 107, 122, 0.4);
+  background: linear-gradient(135deg, rgba(255, 107, 122, 0.12), var(--bg-surface-raised));
 }
 
 .condition-icon {
@@ -800,7 +871,7 @@ body {
   display: grid;
   place-items: center;
   font-size: 1.4rem;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--border-default);
   border-radius: 12px;
 }
 
@@ -809,7 +880,7 @@ body {
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--text-dim);
+  color: var(--text-muted);
   margin-bottom: 0.2rem;
 }
 
@@ -818,6 +889,7 @@ body {
   font-size: 1.35rem;
   font-weight: 700;
   margin: 0 0 0.4rem;
+  color: var(--text-primary);
   letter-spacing: -0.02em;
 }
 
@@ -833,8 +905,8 @@ body {
 
 .severity-none { color: var(--success); background: rgba(61, 214, 140, 0.15); }
 .severity-mild { color: var(--warn); background: rgba(245, 185, 66, 0.15); }
-.severity-moderate { color: #ffa03c; background: rgba(255, 160, 60, 0.15); }
-.severity-high { color: var(--danger); background: rgba(255, 107, 122, 0.15); }
+.severity-moderate { color: #ea580c; background: rgba(255, 160, 60, 0.18); }
+.severity-high { color: var(--danger); background: rgba(255, 107, 122, 0.18); }
 
 /* Confidence ring */
 .confidence-ring {
@@ -851,7 +923,7 @@ body {
 
 .ring-bg {
   fill: none;
-  stroke: rgba(255, 255, 255, 0.08);
+  stroke: var(--border-default);
   stroke-width: 3;
 }
 
@@ -860,7 +932,7 @@ body {
   stroke: var(--accent);
   stroke-width: 3;
   stroke-linecap: round;
-  filter: drop-shadow(0 0 4px var(--accent));
+  filter: drop-shadow(0 0 4px var(--accent-glow));
 }
 
 .ring-value {
@@ -870,6 +942,7 @@ body {
   place-items: center;
   font-size: 0.75rem;
   font-weight: 700;
+  color: var(--text-primary);
 }
 
 /* Stat cards */
@@ -882,9 +955,10 @@ body {
 
 .stat-card {
   padding: 0.75rem;
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid var(--glass-border);
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
+  color: var(--text);
 }
 
 .stat-card-wide {
@@ -903,6 +977,7 @@ body {
 .stat-value {
   font-size: 1.1rem;
   font-weight: 700;
+  color: var(--text-primary);
 }
 
 .stat-value-sm {
@@ -915,7 +990,7 @@ body {
 .stat-bar {
   height: 4px;
   margin-top: 0.4rem;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--border-default);
   border-radius: 999px;
   overflow: hidden;
 }
@@ -954,9 +1029,10 @@ body {
   grid-template-rows: auto auto;
   gap: 0.25rem 0.75rem;
   padding: 0.55rem 0.75rem;
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid var(--glass-border);
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
+  color: var(--text);
 }
 
 .finding-name {
@@ -964,6 +1040,7 @@ body {
   font-weight: 500;
   text-transform: capitalize;
   grid-column: 1;
+  color: var(--text-primary);
 }
 
 .finding-pct {
@@ -977,7 +1054,7 @@ body {
 .finding-bar-wrap {
   grid-column: 1 / -1;
   height: 3px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--border-default);
   border-radius: 999px;
   overflow: hidden;
 }
@@ -995,19 +1072,21 @@ body {
 }
 
 .triage-verdict {
-  font-size: 0.88rem;
+  font-size: 0.92rem;
   font-weight: 600;
-  color: var(--text);
+  color: var(--text-primary);
   margin: 0 0 0.6rem;
+  line-height: 1.5;
 }
 
 .triage-sublabel {
   display: block;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-dim);
-  margin: 0.6rem 0 0.3rem;
+  margin: 0.75rem 0 0.35rem;
 }
 
 .triage-list {
@@ -1015,15 +1094,15 @@ body {
   padding-left: 1.05rem;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.82rem;
-  line-height: 1.45;
-  color: var(--text);
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
 }
 
 .triage-list--dim {
   color: var(--text-dim);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
 }
 
 .urgency-badge {
@@ -1171,6 +1250,18 @@ body {
   line-height: 1.5;
 }
 
+/* ─── Safety statement ─── */
+.safety-statement {
+  margin-top: 1.5rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-default);
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
 /* Footer */
 .site-footer {
   position: relative;
@@ -1202,7 +1293,7 @@ body {
   }
 }
 
-/* ─── Chat Interface (GPT-like full-screen) ─── */
+/* ─── Chat Interface ─── */
 .chat-interface {
   display: flex;
   flex-direction: column;
@@ -1221,8 +1312,8 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 1.25rem 2rem;
-  border-bottom: 2px solid rgba(0, 162, 240, 0.15);
-  background: rgba(255, 255, 255, 0.7);
+  border-bottom: 2px solid var(--border-default);
+  background: var(--surface);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
 }
@@ -1237,13 +1328,13 @@ body {
   font-weight: 900;
   text-transform: uppercase;
   margin: 0 0 0.15rem;
-  color: #073564;
+  color: var(--text-primary);
   letter-spacing: 0.01em;
 }
 
 .chat-subtitle {
   font-size: 0.85rem;
-  color: #5a5a5a;
+  color: var(--text-muted);
   margin: 0;
   font-weight: 500;
 }
@@ -1271,17 +1362,13 @@ body {
 }
 
 .chat-messages::-webkit-scrollbar-track {
-  background: rgba(0, 162, 240, 0.05);
+  background: var(--glass-highlight);
   border-radius: 5px;
 }
 
 .chat-messages::-webkit-scrollbar-thumb {
-  background: rgba(0, 162, 240, 0.3);
+  background: var(--border-strong);
   border-radius: 5px;
-}
-
-.chat-messages::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 162, 240, 0.5);
 }
 
 .chat-empty {
@@ -1292,13 +1379,14 @@ body {
   justify-content: center;
   text-align: center;
   padding: 3rem 2rem;
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--surface);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-radius: 24px;
-  border: 2px solid rgba(0, 162, 240, 0.15);
+  border: 2px solid var(--border-default);
   margin: 2rem auto;
   max-width: 600px;
+  box-shadow: var(--shadow-card);
 }
 
 .chat-empty-icon {
@@ -1313,13 +1401,13 @@ body {
   font-weight: 900;
   text-transform: uppercase;
   margin: 0 0 0.75rem;
-  color: #073564;
+  color: var(--text-primary);
   letter-spacing: 0.01em;
 }
 
 .chat-empty-text {
   font-size: 1rem;
-  color: #5a5a5a;
+  color: var(--text-secondary);
   max-width: 420px;
   margin: 0 0 2rem;
   line-height: 1.6;
@@ -1334,24 +1422,24 @@ body {
 
 .chat-suggestion {
   padding: 0.75rem 1.5rem;
-  font-family: var(--font-poppins), system-ui, sans-serif;
+  font-family: var(--font), system-ui, sans-serif;
   font-size: 0.9rem;
   font-weight: 600;
-  color: #073564;
-  background: rgba(255, 255, 255, 0.8);
+  color: var(--text-primary);
+  background: var(--bg-surface-raised);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border: 2px solid rgba(0, 162, 240, 0.25);
+  border: 2px solid var(--border-default);
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.3s ease;
 }
 
 .chat-suggestion:hover {
-  background: rgba(0, 162, 240, 0.1);
-  border-color: #00a2f0;
+  background: var(--glass-highlight);
+  border-color: var(--accent);
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 162, 240, 0.2);
+  box-shadow: var(--shadow-card);
 }
 
 .chat-message {
@@ -1386,12 +1474,12 @@ body {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #5a5a5a;
+  color: var(--text-muted);
 }
 
 .chat-message-time {
   font-size: 0.75rem;
-  color: #8a8a8a;
+  color: var(--text-dim);
 }
 
 .chat-message-content {
@@ -1419,21 +1507,21 @@ body {
 }
 
 .chat-message--assistant .chat-message-text {
-  background: rgba(255, 255, 255, 0.75);
+  background: var(--surface);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 2px solid rgba(0, 162, 240, 0.2);
-  color: #000000;
+  border: 2px solid var(--border-default);
+  color: var(--text);
   border-radius: 16px 16px 16px 4px;
-  box-shadow: 0 4px 16px rgba(0, 162, 240, 0.1);
+  box-shadow: var(--shadow-card);
 }
 
 .chat-message-analysis {
   padding: 1rem;
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--bg-surface-raised);
   backdrop-filter: blur(15px);
   -webkit-backdrop-filter: blur(15px);
-  border: 2px solid rgba(0, 162, 240, 0.15);
+  border: 2px solid var(--border-default);
   border-radius: 12px;
 }
 
@@ -1442,17 +1530,17 @@ body {
   align-items: center;
   gap: 0.5rem;
   padding: 1.25rem 1.5rem;
-  background: rgba(255, 255, 255, 0.75);
+  background: var(--surface);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 2px solid rgba(0, 162, 240, 0.2);
+  border: 2px solid var(--border-default);
   border-radius: 16px 16px 16px 4px;
 }
 
 .chat-typing span {
   width: 10px;
   height: 10px;
-  background: #00a2f0;
+  background: var(--accent);
   border-radius: 50%;
   animation: typing-bounce 1.4s ease-in-out infinite;
 }
@@ -1477,8 +1565,8 @@ body {
 }
 
 .chat-input-container {
-  border-top: 2px solid rgba(0, 162, 240, 0.15);
-  background: rgba(255, 255, 255, 0.7);
+  border-top: 2px solid var(--border-default);
+  background: var(--surface);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   padding: 1.25rem 2rem 1.75rem;
@@ -1490,10 +1578,10 @@ body {
   gap: 1rem;
   padding: 0.85rem 1rem;
   margin-bottom: 1rem;
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--bg-surface-raised);
   backdrop-filter: blur(15px);
   -webkit-backdrop-filter: blur(15px);
-  border: 2px solid rgba(0, 162, 240, 0.2);
+  border: 2px solid var(--border-default);
   border-radius: 12px;
 }
 
@@ -1502,7 +1590,7 @@ body {
   height: 70px;
   object-fit: cover;
   border-radius: 10px;
-  border: 2px solid rgba(0, 162, 240, 0.25);
+  border: 2px solid var(--border-default);
 }
 
 .chat-image-preview-info {
@@ -1515,7 +1603,7 @@ body {
 
 .chat-image-preview-name {
   font-size: 0.88rem;
-  color: #5a5a5a;
+  color: var(--text-muted);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1529,7 +1617,7 @@ body {
   place-items: center;
   font-size: 1rem;
   font-weight: 700;
-  color: #ff6b7a;
+  color: var(--danger);
   background: rgba(255, 107, 122, 0.1);
   border: 2px solid rgba(255, 107, 122, 0.25);
   border-radius: 8px;
@@ -1539,7 +1627,7 @@ body {
 
 .chat-image-preview-remove:hover {
   background: rgba(255, 107, 122, 0.2);
-  border-color: #ff6b7a;
+  border-color: var(--danger);
   transform: scale(1.05);
 }
 
@@ -1547,10 +1635,10 @@ body {
   display: flex;
   align-items: flex-end;
   gap: 0.85rem;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--bg-surface-raised);
   backdrop-filter: blur(15px);
   -webkit-backdrop-filter: blur(15px);
-  border: 2px solid rgba(0, 162, 240, 0.25);
+  border: 2px solid var(--border-default);
   border-radius: 16px;
   padding: 0.75rem;
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
@@ -1560,8 +1648,8 @@ body {
 }
 
 .chat-input-wrapper:focus-within {
-  border-color: #00a2f0;
-  box-shadow: 0 0 0 4px rgba(0, 162, 240, 0.1);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-glow);
 }
 
 .chat-attach-btn {
@@ -1571,16 +1659,16 @@ body {
   display: grid;
   place-items: center;
   font-size: 1.25rem;
-  background: rgba(0, 162, 240, 0.1);
-  border: 2px solid rgba(0, 162, 240, 0.25);
+  background: var(--bg-surface);
+  border: 2px solid var(--border-default);
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.25s ease;
 }
 
 .chat-attach-btn:hover:not(:disabled) {
-  background: rgba(0, 162, 240, 0.2);
-  border-color: #00a2f0;
+  background: var(--glass-highlight);
+  border-color: var(--accent);
   transform: scale(1.05);
 }
 
@@ -1594,9 +1682,9 @@ body {
   min-height: 42px;
   max-height: 150px;
   padding: 0.65rem 1rem;
-  font-family: var(--font-poppins), system-ui, sans-serif;
+  font-family: var(--font), system-ui, sans-serif;
   font-size: 0.95rem;
-  color: #000000;
+  color: var(--text-primary);
   background: transparent;
   border: none;
   outline: none;
@@ -1606,7 +1694,7 @@ body {
 }
 
 .chat-input::placeholder {
-  color: #8a8a8a;
+  color: var(--text-dim);
 }
 
 .chat-input::-webkit-scrollbar {
@@ -1618,7 +1706,7 @@ body {
 }
 
 .chat-input::-webkit-scrollbar-thumb {
-  background: rgba(0, 162, 240, 0.2);
+  background: var(--border-default);
   border-radius: 3px;
 }
 

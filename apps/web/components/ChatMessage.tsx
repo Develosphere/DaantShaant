@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useLanguage } from "@/i18n";
 import type { ChatMessage } from "@/lib/types";
 import { DiagnosisReport } from "./DiagnosisReport";
 import { CheckoutModal } from "./CheckoutModal";
-import Link from "next/link";
 
 type ChatMessageProps = {
   message: ChatMessage;
@@ -66,6 +67,7 @@ function ChatProductCard({ name, parsedPrice, parsedWhy, parsedHelps, onBuy }: {
   parsedHelps: string[];
   onBuy: (product: any) => void;
 }) {
+  const { t } = useLanguage();
   const [product, setProduct] = useState<any | null>(null);
 
   useEffect(() => {
@@ -124,13 +126,13 @@ function ChatProductCard({ name, parsedPrice, parsedWhy, parsedHelps, onBuy }: {
         <p className="rec-product-desc">{displayProduct.ai_description}</p>
         {displayProduct.problems_solved && displayProduct.problems_solved.length > 0 && (
           <div className="rec-product-tags">
-            {displayProduct.problems_solved.map((t: string, idx: number) => (
-              <span key={idx} className="rec-product-tag">{t}</span>
+            {displayProduct.problems_solved.map((tagItem: string, idx: number) => (
+              <span key={idx} className="rec-product-tag">{tagItem}</span>
             ))}
           </div>
         )}
         <button className="btn btn-buy btn-sm" onClick={() => onBuy(displayProduct)}>
-          Buy Now
+          {t("report.buy_now")}
         </button>
       </div>
     </div>
@@ -138,6 +140,7 @@ function ChatProductCard({ name, parsedPrice, parsedWhy, parsedHelps, onBuy }: {
 }
 
 export function ChatMessageBubble({ message }: ChatMessageProps) {
+  const { t } = useLanguage();
   const isUser = message.sender === "user";
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
@@ -153,7 +156,7 @@ export function ChatMessageBubble({ message }: ChatMessageProps) {
     <div className={`chat-message ${isUser ? "chat-message--user" : "chat-message--assistant"}`}>
       <div className="chat-message-header">
         <span className="chat-message-sender">
-          {isUser ? "You" : "DaantShaant AI"}
+          {isUser ? t("chat.you") : t("chat.assistant_name")}
         </span>
         <span className="chat-message-time">
           {new Date(message.timestamp).toLocaleTimeString([], {
@@ -169,7 +172,7 @@ export function ChatMessageBubble({ message }: ChatMessageProps) {
         {recommendations.length > 0 && (
           <div className="chat-message-recommendations" style={{ marginTop: "1rem" }}>
             <h4 style={{ fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.5rem" }}>
-              🛒 Shop Recommended Items
+              🛒 {t("report.products_title")}
             </h4>
             {recommendations.map((rec, idx) => (
               <ChatProductCard
@@ -188,7 +191,7 @@ export function ChatMessageBubble({ message }: ChatMessageProps) {
           <div className="chat-message-analysis">
             <DiagnosisReport
               result={message.analysis_result}
-              label="Analysis Results"
+              label={t("report.title")}
               loading={false}
               liveActive={false}
             />
@@ -204,4 +207,5 @@ export function ChatMessageBubble({ message }: ChatMessageProps) {
     </div>
   );
 }
+
 

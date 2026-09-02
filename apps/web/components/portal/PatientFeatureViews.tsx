@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useLanguage } from "@/i18n";
 import { CameraPanel } from "@/components/CameraPanel";
 import { ChatInterface } from "@/components/ChatInterface";
 import { getStoredUser } from "@/lib/portal-auth";
@@ -10,15 +11,15 @@ import { PortalDashboard } from "./PortalDashboard";
 import feature from "./patient-feature.module.css";
 
 export function PatientScanView() {
+  const { t } = useLanguage();
   return (
     <PortalDashboard role="patient" maxWidth={1200}>
       <div className={feature.featureMain}>
         <section className={feature.intro}>
-          <p className={feature.eyebrow}>Vision AI · Clinical rules</p>
-          <h1 className={feature.title}>AI teeth scan</h1>
+          <p className={feature.eyebrow}>{t("common.tagline")}</p>
+          <h1 className={feature.title}>{t("scan.title")}</h1>
           <p className={feature.desc}>
-            Capture a photo, run live video, or upload an image — DantShaant analyzes
-            your teeth and returns a diagnosis report saved to your patient account.
+            {t("scan.subtitle")}
           </p>
         </section>
         <div className={`demo-grid ${feature.featureGrid}`}>
@@ -30,15 +31,15 @@ export function PatientScanView() {
 }
 
 export function PatientChatView() {
+  const { t } = useLanguage();
   return (
     <PortalDashboard role="patient" maxWidth={960}>
       <div className={feature.featureMain} style={{ maxWidth: 960 }}>
         <section className={feature.intro}>
-          <p className={feature.eyebrow}>Conversational AI · Persistent memory</p>
-          <h1 className={feature.title}>AI chat session</h1>
+          <p className={feature.eyebrow}>{t("common.tagline")}</p>
+          <h1 className={feature.title}>{t("chat.title")}</h1>
           <p className={feature.desc}>
-            Ask about oral health, share photos for analysis, and get personalized
-            recommendations — your conversation is tied to your patient account.
+            {t("chat.subtitle")}
           </p>
         </section>
         <ChatInterface conversationStorageKey={getPatientConversationStorageKey()} />
@@ -48,6 +49,7 @@ export function PatientChatView() {
 }
 
 export function PatientDashboardHome() {
+  const { t } = useLanguage();
   const [firstName, setFirstName] = useState("");
 
   useEffect(() => {
@@ -58,35 +60,36 @@ export function PatientDashboardHome() {
   return (
     <PortalDashboard role="patient" maxWidth={960}>
       <section className={feature.intro}>
-        <p className={feature.eyebrow}>Patient access</p>
+        <p className={feature.eyebrow}>{t("dashboard.welcome_eyebrow")}</p>
         <h1 className={feature.title}>
-          {firstName ? `Welcome, ${firstName}!` : "Welcome back"}
+          {firstName ? `${t("dashboard.welcome_back")}, ${firstName}!` : t("dashboard.welcome_back")}
         </h1>
         <p className={feature.desc}>
-          Run an AI teeth scan or start a chat session with your dental AI assistant.
+          {t("dashboard.welcome_desc")}
         </p>
         <div className={feature.dashboardCards}>
           <Link href="/patient/scan" className={feature.card}>
             <div className={feature.cardIcon}>📷</div>
-            <div className={feature.cardTitle}>AI scan</div>
+            <div className={feature.cardTitle}>{t("dashboard.scan_title")}</div>
             <p className={feature.cardDesc}>
-              Snapshot, live video, or upload — get an instant diagnosis report.
+              {t("dashboard.scan_desc")}
             </p>
           </Link>
           <Link href="/patient/chat" className={feature.card}>
             <div className={feature.cardIcon}>💬</div>
-            <div className={feature.cardTitle}>AI chat</div>
+            <div className={feature.cardTitle}>{t("dashboard.chat_title")}</div>
             <p className={feature.cardDesc}>
-              Chat with DantShaant AI about your oral health and treatment options.
+              {t("dashboard.chat_desc")}
             </p>
           </Link>
-          <Link href="/patient/scans" className={feature.card}>
-            <div className={feature.cardIcon}>🗂️</div>
-            <div className={feature.cardTitle}>My scans</div>
-            <p className={feature.cardDesc}>Review your saved scan history.</p>
+          <Link href="/patient/dentists" className={feature.card}>
+            <div className={feature.cardIcon}>🗺️</div>
+            <div className={feature.cardTitle}>{t("dashboard.dentists_title")}</div>
+            <p className={feature.cardDesc}>{t("dashboard.dentists_desc")}</p>
           </Link>
         </div>
       </section>
     </PortalDashboard>
   );
 }
+

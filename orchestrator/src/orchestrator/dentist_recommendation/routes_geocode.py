@@ -38,8 +38,9 @@ class ResolveLocationResponse(BaseModel):
 async def autocomplete_address(
     q: str = Query(..., min_length=2, max_length=200),
     limit: int = Query(6, ge=1, le=10),
+    lang: str = Query("en", max_length=10),
 ):
-    suggestions = await search_address_suggestions(q, limit=limit)
+    suggestions = await search_address_suggestions(q, limit=limit, lang=lang)
     return AutocompleteResponse(
         suggestions=[AddressSuggestion(**s) for s in suggestions]
     )
@@ -51,8 +52,10 @@ async def resolve_address(
     place_id: str | None = Query(None, max_length=200),
     lat: float | None = Query(None),
     lng: float | None = Query(None),
+    lang: str = Query("en", max_length=10),
 ):
-    resolved = await resolve_suggestion(place_id, label, lat=lat, lng=lng)
+    resolved = await resolve_suggestion(place_id, label, lat=lat, lng=lng, lang=lang)
     if not resolved:
         raise HTTPException(status_code=404, detail="Could not resolve that address")
     return ResolveLocationResponse(**resolved)
+

@@ -11,12 +11,12 @@ export type AddressSuggestion = {
   lng?: number | null;
 };
 
-export async function fetchAddressSuggestions(query: string): Promise<AddressSuggestion[]> {
+export async function fetchAddressSuggestions(query: string, locale: string = "en"): Promise<AddressSuggestion[]> {
   const q = query.trim();
   if (q.length < 2) return [];
 
   try {
-    const params = new URLSearchParams({ q, limit: "6" });
+    const params = new URLSearchParams({ q, limit: "6", lang: locale });
     const res = await fetch(`${API_BASE}/portal/geocode/autocomplete?${params.toString()}`);
     if (!res.ok) return [];
 
@@ -31,14 +31,15 @@ export async function resolveAddressSuggestion(
   label: string,
   placeId?: string,
   lat?: number | null,
-  lng?: number | null
+  lng?: number | null,
+  locale: string = "en"
 ): Promise<{ lat: number; lng: number; label: string } | null> {
   if (lat != null && lng != null) {
     return { lat, lng, label };
   }
 
   try {
-    const params = new URLSearchParams({ label });
+    const params = new URLSearchParams({ label, lang: locale });
     if (placeId) params.set("place_id", placeId);
     if (lat != null) params.set("lat", String(lat));
     if (lng != null) params.set("lng", String(lng));
@@ -51,3 +52,4 @@ export async function resolveAddressSuggestion(
     return null;
   }
 }
+

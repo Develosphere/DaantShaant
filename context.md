@@ -249,6 +249,25 @@ Phase 10 Fast Track unified and polished the frontend user experience across the
   - AI assistant identity set to "DaantShaant AI Assistant" / "Your AI oral-health companion" without claiming to be a licensed human dentist.
   - Intercepts raw backend JSON errors (`downstream_unavailable`, `downstream_error`, timeout, relevance reject/retake) into clean, friendly user-facing messages.
 
+## Bilingual English/Urdu + Light/Dark Theme + Public Copy Hardening — PHASE 10.1 COMPLETE
+
+Phase 10.1 implemented full bilingual capabilities, light/dark theme support, and hardened patient-facing copy across the webapp:
+
+- **Bilingual i18n System (`apps/web/i18n/`)**:
+  - Full English (DEFAULT) and Urdu dictionaries with 100% key parity (190 keys each).
+  - Context provider with localStorage persistence (`daantshaant_locale`), dynamic `lang="en" | "ur"`, and `dir="ltr" | "rtl"`.
+  - Urdu typography fallback stack (`"Noto Nastaliq Urdu"`, `"Noto Sans Arabic"`).
+  - Synchronized geocoding language: address autocomplete and reverse geocoding pass the active `lang` / `Accept-Language` (`en` or `ur`) so English mode never returns Urdu text and vice versa.
+- **Theme System (`apps/web/theme/`)**:
+  - Light (DEFAULT) and Dark themes with `data-theme="light"` and `data-theme="dark"` on `<html>`.
+  - Contrast tokens: high-contrast dark text on light surfaces (`#0f172a`, `#334155`) in Light mode; crisp readable light text on dark surfaces (`#f8fafc`, `#e2e8f0`) in Dark mode. No low-contrast or white-on-white text issues.
+- **Public-Facing Copy Hardening**:
+  - Implementation/stack technical terminology (`OSM`, `Nominatim`, `OpenStreetMap`, `OpenFreeMap`, `MapLibre`, `Qwen`, `Gemini`, `LangGraph`, `Supabase`, `Python`, `API`, model providers) removed from public user-facing UI while retaining proper map attribution on map canvas.
+  - "Oral scan", "Oral Health Screening", "Screening Verdict", "Visual Findings", "Screening Confidence" standardized.
+  - Professional dental assistant identity: "DaantShaant Oral Health Assistant", "Your oral-health companion".
+- **Header Controls**:
+  - Responsive language toggle (`EN | اردو`) and theme toggle (☀️ / 🌙) on portal and public headers.
+
 ## Known Remaining Issues
 
 - AI usage is less fragmented but not fully unified: chat text generation, product descriptions, and the product recommendation graph go through the shared orchestrator gateway, and Teeth Analyzer clinical vision now runs a service-local Qwen-primary / Gemini-fallback policy (Phase 2C). Clinical RAG and the recommendation embedding service still use direct Gemini paths. OpenRouter has ZERO active runtime references project-wide.
@@ -277,9 +296,11 @@ Phase 10 Fast Track unified and polished the frontend user experience across the
 | 6 Fast Track | Dentist Discovery + OSM/Overpass + MapLibre/OpenFreeMap | COMPLETE |
 | 8-lite | Evaluation Harness + Demo Metrics | COMPLETE |
 | 10 Fast Track | Final UI Integration + Demo UX Polish | COMPLETE |
+| 10.1 | Bilingual English/Urdu + Light/Dark Theme + Public Copy Hardening | COMPLETE |
 
 The former Phase 1C is obsolete because its domain migration scope was merged into Phase 1B.
 
 ## Next Phase
 
 **Phase 11 — Deployment Fast Track**.
+

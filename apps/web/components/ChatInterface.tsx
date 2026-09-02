@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useLanguage } from "@/i18n";
 import { sendChatMessage, getConversationMessages } from "@/lib/chat-api";
 import { fileToImagePayload } from "@/lib/image";
 import type { ChatMessage } from "@/lib/types";
@@ -14,6 +15,7 @@ type Props = {
 export function ChatInterface({
   conversationStorageKey = "dantshaant_current_conversation",
 }: Props) {
+  const { t } = useLanguage();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState("");
   const [conversationId, setConversationId] = useState<string | undefined>();
@@ -41,17 +43,13 @@ export function ChatInterface({
   useEffect(() => {
     const loadSavedConversation = async () => {
       const savedConvId = localStorage.getItem(conversationStorageKey);
-      console.log("Checking for saved conversation:", savedConvId);
       
       if (savedConvId) {
         try {
           setConversationId(savedConvId);
-          console.log("Loading conversation:", savedConvId);
           await loadConversation(savedConvId);
         } catch (error) {
           console.error("Failed to load saved conversation:", error);
-          // Clear invalid conversation ID and start fresh
-          console.log("Clearing invalid conversation ID");
           localStorage.removeItem(conversationStorageKey);
           setConversationId(undefined);
           setMessages([]);
@@ -64,9 +62,7 @@ export function ChatInterface({
   
   const loadConversation = async (convId: string) => {
     try {
-      console.log("Fetching messages for conversation:", convId);
       const msgs = await getConversationMessages(convId);
-      console.log("Loaded messages:", msgs.length);
       setMessages(msgs);
     } catch (error) {
       console.error("Failed to load conversation:", error);
@@ -74,48 +70,35 @@ export function ChatInterface({
     }
   };
   
-  const handleSendMessage = async () => {
-    if (!inputText.trim() && !imageAttachment) return;
+  const handleSendMessage = async (textToSend?: string) => {
+    const messageText = textToSend ?? inputText;
+    if (!messageText.trim() && !imageAttachment) return;
     
     setLoading(true);
     
     try {
-      console.log("Sending message:", {
-        text: inputText,
-        conversationId,
-        hasImage: !!imageAttachment
-      });
-      
       const response = await sendChatMessage(
-        inputText || "Please analyze this image",
+        messageText || "Please analyze this image",
         conversationId,
         imageAttachment?.base64,
         imageAttachment?.mimeType
       );
       
-      console.log("Received response:", response);
-      
-      // Update conversation ID if this is a new conversation
       if (!conversationId) {
-        console.log("Setting new conversation ID:", response.conversation_id);
         setConversationId(response.conversation_id);
         localStorage.setItem(conversationStorageKey, response.conversation_id);
       }
       
-      // Add both messages to the chat
       setMessages((prev) => [...prev, response.user_message, response.assistant_message]);
-      
-      // Clear input and attachment
       setInputText("");
       setImageAttachment(null);
       
-      // Reset textarea height
       if (textareaRef.current) {
         textareaRef.current.style.height = "auto";
       }
     } catch (error) {
       console.error("Failed to send message:", error);
-      alert(error instanceof Error ? error.message : "Failed to send message");
+      alert(error instanceof Error ? error.message : t("common.error"));
     } finally {
       setLoading(false);
     }
@@ -130,8 +113,6 @@ export function ChatInterface({
   
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputText(e.target.value);
-    
-    // Auto-resize textarea
     e.target.style.height = "auto";
     e.target.style.height = `${e.target.scrollHeight}px`;
   };
@@ -174,15 +155,15 @@ export function ChatInterface({
     <div className="chat-interface">
       <div className="chat-header">
         <div className="chat-header-content">
-          <h2 className="chat-title">DaantShaant AI Assistant</h2>
-          <p className="chat-subtitle">Your AI oral-health companion</p>
+          <h2 className="chat-title">{t("chat.title")}</h2>
+          <p className="chat-subtitle">{t("chat.subtitle")}</p>
         </div>
         <button
           type="button"
           className="btn btn-ghost btn-sm"
           onClick={startNewConversation}
         >
-          New Chat
+          {t("chat.new_chat")}
         </button>
       </div>
       
@@ -190,31 +171,31 @@ export function ChatInterface({
         {messages.length === 0 ? (
           <div className="chat-empty">
             <div className="chat-empty-icon">💬</div>
-            <h3 className="chat-empty-title">Start a conversation</h3>
+            <h3 className="chat-empty-title">{t("chat.empty_title")}</h3>
             <p className="chat-empty-text">
-              Ask questions about oral hygiene, dental care tips, or share a photo of your teeth for screening.
+              {t("chat.empty_text")}
             </p>
             <div className="chat-suggestions">
               <button
                 type="button"
                 className="chat-suggestion"
-                onClick={() => setInputText("How often should I brush and floss?")}
+                onClick={() => handleSendMessage(t("chat.starter_brush"))}
               >
-                How often should I brush?
+                {t("chat.starter_brush")}
               </button>
               <button
                 type="button"
                 className="chat-suggestion"
-                onClick={() => setInputText("What causes tooth sensitivity?")}
+                onClick={() => handleSendMessage(t("chat.starter_sensitivity"))}
               >
-                What causes sensitivity?
+                {t("chat.starter_sensitivity")}
               </button>
               <button
                 type="button"
                 className="chat-suggestion"
                 onClick={() => fileInputRef.current?.click()}
               >
-                📷 Screen teeth photo
+                {t("chat.starter_screen")}
               </button>
             </div>
           </div>
@@ -226,7 +207,7 @@ export function ChatInterface({
             {loading && (
               <div className="chat-message chat-message--assistant">
                 <div className="chat-message-header">
-                  <span className="chat-message-sender">DaantShaant AI</span>
+                  <span className="chat-message-sender">{t("chat.assistant_name")}</span>
                 </div>
                 <div className="chat-message-content">
                   <div className="chat-typing">
@@ -266,7 +247,7 @@ export function ChatInterface({
             className="chat-attach-btn"
             onClick={() => fileInputRef.current?.click()}
             disabled={loading}
-            title="Attach image"
+            title={t("chat.attach_image")}
           >
             📎
           </button>
@@ -274,7 +255,7 @@ export function ChatInterface({
           <textarea
             ref={textareaRef}
             className="chat-input"
-            placeholder="Type a message or attach an image..."
+            placeholder={t("chat.input_placeholder")}
             value={inputText}
             onChange={handleTextareaChange}
             onKeyDown={handleKeyDown}
@@ -285,10 +266,10 @@ export function ChatInterface({
           <button
             type="button"
             className="chat-send-btn"
-            onClick={handleSendMessage}
+            onClick={() => handleSendMessage()}
             disabled={loading || (!inputText.trim() && !imageAttachment)}
           >
-            {loading ? "..." : "Send"}
+            {loading ? "..." : t("chat.send")}
           </button>
           
           <input
@@ -303,3 +284,4 @@ export function ChatInterface({
     </div>
   );
 }
+

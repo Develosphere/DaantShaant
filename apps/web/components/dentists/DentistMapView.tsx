@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useLanguage } from "@/i18n";
 import { PortalDashboard } from "@/components/portal/PortalDashboard";
 import { LocationPickerModal } from "@/components/dentists/LocationPickerModal";
 import {
@@ -20,6 +21,7 @@ function parseCoord(value: string | null): number | undefined {
 }
 
 export function DentistMapView() {
+  const { t } = useLanguage();
   const router = useRouter();
   const searchParams = useSearchParams();
   const issue = searchParams.get("issue") ?? "dental checkup";
@@ -152,15 +154,15 @@ export function DentistMapView() {
         console.error("Error loading recommendations:", err);
         const msg = err instanceof Error ? err.message : "";
         if (msg.includes("Location access was denied") || msg.includes("denied")) {
-          setError("Location access wasn't enabled. Search by city or address instead.");
+          setError(t("dentists.location_denied"));
         } else {
-          setError("Could not load nearby dental recommendations. Search by city or address instead.");
+          setError(t("dentists.no_results"));
         }
       } finally {
         setLoading(false);
       }
     },
-    [issue, scanId, severity, renderMap]
+    [issue, scanId, severity, renderMap, t]
   );
 
   useEffect(() => {
@@ -190,7 +192,7 @@ export function DentistMapView() {
       });
       setBookMsg(res.message);
     } catch (err) {
-      setBookMsg(err instanceof Error ? err.message : "Booking request failed");
+      setBookMsg(err instanceof Error ? err.message : t("common.error"));
     } finally {
       setBooking(false);
     }
@@ -216,13 +218,13 @@ export function DentistMapView() {
 
       <div className={styles.layout}>
         <div className={styles.header}>
-          <h1 className={styles.title}>Recommended Dentists & Clinics</h1>
+          <h1 className={styles.title}>{t("dentists.title")}</h1>
           <p className={styles.sub}>
-            Screening issue: <strong>{issue.replace(/_/g, " ")}</strong>
+            {issue.replace(/_/g, " ")}
             {locationLabel && (
               <>
                 {" "}
-                · Near <strong>{locationLabel}</strong>
+                · <strong>{locationLabel}</strong>
               </>
             )}
           </p>
@@ -232,18 +234,18 @@ export function DentistMapView() {
               className={styles.changeLocation}
               onClick={() => setLocationModalOpen(true)}
             >
-              📍 Change search location
+              📍 {t("dentists.change_location")}
             </button>
           )}
           <div className={styles.legend}>
             <span className={styles.legendItem}>
-              <span className={styles.legendDotBest} /> Best specialist match
+              <span className={styles.legendDotBest} /> {t("dentists.best_specialist_match")}
             </span>
             <span className={styles.legendItem}>
-              <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: "#3b82f6", marginRight: 6 }} /> Verified partner
+              <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: "#3b82f6", marginRight: 6 }} /> {t("dentists.verified_clinic")}
             </span>
             <span className={styles.legendItem}>
-              <span className={styles.legendDotOther} /> Community / OSM clinic
+              <span className={styles.legendDotOther} /> {t("dentists.external_clinic")}
             </span>
           </div>
         </div>
@@ -251,7 +253,7 @@ export function DentistMapView() {
         {loading && (
           <div className={styles.loadingContainer}>
             <div className={styles.spinner} />
-            <p className={styles.loading}>Searching nearby dental providers with OpenStreetMap…</p>
+            <p className={styles.loading}>{t("dentists.searching_nearby")}</p>
           </div>
         )}
 
@@ -263,7 +265,7 @@ export function DentistMapView() {
               className={styles.btnRetry}
               onClick={() => setLocationModalOpen(true)}
             >
-              Try different location
+              {t("common.retry")}
             </button>
           </div>
         )}
@@ -271,7 +273,7 @@ export function DentistMapView() {
         {!loading && !error && hasCoords && dentists.length === 0 && (
           <div className={styles.emptyContainer}>
             <p className={styles.empty}>
-              No dentists found within search radius. Try expanding your search area or selecting a larger city center.
+              {t("dentists.no_results")}
             </p>
           </div>
         )}
@@ -297,20 +299,20 @@ export function DentistMapView() {
                     }
                   }}
                 >
-                  {d.is_best && <span className={styles.badgeBest}>Best match</span>}
+                  {d.is_best && <span className={styles.badgeBest}>{t("dentists.best_specialist_match")}</span>}
                   {d.tier === "platform" && (
                     <span className={styles.badgePartner}>
-                      {d.is_partner ? "Partner" : "Verified"}
+                      {d.is_partner ? t("dentists.verified_clinic") : t("dentists.verified_clinic")}
                     </span>
                   )}
                   {d.tier !== "platform" && (
                     <span style={{ fontSize: "0.72rem", padding: "2px 7px", background: "rgba(100,116,139,0.25)", color: "#cbd5e1", borderRadius: 4, marginLeft: 4, fontWeight: 500 }}>
-                      External listing
+                      {t("dentists.external_clinic")}
                     </span>
                   )}
                   <div className={styles.listName}>{d.name}</div>
                   <div className={styles.listMeta}>
-                    {d.clinic_name || d.address} · {d.distance_km.toFixed(1)} km
+                    {d.clinic_name || d.address} · {t("dentists.distance_km", { km: d.distance_km.toFixed(1) })}
                     {d.rating ? ` · ★ ${d.rating}` : ""}
                   </div>
                 </button>
@@ -322,12 +324,12 @@ export function DentistMapView() {
         {selected && (
           <div className={styles.modalOverlay} onClick={() => setSelected(null)}>
             <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-              {selected.is_best && <span className={styles.badgeBest}>Best Match</span>}
+              {selected.is_best && <span className={styles.badgeBest}>{t("dentists.best_specialist_match")}</span>}
               {selected.tier === "platform" ? (
-                <span className={styles.badgePartner} style={{ marginLeft: 6 }}>Verified Platform Provider</span>
+                <span className={styles.badgePartner} style={{ marginLeft: 6 }}>{t("dentists.verified_clinic")}</span>
               ) : (
                 <span style={{ fontSize: "0.75rem", padding: "3px 8px", background: "rgba(100,116,139,0.25)", color: "#cbd5e1", borderRadius: 4, marginLeft: 6 }}>
-                  OpenStreetMap Clinic
+                  {t("dentists.external_clinic")}
                 </span>
               )}
 
@@ -336,21 +338,21 @@ export function DentistMapView() {
               <p className={styles.modalReason}>{selected.recommendation_reason}</p>
               
               <p className={styles.modalRow}>
-                📍 <strong>{selected.distance_km.toFixed(1)} km away</strong>
+                📍 <strong>{t("dentists.distance_km", { km: selected.distance_km.toFixed(1) })}</strong>
                 {selected.rating ? ` · ★ ${selected.rating}` : ""}
               </p>
               {selected.address && <p className={styles.modalRow}>{selected.address}</p>}
               {selected.phone && <p className={styles.modalRow}>📞 {selected.phone}</p>}
               {selected.website && (
                 <p className={styles.modalRow}>
-                  🌐 <a href={selected.website} target="_blank" rel="noreferrer" style={{ color: "#38bdf8" }}>Visit Website</a>
+                  🌐 <a href={selected.website} target="_blank" rel="noreferrer" style={{ color: "#38bdf8" }}>{selected.website}</a>
                 </p>
               )}
 
               <div className={styles.modalActions} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "1rem" }}>
                 {selected.phone && (
                   <a href={`tel:${selected.phone}`} className={styles.btnPrimary} style={{ textDecoration: "none", textAlign: "center", flex: "1 1 auto" }}>
-                    📞 Call Clinic
+                    📞 {t("dentists.call")}
                   </a>
                 )}
                 
@@ -361,7 +363,7 @@ export function DentistMapView() {
                   className={styles.btnPrimary}
                   style={{ textDecoration: "none", textAlign: "center", background: "#334155", color: "#fff", flex: "1 1 auto" }}
                 >
-                  🗺️ Open Directions
+                  🗺️ {t("dentists.directions")}
                 </a>
 
                 {selected.tier === "platform" && selected.dentist_id ? (
@@ -372,11 +374,11 @@ export function DentistMapView() {
                     disabled={booking}
                     onClick={handleBook}
                   >
-                    {booking ? "Sending request…" : "📅 Book Consultation"}
+                    {booking ? t("common.loading") : `📅 ${t("dentists.book_consultation")}`}
                   </button>
                 ) : (
-                  <p style={{ fontSize: "0.8rem", color: "#94a3b8", width: "100%", textAlign: "center", marginTop: "0.25rem" }}>
-                    ℹ️ External clinic listing — contact directly via phone or navigation.
+                  <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", width: "100%", textAlign: "center", marginTop: "0.25rem" }}>
+                    ℹ️ {t("dentists.external_clinic")}
                   </p>
                 )}
               </div>
@@ -384,7 +386,7 @@ export function DentistMapView() {
               {bookMsg && <p className={styles.bookMessage}>{bookMsg}</p>}
               
               <button type="button" className={styles.btnClose} onClick={() => setSelected(null)}>
-                Close
+                {t("common.close")}
               </button>
             </div>
           </div>
@@ -393,3 +395,4 @@ export function DentistMapView() {
     </PortalDashboard>
   );
 }
+

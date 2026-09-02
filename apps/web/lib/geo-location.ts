@@ -63,14 +63,15 @@ export function getCurrentPosition(): Promise<GeolocationPosition> {
 }
 
 /** Reverse geocode lat/lng using OpenStreetMap Nominatim or coordinate string. */
-export async function reverseGeocode(lat: number, lng: number): Promise<string> {
+export async function reverseGeocode(lat: number, lng: number, locale: string = "en"): Promise<string> {
   const fallback = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
   try {
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14`,
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&accept-language=${encodeURIComponent(locale)}`,
       {
         headers: {
           "Accept": "application/json",
+          "Accept-Language": locale,
         },
       }
     );
@@ -83,16 +84,17 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string> 
 }
 
 /** Browser GPS location with human-readable label. */
-export async function getCurrentLocationLabel(): Promise<PickedLocation> {
+export async function getCurrentLocationLabel(locale: string = "en"): Promise<PickedLocation> {
   const pos = await getCurrentPosition();
   const lat = pos.coords.latitude;
   const lng = pos.coords.longitude;
   const coordsLabel = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 
   try {
-    const label = await reverseGeocode(lat, lng);
+    const label = await reverseGeocode(lat, lng, locale);
     return { lat, lng, label: label || coordsLabel };
   } catch {
     return { lat, lng, label: coordsLabel };
   }
 }
+

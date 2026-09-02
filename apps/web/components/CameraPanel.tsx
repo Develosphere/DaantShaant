@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLanguage } from "@/i18n";
 import { analyzeSnapshot } from "@/lib/api";
 import { fileToImagePayload, type ImagePayload } from "@/lib/image";
 import { LiveSessionClient } from "@/lib/ws-live";
@@ -9,15 +10,16 @@ import { DiagnosisReport } from "./DiagnosisReport";
 
 type Mode = "snapshot" | "live" | "upload";
 
-const PROGRESS_STAGES = [
-  { label: "Preparing image", thresholdSec: 0 },
-  { label: "Checking dental relevance", thresholdSec: 3 },
-  { label: "Analyzing visible oral findings", thresholdSec: 9 },
-  { label: "Evaluating screening urgency", thresholdSec: 20 },
-  { label: "Building your report", thresholdSec: 32 },
+const PROGRESS_STAGES_DEF = [
+  { key: "stage_prep", thresholdSec: 0 },
+  { key: "stage_relevance", thresholdSec: 3 },
+  { key: "stage_findings", thresholdSec: 9 },
+  { key: "stage_urgency", thresholdSec: 20 },
+  { key: "stage_report", thresholdSec: 32 },
 ];
 
 export function CameraPanel() {
+  const { t } = useLanguage();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -45,9 +47,8 @@ export function CameraPanel() {
       timer = setInterval(() => {
         setElapsedSec((prev) => {
           const next = prev + 1;
-          // Determine stage
-          for (let i = PROGRESS_STAGES.length - 1; i >= 0; i--) {
-            if (next >= PROGRESS_STAGES[i].thresholdSec) {
+          for (let i = PROGRESS_STAGES_DEF.length - 1; i >= 0; i--) {
+            if (next >= PROGRESS_STAGES_DEF[i].thresholdSec) {
               setCurrentStageIdx(i);
               break;
             }
@@ -83,7 +84,7 @@ export function CameraPanel() {
     liveClientRef.current?.disconnect();
     liveClientRef.current = null;
     setLiveActive(false);
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current?.getTracks().forEach((tTrack) => tTrack.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
     setCameraOn(false);
@@ -125,7 +126,7 @@ export function CameraPanel() {
   useEffect(() => {
     return () => {
       liveClientRef.current?.disconnect();
-      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current?.getTracks().forEach((tTrack) => tTrack.stop());
     };
   }, []);
 
@@ -267,7 +268,7 @@ export function CameraPanel() {
     <div className="demo-grid-inner">
       <section className="scan-panel glass">
         <div className="panel-top">
-          <h2 className="panel-title">Oral scan</h2>
+          <h2 className="panel-title">{t("nav.scan")}</h2>
           <div className="mode-switch mode-switch--three" role="tablist">
             <button
               type="button"
@@ -277,7 +278,7 @@ export function CameraPanel() {
               onClick={() => switchMode("snapshot")}
               disabled={liveActive || loading}
             >
-              Snapshot
+              {t("scan.tab_snapshot")}
             </button>
             <button
               type="button"
@@ -287,7 +288,7 @@ export function CameraPanel() {
               onClick={() => switchMode("live")}
               disabled={liveActive || loading}
             >
-              Live
+              {t("scan.tab_live")}
             </button>
             <button
               type="button"
@@ -297,7 +298,7 @@ export function CameraPanel() {
               onClick={() => switchMode("upload")}
               disabled={liveActive || loading}
             >
-              Upload
+              {t("scan.tab_upload")}
             </button>
           </div>
         </div>
@@ -336,7 +337,7 @@ export function CameraPanel() {
                         fileInputRef.current?.click();
                       }}
                     >
-                      Change image
+                      {t("scan.change_image")}
                     </button>
                   )}
                 </div>
@@ -344,8 +345,8 @@ export function CameraPanel() {
             ) : (
               <div className="upload-empty">
                 <div className="upload-icon">↑</div>
-                <p className="upload-title">Drop a dental photo here</p>
-                <span className="upload-sub">or click to browse · JPEG, PNG, WebP</span>
+                <p className="upload-title">{t("scan.drop_title")}</p>
+                <span className="upload-sub">{t("scan.drop_subtitle")}</span>
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"
@@ -355,7 +356,7 @@ export function CameraPanel() {
                     void handleLoadSample();
                   }}
                 >
-                  ⚡ Try sample demo scan
+                  ⚡ {t("scan.try_sample")}
                 </button>
               </div>
             )}
@@ -368,8 +369,8 @@ export function CameraPanel() {
             {!cameraOn && (
               <div className="viewport-placeholder">
                 <div className="placeholder-icon">📷</div>
-                <p>Camera off</p>
-                <span>Enable camera to begin oral screening</span>
+                <p>{t("scan.camera_off")}</p>
+                <span>{t("scan.enable_camera")}</span>
               </div>
             )}
             {cameraOn && (
@@ -390,47 +391,47 @@ export function CameraPanel() {
 
         {/* Long analysis reassurance & stage indicators */}
         {loading && (
-          <div className="scan-progress-box" style={{ marginTop: "1rem", padding: "1rem", borderRadius: "12px", background: "rgba(15, 23, 42, 0.8)", border: "1px solid rgba(56, 189, 248, 0.2)" }}>
+          <div className="scan-progress-box" style={{ marginTop: "1rem", padding: "1rem", borderRadius: "12px", background: "var(--bg-surface-raised)", border: "1px solid var(--border-default)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-              <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "#38bdf8" }}>
-                AI Screening in progress
+              <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--accent)" }}>
+                {t("scan.screening_in_progress")}
               </span>
-              <span style={{ fontSize: "0.75rem", padding: "2px 8px", borderRadius: "999px", background: "rgba(56, 189, 248, 0.15)", color: "#bae6fd", fontFamily: "monospace" }}>
-                ⏱️ {elapsedSec}s elapsed
+              <span style={{ fontSize: "0.75rem", padding: "2px 8px", borderRadius: "999px", background: "rgba(2, 132, 199, 0.15)", color: "var(--accent)", fontFamily: "monospace" }}>
+                ⏱️ {elapsedSec}s
               </span>
             </div>
 
             <div className="progress-steps" style={{ display: "flex", flexDirection: "column", gap: "0.35rem", margin: "0.6rem 0" }}>
-              {PROGRESS_STAGES.map((s, idx) => {
+              {PROGRESS_STAGES_DEF.map((s, idx) => {
                 const isCurrent = idx === currentStageIdx;
                 const isDone = idx < currentStageIdx;
                 return (
                   <div
-                    key={s.label}
+                    key={s.key}
                     style={{
                       display: "flex",
                       alignItems: "center",
                       gap: "0.5rem",
                       fontSize: "0.78rem",
-                      color: isCurrent ? "#38bdf8" : isDone ? "#4ade80" : "#64748b",
+                      color: isCurrent ? "var(--accent)" : isDone ? "#22c55e" : "var(--text-dim)",
                       fontWeight: isCurrent ? 600 : 400,
                     }}
                   >
                     <span>{isDone ? "✓" : isCurrent ? "⏳" : "○"}</span>
-                    <span>{s.label}</span>
+                    <span>{t(`scan.${s.key}`)}</span>
                   </div>
                 );
               })}
             </div>
 
             {elapsedSec >= 15 && elapsedSec < 35 && (
-              <p style={{ fontSize: "0.75rem", color: "#94a3b8", margin: "0.4rem 0 0", fontStyle: "italic" }}>
-                ℹ️ Detailed visual screening can take a little longer.
+              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", margin: "0.4rem 0 0", fontStyle: "italic" }}>
+                ℹ️ {t("scan.reassurance_15s")}
               </p>
             )}
             {elapsedSec >= 35 && (
-              <p style={{ fontSize: "0.75rem", color: "#94a3b8", margin: "0.4rem 0 0", fontStyle: "italic" }}>
-                ℹ️ DaantShaant is evaluating multiple oral-health signals and nearby specialists.
+              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", margin: "0.4rem 0 0", fontStyle: "italic" }}>
+                ℹ️ {t("scan.reassurance_35s")}
               </p>
             )}
           </div>
@@ -441,7 +442,7 @@ export function CameraPanel() {
             <>
               {upload && (
                 <button type="button" className="btn btn-ghost" onClick={clearUpload} disabled={loading}>
-                  Clear
+                  {t("scan.clear")}
                 </button>
               )}
               <button
@@ -450,7 +451,7 @@ export function CameraPanel() {
                 onClick={handleAnalyzeUpload}
                 disabled={loading || !upload}
               >
-                {loading ? `Analyzing (${elapsedSec}s)…` : "Analyze upload"}
+                {loading ? `${t("scan.analyzing")} (${elapsedSec}s)…` : t("scan.analyze_upload")}
               </button>
               {!upload && (
                 <>
@@ -460,7 +461,7 @@ export function CameraPanel() {
                     onClick={() => fileInputRef.current?.click()}
                     disabled={loading}
                   >
-                    Choose file
+                    {t("scan.choose_file")}
                   </button>
                   <button
                     type="button"
@@ -468,7 +469,7 @@ export function CameraPanel() {
                     onClick={handleLoadSample}
                     disabled={loading}
                   >
-                    Try sample
+                    {t("scan.sample_scan")}
                   </button>
                 </>
               )}
@@ -477,11 +478,11 @@ export function CameraPanel() {
             <>
               {!cameraOn ? (
                 <button type="button" className="btn btn-glow" onClick={startCamera}>
-                  Start camera
+                  {t("scan.start_camera")}
                 </button>
               ) : (
                 <button type="button" className="btn btn-ghost" onClick={stopCamera}>
-                  Stop camera
+                  {t("scan.stop_camera")}
                 </button>
               )}
 
@@ -492,7 +493,7 @@ export function CameraPanel() {
                   onClick={handleTakePhoto}
                   disabled={loading}
                 >
-                  {loading ? `Analyzing (${elapsedSec}s)…` : "Capture & analyze"}
+                  {loading ? `${t("scan.analyzing")} (${elapsedSec}s)…` : t("scan.take_photo")}
                 </button>
               )}
 
@@ -503,13 +504,13 @@ export function CameraPanel() {
                   onClick={handleStartLive}
                   disabled={loading}
                 >
-                  Start live analysis
+                  {t("scan.start_live")}
                 </button>
               )}
 
               {liveActive && (
                 <button type="button" className="btn btn-stop" onClick={handleStopLive}>
-                  Stop & get report
+                  {t("scan.stop_live")}
                 </button>
               )}
             </>
@@ -531,10 +532,11 @@ export function CameraPanel() {
 
       <DiagnosisReport
         result={report}
-        label={liveActive ? "Live screening report" : "AI screening report"}
+        label={liveActive ? t("report.live_title") : t("report.title")}
         loading={loading && !report}
         liveActive={liveActive}
       />
     </div>
   );
 }
+

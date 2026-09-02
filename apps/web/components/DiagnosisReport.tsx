@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useLanguage } from "@/i18n";
 import type { PipelineResult } from "@/lib/types";
 import { CheckoutModal } from "./CheckoutModal";
-import Link from "next/link";
 import { FindDentistsButton } from "./dentists/FindDentistsButton";
 
 type Props = {
@@ -31,34 +32,18 @@ function conditionIcon(label: string): string {
   return "?";
 }
 
-const FINDING_NAME_MAP: Record<string, string> = {
-  cavity_suspect: "Possible decay-related visual finding",
-  cavity_advanced: "Possible structural decay / tooth wear",
-  tartar: "Visible tartar / calculus",
-  plaque_detected: "Visible plaque deposits",
-  gingivitis_signs: "Visible signs of gum inflammation",
-  gum_disease_severe: "Visible signs of advanced gum concern",
-  missing_or_damaged_teeth: "Missing or visibly damaged tooth structure",
-  discoloration: "Visible tooth surface discoloration",
-  healthy_tissue: "Healthy oral tissue appearance",
-};
-
-function formatFindingName(label: string): string {
-  const key = label.toLowerCase().trim();
-  if (FINDING_NAME_MAP[key]) return FINDING_NAME_MAP[key];
-  return label.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 function formatAction(action: string): string {
   return action.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export function DiagnosisReport({
   result,
-  label = "AI Screening Report",
+  label,
   loading,
   liveActive,
 }: Props) {
+  const { t } = useLanguage();
+  const reportTitle = label || t("report.title");
   const [recommendedProducts, setRecommendedProducts] = useState<any[]>([]);
   const [loadingRecs, setLoadingRecs] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
@@ -67,6 +52,20 @@ export function DiagnosisReport({
   const handleBuy = (product: any) => {
     setSelectedProduct(product);
     setIsCheckoutOpen(true);
+  };
+
+  const getFindingLabel = (rawLabel: string): string => {
+    const key = rawLabel.toLowerCase().trim();
+    const translated = t(`finding.${key}`);
+    if (translated && translated !== `finding.${key}`) return translated;
+    return rawLabel.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  };
+
+  const getUrgencyText = (urgency: string): string => {
+    const key = `report.urgency_${urgency.toLowerCase()}`;
+    const translated = t(key);
+    if (translated && translated !== key) return translated;
+    return urgency.toUpperCase();
   };
 
   useEffect(() => {
@@ -175,13 +174,13 @@ export function DiagnosisReport({
     return (
       <aside className="report-panel report-panel--loading">
         <div className="report-header">
-          <h2>{label}</h2>
-          <span className="chip chip-analyzing">Analyzing</span>
+          <h2>{reportTitle}</h2>
+          <span className="chip chip-analyzing">{t("report.analyzing")}</span>
         </div>
         <div className="loader-ring">
           <div className="loader-ring-inner" />
         </div>
-        <p className="loader-text">Screening oral findings & evaluating clinical urgency…</p>
+        <p className="loader-text">{t("report.loader_text")}</p>
       </aside>
     );
   }
@@ -190,20 +189,17 @@ export function DiagnosisReport({
     return (
       <aside className="report-panel report-panel--empty">
         <div className="report-header">
-          <h2>{label}</h2>
+          <h2>{reportTitle}</h2>
         </div>
         <div className="empty-illustration">
           <div className="empty-icon">🦷</div>
-          <p className="empty-title">Your screening report appears here</p>
-          <p className="empty-desc">
-            Capture a snapshot, upload an image, or start live analysis. Real-time screening
-            evaluates oral findings and nearby care recommendations.
-          </p>
+          <p className="empty-title">{t("report.empty_title")}</p>
+          <p className="empty-desc">{t("report.empty_desc")}</p>
         </div>
         <ul className="empty-steps">
-          <li><span>1</span> Take snapshot or upload image</li>
-          <li><span>2</span> AI evaluates oral relevance & findings</li>
-          <li><span>3</span> Get screening report & specialist routing</li>
+          <li><span>1</span> {t("report.step_1")}</li>
+          <li><span>2</span> {t("report.step_2")}</li>
+          <li><span>3</span> {t("report.step_3")}</li>
         </ul>
       </aside>
     );
@@ -219,7 +215,7 @@ export function DiagnosisReport({
   return (
     <aside className={`report-panel report-panel--ready ${liveActive ? "report-panel--live" : ""}`}>
       <div className="report-header">
-        <h2>{label}</h2>
+        <h2>{reportTitle}</h2>
         {liveActive && (
           <span className="chip chip-live">
             <span className="live-dot" /> Live
@@ -231,20 +227,20 @@ export function DiagnosisReport({
         <div className="condition-icon">{conditionIcon(diagnosis.condition_label)}</div>
         <div className="condition-body">
           <span className="condition-label">
-            {triage ? "AI Screening Verdict" : "AI Screening — Possible Concern"}
+            {triage ? t("report.verdict_label") : t("report.verdict_possible_concern")}
           </span>
           <h3 className="condition-name">{headline}</h3>
           <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", alignItems: "center" }}>
             {triage ? (
               <span className={`severity-badge urgency-badge urgency-badge--${urgency}`}>
-                Urgency: {urgency.toUpperCase()}
+                {t("report.urgency_label")}: {getUrgencyText(urgency)}
               </span>
             ) : (
               <span className={`severity-badge ${sevClass}`}>{diagnosis.severity}</span>
             )}
           </div>
         </div>
-        <div className="confidence-ring" style={{ "--pct": confidencePct } as React.CSSProperties} title="AI visual confidence">
+        <div className="confidence-ring" style={{ "--pct": confidencePct } as React.CSSProperties} title={t("report.confidence_label")}>
           <svg viewBox="0 0 36 36">
             <path
               className="ring-bg"
@@ -262,7 +258,7 @@ export function DiagnosisReport({
 
       <div className="stat-cards">
         <div className="stat-card stat-card-wide">
-          <span className="stat-label">Recommended Action</span>
+          <span className="stat-label">{t("report.recommended_action")}</span>
           <span className="stat-action">
             {triage?.recommended_actions?.[0] ?? formatAction(diagnosis.action_trigger)}
           </span>
@@ -270,13 +266,13 @@ export function DiagnosisReport({
         {triage && (
           <>
             <div className="stat-card">
-              <span className="stat-label">Visit Timeframe</span>
+              <span className="stat-label">{t("report.visit_timeframe")}</span>
               <span className="stat-action">{triage.visit_timeframe}</span>
             </div>
             <div className="stat-card">
-              <span className="stat-label">Recommended Specialist</span>
+              <span className="stat-label">{t("report.recommended_specialist")}</span>
               <span className="stat-action">
-                {triage.recommended_specialist ?? "General dentist"}
+                {triage.recommended_specialist ?? t("report.general_dentist")}
               </span>
             </div>
           </>
@@ -285,11 +281,11 @@ export function DiagnosisReport({
 
       {triage && (
         <div className="findings-block triage-block">
-          <h4>Clinical Screening Summary</h4>
+          <h4>{t("report.clinical_summary")}</h4>
           <p className="triage-verdict">{triage.verdict}</p>
           {triage.possible_concerns.length > 0 && (
             <>
-              <span className="triage-sublabel">Possible Concerns Identified</span>
+              <span className="triage-sublabel">{t("report.possible_concerns")}</span>
               <ul className="triage-list">
                 {triage.possible_concerns.map((concern) => (
                   <li key={concern}>{concern}</li>
@@ -299,7 +295,7 @@ export function DiagnosisReport({
           )}
           {triage.recommended_actions.length > 1 && (
             <>
-              <span className="triage-sublabel">Recommended Next Steps</span>
+              <span className="triage-sublabel">{t("report.next_steps")}</span>
               <ul className="triage-list">
                 {triage.recommended_actions.slice(1).map((action) => (
                   <li key={action}>{action}</li>
@@ -309,7 +305,7 @@ export function DiagnosisReport({
           )}
           {triage.limitations.length > 0 && (
             <>
-              <span className="triage-sublabel">Screening Limitations</span>
+              <span className="triage-sublabel">{t("report.limitations")}</span>
               <ul className="triage-list triage-list--dim">
                 {triage.limitations.map((limitation) => (
                   <li key={limitation}>{limitation}</li>
@@ -323,15 +319,15 @@ export function DiagnosisReport({
       {analysis && analysis.findings && analysis.findings.length > 0 && (
         <div className="findings-block">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.65rem" }}>
-            <h4 style={{ margin: 0 }}>Visual Screening Findings</h4>
+            <h4 style={{ margin: 0 }}>{t("report.visual_findings")}</h4>
             <span style={{ fontSize: "0.72rem", color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              AI Visual Confidence
+              {t("report.visual_findings_conf")}
             </span>
           </div>
           <div className="finding-chips">
             {analysis.findings.map((f, i) => (
               <div key={i} className="finding-chip">
-                <span className="finding-name">{formatFindingName(f.label)}</span>
+                <span className="finding-name">{getFindingLabel(f.label)}</span>
                 <div className="finding-bar-wrap">
                   <div
                     className="finding-bar"
@@ -346,7 +342,7 @@ export function DiagnosisReport({
       )}
 
       {diagnosis.meets_threshold === false && (
-        <p className="alert alert-warn">Low visual clarity — try a well-lit photo with teeth clearly visible.</p>
+        <p className="alert alert-warn">{t("report.low_clarity_alert")}</p>
       )}
 
       {!loading && result && !liveActive && (
@@ -361,7 +357,7 @@ export function DiagnosisReport({
 
       {!loading && result && !liveActive && recommendedProducts.length > 0 && (
         <div className="recommendations-block" style={{ marginTop: "1.5rem" }}>
-          <h4>🦷 Oral Care Products for You</h4>
+          <h4>🦷 {t("report.products_title")}</h4>
           <div className="recommendations-list">
             {recommendedProducts.map((p, idx) => {
               const imageSrc = p.images && p.images.length > 0 ? p.images[0] : "";
@@ -390,13 +386,13 @@ export function DiagnosisReport({
                     <p className="rec-product-desc">{p.ai_description}</p>
                     {p.problems_solved && p.problems_solved.length > 0 && (
                       <div className="rec-product-tags">
-                        {p.problems_solved.map((t: string, tIdx: number) => (
-                          <span key={tIdx} className="rec-product-tag">{t}</span>
+                        {p.problems_solved.map((tItem: string, tIdx: number) => (
+                          <span key={tIdx} className="rec-product-tag">{tItem}</span>
                         ))}
                       </div>
                     )}
                     <button className="btn btn-buy btn-sm" onClick={() => handleBuy(p)}>
-                      Buy Now
+                      {t("report.buy_now")}
                     </button>
                   </div>
                 </div>
@@ -406,8 +402,8 @@ export function DiagnosisReport({
         </div>
       )}
 
-      <div className="safety-statement" style={{ marginTop: "1.5rem", padding: "0.85rem 1rem", borderRadius: "10px", background: "rgba(30, 41, 59, 0.6)", border: "1px solid rgba(255, 255, 255, 0.08)", fontSize: "0.78rem", color: "#94a3b8", lineHeight: 1.5 }}>
-        🛡️ <strong>Safety Statement:</strong> DaantShaant provides AI-assisted screening, not a medical diagnosis. A licensed dentist should confirm concerns and treatment needs.
+      <div className="safety-statement">
+        🛡️ {t("report.safety_statement")}
       </div>
 
       <CheckoutModal
@@ -418,3 +414,4 @@ export function DiagnosisReport({
     </aside>
   );
 }
+

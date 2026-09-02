@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans, Syne, Anton, Poppins, Darker_Grotesque } from "next/font/google";
+import { LanguageProvider } from "@/i18n";
+import { ThemeProvider } from "@/theme";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({
@@ -36,9 +38,9 @@ const darkerGrotesque = Darker_Grotesque({
 });
 
 export const metadata: Metadata = {
-  title: "DaantShant — Scan. Detect. Protect.",
+  title: "DaantShaant — Scan. Detect. Protect.",
   description:
-    "AI dental scanner, smart assistant, and dentist matching — everything you need for better oral health.",
+    "Smart oral-health screening assistant and dentist discovery — care navigation for better oral health.",
 };
 
 export default function RootLayout({
@@ -49,9 +51,16 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      dir="ltr"
+      data-theme="light"
       className={`${jakarta.variable} ${syne.variable} ${anton.variable} ${poppins.variable} ${darkerGrotesque.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        <ThemeProvider>
+          <LanguageProvider>{children}</LanguageProvider>
+        </ThemeProvider>
+      </body>
     </html>
   );
 }
+

@@ -820,6 +820,71 @@ Unified and polished the frontend interface across the end-to-end patient journe
 
 ### Next
 
+Phase 10.1 — Bilingual English/Urdu + Light/Dark Theme + Public Copy Hardening.
+
+---
+
+## Phase 10.1 — Bilingual English/Urdu + Light/Dark Theme + Public Copy Hardening
+
+**Date:** September 2026
+**Status:** COMPLETE
+
+### Summary
+
+Implemented end-to-end bilingual English/Urdu localization, dynamic Light/Dark theme switching, address language synchronization, and hardened public-facing copy:
+- **Bilingual i18n System:** English (DEFAULT) and Urdu dictionaries with 100% key parity (190 keys). Real-time directionality switching (`dir="ltr"` / `dir="rtl"`), `lang="en" | "ur"`, and Urdu typography fallback (`"Noto Nastaliq Urdu"`, `"Noto Sans Arabic"`).
+- **Theme System:** Light (DEFAULT) and Dark themes with `data-theme="light"` / `data-theme="dark"` on `<html>`. Rich design tokens ensuring high contrast across all components with zero washed-out or white-on-white text issues.
+- **Geocoding & Address Synchronization:** Frontend passes active `locale` (`en` or `ur`) to backend autocomplete/resolve routes and client reverse geocoding with `Accept-Language` headers, ensuring Nominatim results match user language choice.
+- **Public-Facing Copy Hardening:** Removed stack/implementation terminology (`OSM`, `Nominatim`, `OpenStreetMap`, `OpenFreeMap`, `MapLibre`, `Qwen`, `Gemini`, `LangGraph`, `Supabase`, `Python`, `API`, model providers) from user-facing screens while keeping legal map attribution.
+- **Responsible Identity:** Standardized brand and identity to "DaantShaant Oral Health Assistant" and "Your oral-health companion", clarifying screening is informational and does not replace a licensed human dentist.
+- **Header Controls:** Language toggle (`EN | اردو`) and theme toggle (☀️ / 🌙) on portal and public headers.
+
+### Files Created
+
+- `apps/web/i18n/types.ts`
+- `apps/web/i18n/en.ts`
+- `apps/web/i18n/ur.ts`
+- `apps/web/i18n/context.tsx`
+- `apps/web/i18n/index.ts`
+- `apps/web/theme/context.tsx`
+- `apps/web/theme/index.ts`
+
+### Files Modified
+
+- `apps/web/app/globals.css`
+- `apps/web/app/layout.tsx`
+- `apps/web/components/portal/PortalHeader.tsx`
+- `apps/web/components/portal/portal-header.module.css`
+- `apps/web/components/Header.tsx`
+- `apps/web/components/DiagnosisReport.tsx`
+- `apps/web/components/CameraPanel.tsx`
+- `apps/web/components/ChatInterface.tsx`
+- `apps/web/components/ChatMessage.tsx`
+- `apps/web/components/dentists/LocationPickerModal.tsx`
+- `apps/web/components/dentists/DentistMapView.tsx`
+- `apps/web/components/dentists/FindDentistsButton.tsx`
+- `apps/web/components/portal/LoginPage.tsx`
+- `apps/web/components/portal/RegisterPage.tsx`
+- `apps/web/components/portal/PatientFeatureViews.tsx`
+- `apps/web/components/portal/PortalSectionPage.tsx`
+- `apps/web/components/portal/portal-auth.module.css`
+- `apps/web/lib/location-autocomplete.ts`
+- `apps/web/lib/geo-location.ts`
+- `orchestrator/src/orchestrator/dentist_recommendation/routes_geocode.py`
+- `orchestrator/src/orchestrator/dentist_recommendation/autocomplete_service.py`
+- `orchestrator/src/orchestrator/dentist_recommendation/geocoding.py`
+- `context.md`
+- `docs/phase-log.md`
+
+### Validation
+
+- i18n Key Parity Test: 190 EN keys, 190 UR keys, 0 missing.
+- Next.js Production Build (`npm run build`): Completed with code 0 (26/26 static routes generated).
+- Backend Test Suite: 263 passed, 1 skipped in 30.13s.
+
+### Next
+
 Phase 11 — Deployment Fast Track.
+
 
 

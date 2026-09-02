@@ -3,9 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
+import { useLanguage } from "@/i18n";
+import { useTheme } from "@/theme";
 
 export function Header() {
   const pathname = usePathname();
+  const { t, locale, toggleLanguage } = useLanguage();
+  const { theme, toggleTheme } = useTheme();
   const [cartCount, setCartCount] = useState(0);
 
   useEffect(() => {
@@ -23,7 +27,7 @@ export function Header() {
       window.removeEventListener("cart-updated", updateCart);
     };
   }, []);
-  
+
   const navLink = (active: boolean) => ({
     padding: "0.5rem 1rem",
     fontSize: "0.85rem",
@@ -32,7 +36,7 @@ export function Header() {
     textDecoration: "none",
     transition: "color 0.2s ease",
   } as const);
-  
+
   return (
     <header className="site-header">
       <div className="brand">
@@ -48,26 +52,26 @@ export function Header() {
             </svg>
           </div>
           <div>
-            <span className="brand-name">DantShaant</span>
-            <span className="brand-tag">Autonomous dental AI</span>
+            <span className="brand-name">DaantShaant</span>
+            <span className="brand-tag">{t("common.tagline")}</span>
           </div>
         </Link>
       </div>
-      
-      <nav style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+
+      <nav style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
         <Link href="/scan" style={navLink(pathname === "/scan")}>
-          Analyzer
+          {t("nav.scan")}
         </Link>
         <Link href="/chat" style={navLink(pathname === "/chat")}>
-          Chat
+          {t("nav.chat")}
         </Link>
         <Link href="/portal" style={navLink(pathname === "/portal" || pathname.startsWith("/products"))}>
-          Products
+          {t("nav.products")}
         </Link>
         {cartCount > 0 && (
           <div className="header-cart-badge" style={{
-            background: "rgba(0, 242, 254, 0.15)",
-            border: "1px solid rgba(0, 242, 254, 0.3)",
+            background: "rgba(2, 132, 199, 0.15)",
+            border: "1px solid rgba(2, 132, 199, 0.3)",
             color: "var(--accent)",
             padding: "0.2rem 0.6rem",
             borderRadius: "9999px",
@@ -76,16 +80,58 @@ export function Header() {
             display: "flex",
             alignItems: "center",
             gap: "0.3rem",
-            marginRight: "0.5rem"
+            marginRight: "0.25rem"
           }}>
             🛒 <span>{cartCount}</span>
           </div>
         )}
+
+        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+          <button
+            type="button"
+            onClick={toggleLanguage}
+            title={locale === "en" ? "اردو میں دیکھیں" : "Switch to English"}
+            aria-label="Toggle language"
+            style={{
+              padding: "0.4rem 0.65rem",
+              fontSize: "0.8rem",
+              fontWeight: 700,
+              fontFamily: "inherit",
+              color: "var(--text-primary)",
+              background: "var(--bg-surface-raised)",
+              border: "1px solid var(--border-default)",
+              borderRadius: "8px",
+              cursor: "pointer",
+            }}
+          >
+            {locale === "en" ? "اردو" : "EN"}
+          </button>
+
+          <button
+            type="button"
+            onClick={toggleTheme}
+            title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+            aria-label="Toggle theme"
+            style={{
+              padding: "0.4rem 0.65rem",
+              fontSize: "0.8rem",
+              color: "var(--text-primary)",
+              background: "var(--bg-surface-raised)",
+              border: "1px solid var(--border-default)",
+              borderRadius: "8px",
+              cursor: "pointer",
+            }}
+          >
+            {theme === "light" ? "🌙" : "☀️"}
+          </button>
+        </div>
+
         <div className="header-badge">
           <span className="pulse-dot" />
-          Demo ready
+          {t("nav.demo_ready")}
         </div>
       </nav>
     </header>
   );
 }
+

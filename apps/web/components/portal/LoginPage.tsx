@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useLanguage } from "@/i18n";
 import type { PortalRole } from "@/lib/portal-types";
 import { loginPortal } from "@/lib/portal-auth";
 import { PortalAuthShell } from "./PortalAuthShell";
@@ -13,6 +14,7 @@ type Props = { role: PortalRole };
 export function LoginPage({ role }: Props) {
   usePortalGuestGuard(role);
   const router = useRouter();
+  const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -26,7 +28,7 @@ export function LoginPage({ role }: Props) {
       await loginPortal(role, email.trim(), password);
       router.push(`/${role}/dashboard`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(err instanceof Error ? err.message : t("auth.login_failed"));
     } finally {
       setLoading(false);
     }
@@ -42,35 +44,36 @@ export function LoginPage({ role }: Props) {
         )}
 
         <div className={styles.formGroup}>
-          <label htmlFor={`${role}-email`}>Email address</label>
+          <label htmlFor={`${role}-email`}>{t("auth.email")}</label>
           <input
             id={`${role}-email`}
             type="email"
             required
             autoComplete="email"
-            placeholder="you@example.com"
+            placeholder={t("auth.email_placeholder")}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
         </div>
 
         <div className={styles.formGroup}>
-          <label htmlFor={`${role}-password`}>Password</label>
+          <label htmlFor={`${role}-password`}>{t("auth.password")}</label>
           <input
             id={`${role}-password`}
             type="password"
             required
             autoComplete="current-password"
-            placeholder="••••••••"
+            placeholder={t("auth.password_placeholder")}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
         </div>
 
         <button type="submit" className={styles.submit} disabled={loading}>
-          {loading ? "Signing in…" : "Sign in"}
+          {loading ? t("auth.signing_in") : t("auth.sign_in")}
         </button>
       </form>
     </PortalAuthShell>
   );
 }
+

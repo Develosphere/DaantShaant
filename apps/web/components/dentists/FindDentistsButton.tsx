@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useLanguage } from "@/i18n";
 import { getStoredUser } from "@/lib/portal-auth";
 import type { PickedLocation } from "@/lib/geo-location";
 import { LocationPickerModal } from "./LocationPickerModal";
@@ -15,6 +16,7 @@ type Props = {
 };
 
 export function FindDentistsButton({ issue, scanId, severity, className, style }: Props) {
+  const { t } = useLanguage();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const isLoggedIn = !!getStoredUser("patient");
@@ -43,7 +45,7 @@ export function FindDentistsButton({ issue, scanId, severity, className, style }
         className={className ?? "btn btn-secondary"}
         style={{ display: "block", textAlign: "center", textDecoration: "none", ...style }}
       >
-        Sign in to find recommended dentists
+        {t("report.find_dentists_btn")}
       </a>
     );
   }
@@ -63,7 +65,7 @@ export function FindDentistsButton({ issue, scanId, severity, className, style }
         }}
         onClick={() => setOpen(true)}
       >
-        🗺️ Find recommended dentists
+        🗺️ {t("report.find_dentists_btn")}
       </button>
       <LocationPickerModal
         open={open}
@@ -73,3 +75,4 @@ export function FindDentistsButton({ issue, scanId, severity, className, style }
     </>
   );
 }
+

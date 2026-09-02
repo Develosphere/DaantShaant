@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useLanguage } from "@/i18n";
 import type { PortalRole } from "@/lib/portal-types";
 import { registerPortal } from "@/lib/portal-auth";
 import { PortalAuthShell } from "./PortalAuthShell";
@@ -14,6 +15,7 @@ type Props = { role: PortalRole };
 export function RegisterPage({ role }: Props) {
   usePortalGuestGuard(role);
   const router = useRouter();
+  const { t } = useLanguage();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -37,11 +39,11 @@ export function RegisterPage({ role }: Props) {
     setError("");
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match");
+      setError(t("auth.password_mismatch"));
       return;
     }
     if (password.length < 8) {
-      setError("Password must be at least 8 characters");
+      setError(t("auth.password_min_length"));
       return;
     }
 
@@ -68,7 +70,7 @@ export function RegisterPage({ role }: Props) {
       await registerPortal(role, payload);
       router.push(`/${role}/dashboard`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Registration failed");
+      setError(err instanceof Error ? err.message : t("auth.reg_failed"));
     } finally {
       setLoading(false);
     }
@@ -96,21 +98,21 @@ export function RegisterPage({ role }: Props) {
 
         <div className={styles.row}>
           <div className={styles.formGroup}>
-            <label htmlFor={`${role}-first`}>First name</label>
+            <label htmlFor={`${role}-first`}>{t("auth.first_name")}</label>
             <input
               id={`${role}-first`}
               required
-              placeholder="First name"
+              placeholder={t("auth.first_name")}
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
             />
           </div>
           <div className={styles.formGroup}>
-            <label htmlFor={`${role}-last`}>Last name</label>
+            <label htmlFor={`${role}-last`}>{t("auth.last_name")}</label>
             <input
               id={`${role}-last`}
               required
-              placeholder="Last name"
+              placeholder={t("auth.last_name")}
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
             />
@@ -118,20 +120,20 @@ export function RegisterPage({ role }: Props) {
         </div>
 
         <div className={styles.formGroup}>
-          <label htmlFor={`${role}-reg-email`}>Email address</label>
+          <label htmlFor={`${role}-reg-email`}>{t("auth.email")}</label>
           <input
             id={`${role}-reg-email`}
             type="email"
             required
             autoComplete="email"
-            placeholder="you@example.com"
+            placeholder={t("auth.email_placeholder")}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
         </div>
 
         <div className={styles.formGroup}>
-          <label htmlFor={`${role}-phone`}>Phone</label>
+          <label htmlFor={`${role}-phone`}>{t("auth.phone")}</label>
           <input
             id={`${role}-phone`}
             type="tel"
@@ -143,11 +145,11 @@ export function RegisterPage({ role }: Props) {
         </div>
 
         <div className={styles.formGroup}>
-          <label htmlFor={`${role}-location`}>Location</label>
+          <label htmlFor={`${role}-location`}>{t("auth.location")}</label>
           <input
             id={`${role}-location`}
             required
-            placeholder="City, Country"
+            placeholder={t("auth.location_placeholder")}
             value={location}
             onChange={(e) => setLocation(e.target.value)}
           />
@@ -207,38 +209,39 @@ export function RegisterPage({ role }: Props) {
         )}
 
         <div className={styles.formGroup}>
-          <label htmlFor={`${role}-reg-pass`}>Password</label>
+          <label htmlFor={`${role}-reg-pass`}>{t("auth.password")}</label>
           <input
             id={`${role}-reg-pass`}
             type="password"
             required
             autoComplete="new-password"
-            placeholder="Min. 8 characters"
+            placeholder={t("auth.password_min_length")}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
           <span className={styles.hint}>
-            At least 8 characters, with a letter and a number
+            {t("auth.password_min_length")}
           </span>
         </div>
 
         <div className={styles.formGroup}>
-          <label htmlFor={`${role}-confirm`}>Confirm password</label>
+          <label htmlFor={`${role}-confirm`}>{t("auth.confirm_password")}</label>
           <input
             id={`${role}-confirm`}
             type="password"
             required
             autoComplete="new-password"
-            placeholder="Repeat password"
+            placeholder={t("auth.confirm_password")}
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
           />
         </div>
 
         <button type="submit" className={styles.submit} disabled={loading}>
-          {loading ? "Creating account…" : "Create account"}
+          {loading ? t("auth.creating_account") : t("auth.create_account")}
         </button>
       </form>
     </PortalAuthShell>
   );
 }
+

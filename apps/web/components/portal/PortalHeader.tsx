@@ -2,28 +2,30 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useLanguage } from "@/i18n";
+import { useTheme } from "@/theme";
 import type { PortalRole, PortalUser } from "@/lib/portal-types";
 import { PORTAL_META } from "@/lib/portal-types";
 import styles from "./portal-header.module.css";
 
-type NavItem = { href: string; label: string; authOnly?: boolean };
+type NavItemKey = "dashboard" | "scan" | "chat" | "dentists" | "products" | "orders" | "users";
+type NavItem = { href: string; key: NavItemKey; defaultLabel: string; authOnly?: boolean };
 
 const PORTAL_NAV: Record<PortalRole, NavItem[]> = {
   patient: [
-    { href: "/patient/dashboard", label: "Dashboard", authOnly: true },
-    { href: "/patient/scan", label: "AI scan", authOnly: true },
-    { href: "/patient/chat", label: "AI chat", authOnly: true },
-    { href: "/patient/dentists", label: "Find dentists", authOnly: true },
-    // { href: "/patient/scans", label: "My scans", authOnly: true }, // Hidden from navbar but route still accessible
+    { href: "/patient/dashboard", key: "dashboard", defaultLabel: "Dashboard", authOnly: true },
+    { href: "/patient/scan", key: "scan", defaultLabel: "Oral scan", authOnly: true },
+    { href: "/patient/chat", key: "chat", defaultLabel: "Chat assistant", authOnly: true },
+    { href: "/patient/dentists", key: "dentists", defaultLabel: "Find dentists", authOnly: true },
   ],
   dentist: [
-    { href: "/dentist/dashboard", label: "Dashboard", authOnly: true },
-    { href: "/dentist/products", label: "Products", authOnly: true },
-    { href: "/dentist/orders", label: "Orders", authOnly: true },
+    { href: "/dentist/dashboard", key: "dashboard", defaultLabel: "Dashboard", authOnly: true },
+    { href: "/dentist/products", key: "products", defaultLabel: "Products", authOnly: true },
+    { href: "/dentist/orders", key: "orders", defaultLabel: "Orders", authOnly: true },
   ],
   admin: [
-    { href: "/admin/dashboard", label: "Dashboard", authOnly: true },
-    { href: "/admin/users", label: "Users", authOnly: true },
+    { href: "/admin/dashboard", key: "dashboard", defaultLabel: "Dashboard", authOnly: true },
+    { href: "/admin/users", key: "users", defaultLabel: "Users", authOnly: true },
   ],
 };
 
@@ -35,8 +37,31 @@ type Props = {
 
 export function PortalHeader({ role, user, onLogout }: Props) {
   const pathname = usePathname();
+  const { t, locale, toggleLanguage } = useLanguage();
+  const { theme, toggleTheme } = useTheme();
   const meta = PORTAL_META[role];
   const navItems = PORTAL_NAV[role].filter((item) => !item.authOnly || user);
+
+  const getLabel = (key: NavItemKey, fallback: string) => {
+    switch (key) {
+      case "dashboard":
+        return t("nav.dashboard");
+      case "scan":
+        return t("nav.scan");
+      case "chat":
+        return t("nav.chat");
+      case "dentists":
+        return t("nav.dentists");
+      case "products":
+        return t("nav.products");
+      case "orders":
+        return t("nav.orders");
+      case "users":
+        return t("nav.users");
+      default:
+        return fallback;
+    }
+  };
 
   const avatar =
     user?.profile_image?.startsWith("data:") || user?.profile_image?.startsWith("/")
@@ -58,8 +83,8 @@ export function PortalHeader({ role, user, onLogout }: Props) {
             </svg>
           </div>
           <div className={styles.brandText}>
-            <span className={styles.brandName}>DaantShant</span>
-            <span className={styles.brandTag}>{meta.eyebrow}</span>
+            <span className={styles.brandName}>DaantShaant</span>
+            <span className={styles.brandTag}>{role === "patient" ? t("common.tagline") : meta.eyebrow}</span>
           </div>
         </Link>
 
@@ -73,10 +98,32 @@ export function PortalHeader({ role, user, onLogout }: Props) {
                 href={item.href}
                 className={`${styles.navLink} ${active ? styles.navLinkActive : ""}`}
               >
-                {item.label}
+                {getLabel(item.key, item.defaultLabel)}
               </Link>
             );
           })}
+
+          <div className={styles.controlGroup}>
+            <button
+              type="button"
+              className={styles.langToggle}
+              onClick={toggleLanguage}
+              title={locale === "en" ? "اردو میں دیکھیں" : "Switch to English"}
+              aria-label="Toggle language"
+            >
+              {locale === "en" ? "اردو" : "EN"}
+            </button>
+
+            <button
+              type="button"
+              className={styles.themeToggle}
+              onClick={toggleTheme}
+              title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+              aria-label="Toggle theme"
+            >
+              {theme === "light" ? "🌙" : "☀️"}
+            </button>
+          </div>
 
           {user ? (
             <div className={styles.userBlock}>
@@ -86,7 +133,7 @@ export function PortalHeader({ role, user, onLogout }: Props) {
                 <span>{user.email}</span>
               </div>
               <button type="button" className={styles.logoutBtn} onClick={onLogout}>
-                Log out
+                {t("nav.logout")}
               </button>
             </div>
           ) : (
@@ -95,14 +142,14 @@ export function PortalHeader({ role, user, onLogout }: Props) {
                 href={`/${role}/login`}
                 className={`${styles.navLink} ${pathname === `/${role}/login` ? styles.navLinkActive : ""}`}
               >
-                Sign in
+                {t("nav.login")}
               </Link>
               {role !== "admin" && (
                 <Link
                   href={`/${role}/register`}
                   className={`${styles.navLink} ${pathname === `/${role}/register` ? styles.navLinkActive : ""}`}
                 >
-                  Register
+                  {t("nav.register")}
                 </Link>
               )}
             </>

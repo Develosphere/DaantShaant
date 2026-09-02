@@ -14,13 +14,13 @@ from orchestrator.dentist_recommendation.geocoding import NOMINATIM_HEADERS, geo
 logger = logging.getLogger(__name__)
 
 
-async def search_address_suggestions(query: str, limit: int = 6) -> list[dict[str, Any]]:
+async def search_address_suggestions(query: str, limit: int = 6, lang: str = "en") -> list[dict[str, Any]]:
     """Return suggestions: [{ place_id, label, lat?, lng? }, ...]."""
     q = query.strip()
     if len(q) < 2:
         return []
 
-    return await _autocomplete_nominatim(q, limit)
+    return await _autocomplete_nominatim(q, limit, lang=lang)
 
 
 async def resolve_suggestion(
@@ -28,25 +28,26 @@ async def resolve_suggestion(
     label: str,
     lat: float | None = None,
     lng: float | None = None,
+    lang: str = "en",
 ) -> dict[str, Any] | None:
     """Resolve a suggestion to lat/lng/label."""
     if lat is not None and lng is not None and label.strip():
         return {"lat": lat, "lng": lng, "label": label.strip()}
 
     if place_id and place_id.startswith("osm:"):
-        resolved = await _resolve_nominatim_place(place_id.removeprefix("osm:"))
+        resolved = await _resolve_nominatim_place(place_id.removeprefix("osm:"), lang=lang)
         if resolved:
             return resolved
 
     if label.strip():
-        coords = await geocode_address(label)
+        coords = await geocode_address(label, lang=lang)
         if coords:
             return {"lat": coords[0], "lng": coords[1], "label": label.strip()}
 
     return None
 
 
-async def _autocomplete_nominatim(query: str, limit: int) -> list[dict[str, Any]]:
+async def _autocomplete_nominatim(query: str, limit: int, lang: str = "en") -> list[dict[str, Any]]:
     url = "https://nominatim.openstreetmap.org/search"
     params = {
         "q": query,
@@ -54,11 +55,13 @@ async def _autocomplete_nominatim(query: str, limit: int) -> list[dict[str, Any]
         "addressdetails": "0",
         "limit": str(limit),
         "countrycodes": "pk,ae",
+        "accept-language": lang,
     }
+    headers = {**NOMINATIM_HEADERS, "Accept-Language": lang}
 
     try:
         async with httpx.AsyncClient(timeout=12.0) as client:
-            res = await client.get(url, params=params, headers=NOMINATIM_HEADERS)
+            res = await client.get(url, params=params, headers=headers)
             res.raise_for_status()
             data = res.json()
     except Exception as exc:
@@ -85,13 +88,14 @@ async def _autocomplete_nominatim(query: str, limit: int) -> list[dict[str, Any]
     return results
 
 
-async def _resolve_nominatim_place(osm_id: str) -> dict[str, Any] | None:
+async def _resolve_nominatim_place(osm_id: str, lang: str = "en") -> dict[str, Any] | None:
     url = "https://nominatim.openstreetmap.org/lookup"
-    params = {"osm_ids": f"N{osm_id},W{osm_id},R{osm_id}", "format": "json"}
+    params = {"osm_ids": f"N{osm_id},W{osm_id},R{osm_id}", "format": "json", "accept-language": lang}
+    headers = {**NOMINATIM_HEADERS, "Accept-Language": lang}
 
     try:
         async with httpx.AsyncClient(timeout=12.0) as client:
-            res = await client.get(url, params=params, headers=NOMINATIM_HEADERS)
+            res = await client.get(url, params=params, headers=headers)
             res.raise_for_status()
             data = res.json()
     except Exception:
@@ -109,3 +113,4 @@ async def _resolve_nominatim_place(osm_id: str) -> dict[str, Any] | None:
         }
     except (KeyError, TypeError, ValueError):
         return None
+

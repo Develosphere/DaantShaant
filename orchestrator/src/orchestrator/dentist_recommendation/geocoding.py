@@ -20,7 +20,7 @@ NOMINATIM_HEADERS = {
 _COORDINATE_RE = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$")
 
 
-async def geocode_address(address: str) -> tuple[float, float] | None:
+async def geocode_address(address: str, lang: str = "en") -> tuple[float, float] | None:
     """Return (lat, lng) for an address string or coordinate string, or None if geocoding fails."""
     clean = address.strip()
     if not clean:
@@ -40,11 +40,13 @@ async def geocode_address(address: str) -> tuple[float, float] | None:
         "format": "json",
         "limit": "1",
         "countrycodes": "pk,ae",
+        "accept-language": lang,
     }
+    headers = {**NOMINATIM_HEADERS, "Accept-Language": lang}
 
     try:
         async with httpx.AsyncClient(timeout=12.0) as client:
-            res = await client.get(url, params=params, headers=NOMINATIM_HEADERS)
+            res = await client.get(url, params=params, headers=headers)
             res.raise_for_status()
             data = res.json()
     except Exception as exc:
@@ -59,3 +61,4 @@ async def geocode_address(address: str) -> tuple[float, float] | None:
         return float(item["lat"]), float(item["lon"])
     except (KeyError, ValueError, TypeError):
         return None
+

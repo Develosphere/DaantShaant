@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useLanguage } from "@/i18n";
 import { getCurrentLocationLabel, type PickedLocation } from "@/lib/geo-location";
 import { fetchAddressSuggestions, resolveAddressSuggestion, type AddressSuggestion } from "@/lib/location-autocomplete";
 import styles from "./location-picker.module.css";
@@ -38,9 +39,10 @@ export function LocationPickerModal({
   open,
   onClose,
   onConfirm,
-  title = "Where are you located?",
-  subtitle = "Type your city or area (e.g. Karachi, Lahore, Dubai) or use GPS to find recommended dentists nearby.",
+  title,
+  subtitle,
 }: Props) {
+  const { t, locale } = useLanguage();
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
@@ -48,6 +50,9 @@ export function LocationPickerModal({
   const [gpsLoading, setGpsLoading] = useState(false);
   const [error, setError] = useState("");
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const displayTitle = title || t("dentists.location_modal_title");
+  const displaySubtitle = subtitle || t("dentists.location_modal_desc");
 
   useEffect(() => {
     if (!open) {
@@ -76,7 +81,7 @@ export function LocationPickerModal({
     setLoadingSuggestions(true);
     debounceTimerRef.current = setTimeout(async () => {
       try {
-        const results = await fetchAddressSuggestions(val);
+        const results = await fetchAddressSuggestions(val, locale);
         setSuggestions(results);
       } catch {
         setSuggestions([]);
@@ -101,16 +106,16 @@ export function LocationPickerModal({
     }
 
     try {
-      const resolved = await resolveAddressSuggestion(s.label, s.place_id);
+      const resolved = await resolveAddressSuggestion(s.label, s.place_id, undefined, undefined, locale);
       if (resolved) {
         setPicked(resolved);
         setQuery(resolved.label);
         setSuggestions([]);
       } else {
-        setError("Could not resolve location coordinates. Try another suggestion or GPS.");
+        setError(t("dentists.location_timeout"));
       }
     } catch {
-      setError("Could not resolve location coordinates.");
+      setError(t("common.error"));
     }
   }
 
@@ -120,7 +125,7 @@ export function LocationPickerModal({
     setError("");
 
     try {
-      const loc = await getCurrentLocationLabel();
+      const loc = await getCurrentLocationLabel(locale);
       setPicked(loc);
       setQuery(loc.label);
       setSuggestions([]);
@@ -128,7 +133,7 @@ export function LocationPickerModal({
       setError(
         err instanceof Error
           ? err.message
-          : "Could not get your GPS location — type your city or address instead."
+          : t("dentists.location_denied")
       );
     } finally {
       setGpsLoading(false);
@@ -140,25 +145,25 @@ export function LocationPickerModal({
   return (
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <h2 className={styles.title}>{title}</h2>
-        <p className={styles.sub}>{subtitle}</p>
+        <h2 className={styles.title}>{displayTitle}</h2>
+        <p className={styles.sub}>{displaySubtitle}</p>
 
-        <span className={styles.label}>Your location</span>
+        <span className={styles.label}>{t("auth.location")}</span>
         <div className={styles.inputRow}>
           <div style={{ flex: 1, position: "relative" }}>
             <input
               type="text"
               className="input-field"
-              placeholder="e.g. Clifton, Karachi or Dubai Marina"
+              placeholder={t("dentists.search_placeholder")}
               value={query}
               onChange={handleQueryChange}
               style={{
                 width: "100%",
                 padding: "0.75rem 1rem",
                 borderRadius: "8px",
-                border: "1px solid var(--color-border, #334155)",
-                background: "var(--color-bg-secondary, #1e293b)",
-                color: "#fff",
+                border: "1px solid var(--border-default)",
+                background: "var(--bg-surface-raised)",
+                color: "var(--text-primary)",
                 fontSize: "0.95rem",
               }}
             />
@@ -170,12 +175,12 @@ export function LocationPickerModal({
                   left: 0,
                   right: 0,
                   zIndex: 2000,
-                  background: "#1e293b",
-                  border: "1px solid #334155",
+                  background: "var(--bg-surface)",
+                  border: "1px solid var(--border-strong)",
                   borderRadius: "8px",
                   maxHeight: "220px",
                   overflowY: "auto",
-                  boxShadow: "0 10px 25px rgba(0,0,0,0.5)",
+                  boxShadow: "var(--shadow-card)",
                 }}
               >
                 {suggestions.map((s, idx) => (
@@ -185,11 +190,11 @@ export function LocationPickerModal({
                     style={{
                       padding: "0.6rem 0.85rem",
                       cursor: "pointer",
-                      borderBottom: "1px solid #334155",
+                      borderBottom: "1px solid var(--border-default)",
                       fontSize: "0.85rem",
-                      color: "#e2e8f0",
+                      color: "var(--text-primary)",
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "#334155")}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-surface-raised)")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                   >
                     📍 {s.label}
@@ -201,8 +206,8 @@ export function LocationPickerModal({
           <button
             type="button"
             className={styles.gpsBtn}
-            title="Use current GPS location"
-            aria-label="Use current GPS location"
+            title={t("dentists.use_gps")}
+            aria-label={t("dentists.use_gps")}
             disabled={gpsLoading}
             onClick={handleGps}
           >
@@ -212,16 +217,16 @@ export function LocationPickerModal({
 
         <p className={styles.hint}>
           {loadingSuggestions
-            ? "Searching OpenStreetMap locations…"
-            : "Type for OSM address suggestions, or tap GPS to use current position."}
+            ? t("dentists.searching_locations")
+            : t("dentists.address_prompt")}
         </p>
 
-        {picked && <p className={styles.selected}>Selected: {picked.label}</p>}
+        {picked && <p className={styles.selected}>{picked.label}</p>}
         {error && <p className={styles.error}>{error}</p>}
 
         <div className={styles.actions}>
           <button type="button" className={styles.btnGhost} onClick={onClose} disabled={gpsLoading}>
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             type="button"
@@ -229,10 +234,11 @@ export function LocationPickerModal({
             disabled={!picked || gpsLoading}
             onClick={() => picked && onConfirm(picked)}
           >
-            Find dentists
+            {t("nav.dentists")}
           </button>
         </div>
       </div>
     </div>
   );
 }
+
