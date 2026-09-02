@@ -1,12 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { getCurrentLocationLabel, type PickedLocation } from "@/lib/google-maps";
-import {
-  loadGooglePlacePickerLibrary,
-  placeToLocation,
-  type GmpPlacePickerElement,
-} from "@/lib/google-place-picker";
+import { getCurrentLocationLabel, type PickedLocation } from "@/lib/geo-location";
+import { fetchAddressSuggestions, resolveAddressSuggestion, type AddressSuggestion } from "@/lib/location-autocomplete";
 import styles from "./location-picker.module.css";
 
 type Props = {
@@ -43,96 +39,99 @@ export function LocationPickerModal({
   onClose,
   onConfirm,
   title = "Where are you located?",
-  subtitle = "Type your city or address, pick a suggestion, or use GPS so we can find dentists near you.",
+  subtitle = "Type your city or area (e.g. Karachi, Lahore, Dubai) or use GPS to find recommended dentists nearby.",
 }: Props) {
-  const pickerHostRef = useRef<HTMLDivElement>(null);
-  const pickerRef = useRef<GmpPlacePickerElement | null>(null);
-  const gpsAbortRef = useRef(false);
-
-  const [pickerReady, setPickerReady] = useState(false);
+  const [query, setQuery] = useState("");
+  const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [picked, setPicked] = useState<PickedLocation | null>(null);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [error, setError] = useState("");
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!open) {
-      gpsAbortRef.current = true;
+      setQuery("");
+      setSuggestions([]);
       setPicked(null);
       setGpsLoading(false);
-      setPickerReady(false);
       setError("");
-      pickerRef.current = null;
-      if (pickerHostRef.current) pickerHostRef.current.innerHTML = "";
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      return;
+    }
+  }, [open]);
+
+  function handleQueryChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value;
+    setQuery(val);
+    setError("");
+
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+
+    if (val.trim().length < 2) {
+      setSuggestions([]);
       return;
     }
 
-    gpsAbortRef.current = false;
-    let cancelled = false;
+    setLoadingSuggestions(true);
+    debounceTimerRef.current = setTimeout(async () => {
+      try {
+        const results = await fetchAddressSuggestions(val);
+        setSuggestions(results);
+      } catch {
+        setSuggestions([]);
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    }, 350);
+  }
 
-    loadGooglePlacePickerLibrary()
-      .then(async () => {
-        if (cancelled || !pickerHostRef.current) return;
+  async function handleSelectSuggestion(s: AddressSuggestion) {
+    setError("");
+    if (s.lat != null && s.lng != null) {
+      const loc: PickedLocation = {
+        lat: s.lat,
+        lng: s.lng,
+        label: s.label,
+      };
+      setPicked(loc);
+      setQuery(s.label);
+      setSuggestions([]);
+      return;
+    }
 
-        pickerHostRef.current.innerHTML = "";
-        const picker = document.createElement("gmpx-place-picker") as GmpPlacePickerElement;
-        picker.setAttribute("placeholder", "e.g. Karachi, Pakistan");
-        picker.className = styles.placePicker;
-
-        const onPlaceChange = () => {
-          const loc = placeToLocation(picker.value);
-          if (!loc) {
-            setError("Pick an address from the suggestions list");
-            setPicked(null);
-            return;
-          }
-          setError("");
-          setPicked(loc);
-        };
-
-        picker.addEventListener("gmpx-placechange", onPlaceChange);
-        pickerHostRef.current.appendChild(picker);
-        pickerRef.current = picker;
-        setPickerReady(true);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setPickerReady(false);
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Could not load address search — use GPS instead"
-          );
-        }
-      });
-
-    return () => {
-      cancelled = true;
-      pickerRef.current = null;
-      if (pickerHostRef.current) pickerHostRef.current.innerHTML = "";
-    };
-  }, [open]);
+    try {
+      const resolved = await resolveAddressSuggestion(s.label, s.place_id);
+      if (resolved) {
+        setPicked(resolved);
+        setQuery(resolved.label);
+        setSuggestions([]);
+      } else {
+        setError("Could not resolve location coordinates. Try another suggestion or GPS.");
+      }
+    } catch {
+      setError("Could not resolve location coordinates.");
+    }
+  }
 
   async function handleGps() {
     if (gpsLoading) return;
-
     setGpsLoading(true);
     setError("");
-    gpsAbortRef.current = false;
 
     try {
       const loc = await getCurrentLocationLabel();
-      if (gpsAbortRef.current) return;
       setPicked(loc);
-      setError("");
+      setQuery(loc.label);
+      setSuggestions([]);
     } catch (err) {
-      if (gpsAbortRef.current) return;
       setError(
         err instanceof Error
           ? err.message
-          : "Could not get your location — type your address instead"
+          : "Could not get your GPS location — type your city or address instead."
       );
     } finally {
-      if (!gpsAbortRef.current) setGpsLoading(false);
+      setGpsLoading(false);
     }
   }
 
@@ -146,12 +145,64 @@ export function LocationPickerModal({
 
         <span className={styles.label}>Your location</span>
         <div className={styles.inputRow}>
-          <div className={styles.inputWrap} ref={pickerHostRef} />
+          <div style={{ flex: 1, position: "relative" }}>
+            <input
+              type="text"
+              className="input-field"
+              placeholder="e.g. Clifton, Karachi or Dubai Marina"
+              value={query}
+              onChange={handleQueryChange}
+              style={{
+                width: "100%",
+                padding: "0.75rem 1rem",
+                borderRadius: "8px",
+                border: "1px solid var(--color-border, #334155)",
+                background: "var(--color-bg-secondary, #1e293b)",
+                color: "#fff",
+                fontSize: "0.95rem",
+              }}
+            />
+            {suggestions.length > 0 && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "105%",
+                  left: 0,
+                  right: 0,
+                  zIndex: 2000,
+                  background: "#1e293b",
+                  border: "1px solid #334155",
+                  borderRadius: "8px",
+                  maxHeight: "220px",
+                  overflowY: "auto",
+                  boxShadow: "0 10px 25px rgba(0,0,0,0.5)",
+                }}
+              >
+                {suggestions.map((s, idx) => (
+                  <div
+                    key={`${s.place_id}-${idx}`}
+                    onClick={() => handleSelectSuggestion(s)}
+                    style={{
+                      padding: "0.6rem 0.85rem",
+                      cursor: "pointer",
+                      borderBottom: "1px solid #334155",
+                      fontSize: "0.85rem",
+                      color: "#e2e8f0",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#334155")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  >
+                    📍 {s.label}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <button
             type="button"
             className={styles.gpsBtn}
-            title="Use current location"
-            aria-label="Use current location"
+            title="Use current GPS location"
+            aria-label="Use current GPS location"
             disabled={gpsLoading}
             onClick={handleGps}
           >
@@ -160,9 +211,9 @@ export function LocationPickerModal({
         </div>
 
         <p className={styles.hint}>
-          {pickerReady
-            ? "Start typing for Google address suggestions, or use the pin for GPS."
-            : "Loading address search… You can use the pin for GPS while waiting."}
+          {loadingSuggestions
+            ? "Searching OpenStreetMap locations…"
+            : "Type for OSM address suggestions, or tap GPS to use current position."}
         </p>
 
         {picked && <p className={styles.selected}>Selected: {picked.label}</p>}

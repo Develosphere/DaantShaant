@@ -9,21 +9,9 @@ import {
   fetchDentistRecommendations,
   type DentistPin,
 } from "@/lib/dentist-recommend";
-import { loadGoogleMaps, type PickedLocation } from "@/lib/google-maps";
+import { type PickedLocation } from "@/lib/geo-location";
+import { ensureMapLibreCSS, maplibregl, OPENFREEMAP_LIBERTY_STYLE } from "@/lib/maplibre";
 import styles from "./dentist-map.module.css";
-
-function pinIcon(isBest: boolean): google.maps.Icon {
-  const color = isBest ? "#22c55e" : "#94a3b8";
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="42" viewBox="0 0 32 42">
-    <path fill="${color}" stroke="#fff" stroke-width="1.5" d="M16 0C7.2 0 0 7.2 0 16c0 12 16 26 16 26s16-14 16-26C32 7.2 24.8 0 16 0z"/>
-    <circle cx="16" cy="16" r="6" fill="#fff"/>
-  </svg>`;
-  return {
-    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-    scaledSize: new google.maps.Size(32, 42),
-    anchor: new google.maps.Point(16, 42),
-  };
-}
 
 function parseCoord(value: string | null): number | undefined {
   if (!value) return undefined;
@@ -42,11 +30,16 @@ export function DentistMapView() {
   const urlLng = parseCoord(searchParams.get("lng"));
   const hasCoords = urlLat !== undefined && urlLng !== undefined;
 
-  const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstance = useRef<google.maps.Map | null>(null);
-  const markersRef = useRef<google.maps.Marker[]>([]);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapInstance = useRef<maplibregl.Map | null>(null);
+  const markersRef = useRef<maplibregl.Marker[]>([]);
 
   const [dentists, setDentists] = useState<DentistPin[]>([]);
+  const [patientCoords, setPatientCoords] = useState<{ lat: number; lng: number } | null>(
+    hasCoords && urlLat !== undefined && urlLng !== undefined
+      ? { lat: urlLat, lng: urlLng }
+      : null
+  );
   const [sessionId, setSessionId] = useState<string>("");
   const [loading, setLoading] = useState(hasCoords);
   const [error, setError] = useState("");
@@ -57,71 +50,83 @@ export function DentistMapView() {
 
   const renderMap = useCallback(
     (center: { lat: number; lng: number }, pins: DentistPin[]) => {
-      if (!mapRef.current || !window.google?.maps) {
-        console.error("Map container or Google Maps not available");
-        return;
-      }
+      if (!mapContainerRef.current) return;
+      ensureMapLibreCSS();
 
       try {
         if (!mapInstance.current) {
-          mapInstance.current = new google.maps.Map(mapRef.current, {
-            center,
+          mapInstance.current = new maplibregl.Map({
+            container: mapContainerRef.current,
+            style: OPENFREEMAP_LIBERTY_STYLE,
+            center: [center.lng, center.lat],
             zoom: 12,
-            mapTypeControl: false,
-            streetViewControl: false,
-            fullscreenControl: true,
-            zoomControl: true,
-            styles: [
-              {
-                featureType: "poi",
-                elementType: "labels",
-                stylers: [{ visibility: "off" }],
-              },
-            ],
+            attributionControl: false,
           });
-          console.log("Map initialized successfully");
+
+          mapInstance.current.addControl(
+            new maplibregl.AttributionControl({
+              customAttribution:
+                '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors | Style: <a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a>',
+            }),
+            "bottom-right"
+          );
+
+          mapInstance.current.addControl(new maplibregl.NavigationControl(), "top-right");
         } else {
-          mapInstance.current.setCenter(center);
+          mapInstance.current.flyTo({ center: [center.lng, center.lat], zoom: 12 });
         }
 
-        markersRef.current.forEach((m) => m.setMap(null));
+        // Clean existing markers
+        markersRef.current.forEach((m) => m.remove());
         markersRef.current = [];
 
-        const patientMarker = new google.maps.Marker({
-          position: center,
-          map: mapInstance.current,
-          title: "You",
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 10,
-            fillColor: "#00a2f0",
-            fillOpacity: 1,
-            strokeColor: "#fff",
-            strokeWeight: 2,
-          },
-          zIndex: 1000,
-        });
+        // 1. User / Patient Marker
+        const userEl = document.createElement("div");
+        userEl.className = "user-pulse-marker";
+        userEl.style.width = "18px";
+        userEl.style.height = "18px";
+        userEl.style.borderRadius = "50%";
+        userEl.style.backgroundColor = "#00a2f0";
+        userEl.style.border = "3px solid #ffffff";
+        userEl.style.boxShadow = "0 0 10px rgba(0, 162, 240, 0.8)";
+        userEl.title = "Your location";
+
+        const patientMarker = new maplibregl.Marker({ element: userEl })
+          .setLngLat([center.lng, center.lat])
+          .addTo(mapInstance.current);
         markersRef.current.push(patientMarker);
 
+        // 2. Dentist Pins
         pins.forEach((d) => {
-          const marker = new google.maps.Marker({
-            position: { lat: d.lat, lng: d.lng },
-            map: mapInstance.current!,
-            title: d.name,
-            icon: pinIcon(d.is_best),
-          });
-          marker.addListener("click", () => setSelected(d));
+          const pinEl = document.createElement("div");
+          pinEl.style.cursor = "pointer";
+          pinEl.style.transform = "translate(-50%, -100%)";
+
+          const color = d.is_best ? "#22c55e" : d.tier === "platform" ? "#3b82f6" : "#64748b";
+          pinEl.innerHTML = `
+            <svg width="28" height="36" viewBox="0 0 32 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M16 0C7.2 0 0 7.2 0 16c0 12 16 26 16 26s16-14 16-26C32 7.2 24.8 0 16 0z" fill="${color}" stroke="#ffffff" stroke-width="2"/>
+              <circle cx="16" cy="16" r="6" fill="#ffffff"/>
+            </svg>
+          `;
+
+          pinEl.addEventListener("click", () => setSelected(d));
+
+          const marker = new maplibregl.Marker({ element: pinEl })
+            .setLngLat([d.lng, d.lat])
+            .addTo(mapInstance.current!);
           markersRef.current.push(marker);
         });
 
+        // 3. Fit bounds
         if (pins.length > 0) {
-          const bounds = new google.maps.LatLngBounds();
-          bounds.extend(center);
-          pins.forEach((d) => bounds.extend({ lat: d.lat, lng: d.lng }));
-          mapInstance.current.fitBounds(bounds, 48);
+          const bounds = new maplibregl.LngLatBounds();
+          bounds.extend([center.lng, center.lat]);
+          pins.forEach((d) => bounds.extend([d.lng, d.lat]));
+          mapInstance.current.fitBounds(bounds, { padding: 48, maxZoom: 14 });
         }
       } catch (err) {
-        console.error("Error rendering map:", err);
+        console.error("Error initializing MapLibre map:", err);
       }
     },
     []
@@ -132,9 +137,6 @@ export function DentistMapView() {
       setLoading(true);
       setError("");
       try {
-        console.log("Loading Google Maps...");
-        await loadGoogleMaps();
-        console.log("Google Maps loaded, fetching dentists...");
         const data = await fetchDentistRecommendations({
           issue,
           lat,
@@ -142,10 +144,9 @@ export function DentistMapView() {
           severity,
           scan_id: scanId,
         });
-        console.log("Dentists fetched:", data.dentists.length);
         setDentists(data.dentists);
         setSessionId(data.session_id);
-        console.log("Rendering map...");
+        setPatientCoords({ lat: data.patient_lat, lng: data.patient_lng });
         renderMap({ lat: data.patient_lat, lng: data.patient_lng }, data.dentists);
       } catch (err) {
         console.error("Error loading recommendations:", err);
@@ -184,10 +185,17 @@ export function DentistMapView() {
       });
       setBookMsg(res.message);
     } catch (err) {
-      setBookMsg(err instanceof Error ? err.message : "Booking failed");
+      setBookMsg(err instanceof Error ? err.message : "Booking request failed");
     } finally {
       setBooking(false);
     }
+  }
+
+  function getDirectionsUrl(d: DentistPin): string {
+    if (patientCoords) {
+      return `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${patientCoords.lat}%2C${patientCoords.lng}%3B${d.lat}%2C${d.lng}`;
+    }
+    return `https://www.openstreetmap.org/?mlat=${d.lat}&mlon=${d.lng}#map=16/${d.lat}/${d.lng}`;
   }
 
   return (
@@ -203,9 +211,9 @@ export function DentistMapView() {
 
       <div className={styles.layout}>
         <div className={styles.header}>
-          <h1 className={styles.title}>Recommended dentists</h1>
+          <h1 className={styles.title}>Recommended Dentists & Clinics</h1>
           <p className={styles.sub}>
-            Based on your scan: <strong>{issue.replace(/_/g, " ")}</strong>
+            Screening issue: <strong>{issue.replace(/_/g, " ")}</strong>
             {locationLabel && (
               <>
                 {" "}
@@ -219,15 +227,18 @@ export function DentistMapView() {
               className={styles.changeLocation}
               onClick={() => setLocationModalOpen(true)}
             >
-              📍 Change location
+              📍 Change search location
             </button>
           )}
           <div className={styles.legend}>
             <span className={styles.legendItem}>
-              <span className={styles.legendDotBest} /> Best match for your scan
+              <span className={styles.legendDotBest} /> Best specialist match
             </span>
             <span className={styles.legendItem}>
-              <span className={styles.legendDotOther} /> Other recommendations
+              <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: "#3b82f6", marginRight: 6 }} /> Verified partner
+            </span>
+            <span className={styles.legendItem}>
+              <span className={styles.legendDotOther} /> Community / OSM clinic
             </span>
           </div>
         </div>
@@ -235,7 +246,7 @@ export function DentistMapView() {
         {loading && (
           <div className={styles.loadingContainer}>
             <div className={styles.spinner} />
-            <p className={styles.loading}>Finding dentists near you…</p>
+            <p className={styles.loading}>Searching nearby dental providers with OpenStreetMap…</p>
           </div>
         )}
 
@@ -255,8 +266,7 @@ export function DentistMapView() {
         {!loading && !error && hasCoords && dentists.length === 0 && (
           <div className={styles.emptyContainer}>
             <p className={styles.empty}>
-              No dentists found in this area yet. Try expanding your search radius or contact
-              support.
+              No dentists found within search radius. Try expanding your search area or selecting a larger city center.
             </p>
           </div>
         )}
@@ -264,13 +274,7 @@ export function DentistMapView() {
         {!loading && !error && hasCoords && dentists.length > 0 && (
           <div className={styles.sidebar}>
             <div className={styles.mapWrap}>
-              {!mapInstance.current && (
-                <div className={styles.mapPlaceholder}>
-                  <div className={styles.mapSpinner} />
-                  <p>Loading map...</p>
-                </div>
-              )}
-              <div ref={mapRef} className={styles.mapCanvas} />
+              <div ref={mapContainerRef} className={styles.mapCanvas} style={{ width: "100%", height: "100%", minHeight: "380px" }} />
             </div>
 
             <div className={styles.list}>
@@ -285,7 +289,14 @@ export function DentistMapView() {
                 >
                   {d.is_best && <span className={styles.badgeBest}>Best match</span>}
                   {d.tier === "platform" && (
-                    <span className={styles.badgePartner}>Partner</span>
+                    <span className={styles.badgePartner}>
+                      {d.is_partner ? "Partner" : "Verified"}
+                    </span>
+                  )}
+                  {d.tier !== "platform" && (
+                    <span style={{ fontSize: "0.72rem", padding: "2px 6px", background: "rgba(100,116,139,0.2)", color: "#94a3b8", borderRadius: 4, marginLeft: 4 }}>
+                      OSM
+                    </span>
                   )}
                   <div className={styles.listName}>{d.name}</div>
                   <div className={styles.listMeta}>
@@ -301,36 +312,67 @@ export function DentistMapView() {
         {selected && (
           <div className={styles.modalOverlay} onClick={() => setSelected(null)}>
             <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-              {selected.is_best && <span className={styles.badgeBest}>Best match</span>}
-              <h3>{selected.name}</h3>
+              {selected.is_best && <span className={styles.badgeBest}>Best Match</span>}
+              {selected.tier === "platform" ? (
+                <span className={styles.badgePartner} style={{ marginLeft: 6 }}>Verified Platform Provider</span>
+              ) : (
+                <span style={{ fontSize: "0.75rem", padding: "3px 8px", background: "rgba(100,116,139,0.25)", color: "#cbd5e1", borderRadius: 4, marginLeft: 6 }}>
+                  OpenStreetMap Clinic
+                </span>
+              )}
+
+              <h3 style={{ marginTop: "0.75rem" }}>{selected.name}</h3>
               <p className={styles.modalClinic}>{selected.clinic_name || selected.address}</p>
               <p className={styles.modalReason}>{selected.recommendation_reason}</p>
+              
               <p className={styles.modalRow}>
-                {selected.distance_km.toFixed(1)} km away
+                📍 <strong>{selected.distance_km.toFixed(1)} km away</strong>
                 {selected.rating ? ` · ★ ${selected.rating}` : ""}
               </p>
               {selected.address && <p className={styles.modalRow}>{selected.address}</p>}
               {selected.phone && <p className={styles.modalRow}>📞 {selected.phone}</p>}
+              {selected.website && (
+                <p className={styles.modalRow}>
+                  🌐 <a href={selected.website} target="_blank" rel="noreferrer" style={{ color: "#38bdf8" }}>Visit Website</a>
+                </p>
+              )}
 
-              <div className={styles.modalActions}>
+              <div className={styles.modalActions} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "1rem" }}>
+                {selected.phone && (
+                  <a href={`tel:${selected.phone}`} className={styles.btnPrimary} style={{ textDecoration: "none", textAlign: "center", flex: "1 1 auto" }}>
+                    📞 Call Clinic
+                  </a>
+                )}
+                
+                <a
+                  href={getDirectionsUrl(selected)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={styles.btnPrimary}
+                  style={{ textDecoration: "none", textAlign: "center", background: "#334155", color: "#fff", flex: "1 1 auto" }}
+                >
+                  🗺️ Open Directions
+                </a>
+
                 {selected.tier === "platform" && selected.dentist_id ? (
                   <button
                     type="button"
                     className={styles.btnPrimary}
+                    style={{ background: "#059669", flex: "1 1 100%" }}
                     disabled={booking}
                     onClick={handleBook}
                   >
-                    {booking ? "Sending…" : "Book consultation"}
+                    {booking ? "Sending request…" : "📅 Book Consultation"}
                   </button>
-                ) : selected.phone ? (
-                  <a href={`tel:${selected.phone}`} className={styles.btnPrimary}>
-                    Contact dentist
-                  </a>
                 ) : (
-                  <span className={styles.modalRow}>Phone not available</span>
+                  <p style={{ fontSize: "0.8rem", color: "#94a3b8", width: "100%", textAlign: "center", marginTop: "0.25rem" }}>
+                    ℹ️ External clinic listing — contact directly via phone or navigation.
+                  </p>
                 )}
               </div>
+
               {bookMsg && <p className={styles.bookMessage}>{bookMsg}</p>}
+              
               <button type="button" className={styles.btnClose} onClick={() => setSelected(null)}>
                 Close
               </button>

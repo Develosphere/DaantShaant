@@ -186,6 +186,7 @@ class DentistRecommendRequest(BaseModel):
 
 class DentistPin(BaseModel):
     tier: str  # "platform" | "general"
+    source: Optional[str] = "platform"  # "platform" | "osm" | "curated"
     dentist_id: Optional[str] = None
     place_id: Optional[str] = None
     name: str
@@ -193,11 +194,13 @@ class DentistPin(BaseModel):
     lng: float
     address: str = ""
     phone: Optional[str] = None
+    website: Optional[str] = None
     rating: Optional[float] = None
     distance_km: float = 0.0
     specialties: list[str] = []
     is_partner: bool = False
     is_verified: bool = False
+    is_registered: bool = False
     is_best: bool = False
     rank: int = 0
     clinic_name: str = ""

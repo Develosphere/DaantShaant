@@ -1,7 +1,7 @@
 # DaantShaant Context
 
 > Current implementation state. Read this first in every engineering chat.
-> Last updated: Phase 4-lite - Unified Clinical LangGraph, September 2026.
+> Last updated: Phase 6 Fast Track - Dentist Discovery + OSM/Overpass + MapLibre/OpenFreeMap, September 2026.
 
 ## Product
 
@@ -10,13 +10,14 @@ DaantShaant is an AI-assisted oral-health screening and care-navigation platform
 ## Current Architecture
 
 ```text
-Next.js 14
+Next.js 14 + MapLibre GL JS + OpenFreeMap
     |
 FastAPI Orchestrator
     |-- Unified Clinical LangGraph screening pipeline (snapshot/upload/live)
     |-- Chat + FAISS RAG
     |-- Product recommendation LangGraph
-    |-- Dentist recommendation LangGraph
+    |-- Dentist recommendation LangGraph (OSM Overpass + PostgreSQL DB + Deterministic Ranking)
+    |-- Geocoding & Autocomplete (OSM Nominatim)
     |-- Unified access/refresh authentication
     |
 SQLAlchemy 2 async + asyncpg + Alembic
@@ -24,7 +25,7 @@ SQLAlchemy 2 async + asyncpg + Alembic
 Supabase PostgreSQL (sole application database)
 ```
 
-The Teeth Analyzer and Diagnosis services remain separate HTTP services. Existing AI, RAG, LangGraph, live scan, and Google map behavior was preserved except for the persistence/auth interfaces required by Phase 1B.
+The Teeth Analyzer and Diagnosis services remain separate HTTP services. Existing AI, RAG, LangGraph, live scan, and open mapping behavior are active. Google Maps / Places is permanently removed from active runtime paths.
 
 ## Persistence - ACTIVE
 
@@ -193,10 +194,26 @@ Phase 4-lite unified the end-to-end clinical screening flow into a single, deter
 - **Shared Path**: `pipeline.run_scan_with_relevance(...)` is the single integration point calling `run_clinical_graph(...)`, preserving the `ScanOutcome` contract across snapshot, upload, and live WebSocket modes.
 - **Observability**: Safe node execution trace (`node`, `status`, `duration_ms`) appended without image bytes, prompts, or API keys.
 
+## Dentist Discovery & Open Mapping — PHASE 6 FAST TRACK COMPLETE
+
+Phase 6 Fast Track replaced Google Maps / Places runtime dependencies across frontend and backend with an open mapping and discovery stack:
+
+- **External Dentist Discovery**: OpenStreetMap via Overpass API (`orchestrator/src/orchestrator/dentist_recommendation/osm_dentists.py`) queries `amenity=dentist` and `healthcare=dentist` using geographic search coordinates. No patient clinical data is transmitted. Gracefully handles timeouts and failures by returning database platform dentists without crashing.
+- **Local Distance Calculation**: Haversine formula calculates great-circle distances locally without third-party APIs.
+- **Deterministic Multi-Factor Ranking** (`ranking.py`): Prioritizes:
+  1. Specialist relevance match (from clinical screening triage `recommended_specialist` / issue)
+  2. Verified registered platform dentists (`is_verified=True` and `source="platform"`)
+  3. Distance proximity
+  4. Partner status (small tiebreaker ONLY — never overrides clinical specialist relevance)
+- **LangGraph Integration**: StateGraph in `dentist_agent.py` (`query_platform → query_osm → merge_rank → log_session → END`) orchestrates platform and OSM discovery and persists recommendations to Supabase PostgreSQL.
+- **Address Autocomplete & Geocoding**: Proxies to OpenStreetMap Nominatim (`autocomplete_service.py`, `geocoding.py`) with DaantShaant User-Agent header; Google Places autocomplete removed.
+- **Frontend Map & Geolocation**: Next.js client component (`DentistMapView.tsx`) uses `MapLibre GL JS` with `OpenFreeMap` Liberty style vector tiles. Browser GPS uses `navigator.geolocation`. Directions link to OpenStreetMap routing. Consultation booking is restricted to verified platform dentists (`d.tier === 'platform' && d.dentist_id`), while external OSM clinics display direct contact information.
+- **Attribution**: Proper attribution for OpenStreetMap contributors and OpenFreeMap is visibly rendered on the map.
+- **Google Maps / Places**: ZERO active runtime callers.
+
 ## Known Remaining Issues
 
 - AI usage is less fragmented but not fully unified: chat text generation, product descriptions, and the product recommendation graph go through the shared orchestrator gateway, and Teeth Analyzer clinical vision now runs a service-local Qwen-primary / Gemini-fallback policy (Phase 2C). Clinical RAG and the recommendation embedding service still use direct Gemini paths. OpenRouter has ZERO active runtime references project-wide.
-- Google Maps/Places remains active and paid-key dependent.
 - Deep evidence grounding (Phase 3A RAG) not yet started — triage rules carry lightweight metadata only (rule_id, rationale), no citations or guideline references.
 - The frontend dependency audit currently reports three high-severity advisories; dependency upgrades require a separate compatibility/security phase.
 
@@ -219,9 +236,10 @@ Phase 4-lite unified the end-to-end clinical screening flow into a single, deter
 | 2C | Qwen Clinical Vision (Teeth Analyzer Qwen primary + Gemini fallback; OpenRouter removed) | COMPLETE |
 | 3B-lite | Deterministic Clinical Triage (rule-based screening triage, safety fixes, no LLM) | COMPLETE |
 | 4-lite | Unified Clinical LangGraph (deterministic scan-to-care pipeline orchestration) | COMPLETE |
+| 6 Fast Track | Dentist Discovery + OSM/Overpass + MapLibre/OpenFreeMap | COMPLETE |
 
 The former Phase 1C is obsolete because its domain migration scope was merged into Phase 1B.
 
 ## Next Phase
 
-**Phase 6 Fast Track — Dentist Discovery + OSM/Overpass + MapLibre/OpenFreeMap** (replace Google Maps/Places with open mapping stack).
+**Phase 8-lite — Evaluation Harness + Demo Metrics**.

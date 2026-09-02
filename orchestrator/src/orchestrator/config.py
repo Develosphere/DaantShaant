@@ -91,15 +91,21 @@ class AuthSettings(BaseSettings):
         return self.jwt_secret
 
 
-class GoogleMapsSettings(BaseSettings):
-    """Google Maps / Places / Geocoding — reads GOOGLE_MAPS_API_KEY from .env"""
+class MapSettings(BaseSettings):
+    """OpenStreetMap / Overpass / Nominatim configuration (Phase 6 Fast Track)."""
     model_config = SettingsConfigDict(
         env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
     )
 
-    google_maps_api_key: str = ""
+    overpass_url: str = "https://overpass-api.de/api/interpreter"
+    nominatim_url: str = "https://nominatim.openstreetmap.org"
+    google_maps_api_key: str = ""  # Deprecated - zero active runtime callers
+
+
+# For backward-compatibility in settings composition
+GoogleMapsSettings = MapSettings
 
 
 class AISettings(BaseSettings):

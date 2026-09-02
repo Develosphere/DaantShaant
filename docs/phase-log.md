@@ -681,3 +681,57 @@ relevance ──[retake]───→ END
 ### Next
 
 Phase 6 Fast Track — Dentist Discovery + OSM/Overpass + MapLibre/OpenFreeMap.
+
+---
+
+## Phase 6 Fast Track — Dentist Discovery + OSM/Overpass + MapLibre/OpenFreeMap
+
+**Date:** September 2026
+**Status:** COMPLETE
+
+### Summary
+
+Replaced Google Maps / Places runtime dependencies across frontend and backend with an open mapping and discovery stack:
+- **Map rendering:** MapLibre GL JS + OpenFreeMap Liberty style vector tiles
+- **External Dentist Discovery:** OpenStreetMap via Overpass API (`amenity=dentist`, `healthcare=dentist`)
+- **Address Search & Autocomplete:** OpenStreetMap Nominatim proxy
+- **Patient Location:** Browser `navigator.geolocation` + Nominatim reverse geocode fallback
+- **Deterministic Ranking:** Specialization match priority > Verified Platform status > Distance > Partner tiebreaker
+- **Integration:** Wired triage `recommended_specialist` from clinical screening report directly to dentist discovery
+
+Google Maps / Places active runtime callers: **ZERO**.
+
+### Files Created
+
+- `orchestrator/src/orchestrator/dentist_recommendation/osm_dentists.py` (Overpass OSM dentist discovery, normalization, Haversine distance, caching, timeout & safe error fallbacks)
+- `orchestrator/src/orchestrator/dentist_recommendation/ranking.py` (Deterministic multi-factor dentist ranking engine)
+- `apps/web/lib/geo-location.ts` (Browser GPS `navigator.geolocation` with Nominatim reverse geocode)
+- `apps/web/lib/maplibre.ts` (MapLibre GL JS client-side loader with OpenFreeMap Liberty vector tile style)
+- `orchestrator/tests/test_dentist_discovery.py` (12 focused unit tests for OSM normalization, ranking, safety, Google Maps absence, LangGraph flow)
+
+### Files Modified
+
+- `orchestrator/src/orchestrator/dentist_recommendation/geocoding.py` (Removed Google Geocoding API, implemented OSM Nominatim)
+- `orchestrator/src/orchestrator/dentist_recommendation/autocomplete_service.py` (Removed Google Places autocomplete/details, pure Nominatim)
+- `orchestrator/src/orchestrator/dentist_recommendation/places_service.py` (Replaced Google Places API calls with OSM discovery adapter)
+- `orchestrator/src/orchestrator/dentist_recommendation/dentist_agent.py` (LangGraph workflow updated to query OSM and use deterministic ranking)
+- `orchestrator/src/orchestrator/dentist_portal/models.py` (Added `source`, `website`, `is_registered` to `DentistPin`)
+- `orchestrator/src/orchestrator/config.py` (Added `MapSettings`, marked `google_maps_api_key` deprecated)
+- `apps/web/lib/google-maps.ts` (Replaced Google Maps loader with re-exports of `geo-location.ts`)
+- `apps/web/lib/location-autocomplete.ts` (Removed Google Places autocomplete, pure backend Nominatim proxy)
+- `apps/web/lib/dentist-recommend.ts` (Updated `DentistPin` TypeScript interface)
+- `apps/web/components/dentists/LocationPickerModal.tsx` (Nominatim autocomplete search + GPS button)
+- `apps/web/components/dentists/DentistMapView.tsx` (MapLibre GL JS + OpenFreeMap interactive map, OSM directions, call clinic, no fake booking for external OSM clinics)
+- `apps/web/components/DiagnosisReport.tsx` (Passed triage `recommended_specialist` to FindDentistsButton)
+- Docs: `context.md`, `docs/third-party-usage.md`, `docs/phase-log.md`
+
+### Validation
+
+- `orchestrator/tests/test_dentist_discovery.py`: 12 passed. Zero real external network calls.
+- Full test suite (`orchestrator/tests/`): 247 passed, 1 skipped.
+- Frontend build & typecheck (`apps/web`): `npm run build` completed 100% successfully (26/26 static routes generated).
+
+### Next
+
+Phase 8-lite — Evaluation Harness + Demo Metrics.
+

@@ -381,7 +381,7 @@ export function DiagnosisReport({
       {!loading && result && !liveActive && diagnosis.meets_threshold !== false && (
         <div style={{ marginTop: "1.25rem" }}>
           <FindDentistsButton
-            issue={diagnosis.condition_label}
+            issue={diagnosis.triage?.recommended_specialist || diagnosis.condition_label}
             scanId={diagnosis.diagnosis_id}
             severity={diagnosis.severity}
           />

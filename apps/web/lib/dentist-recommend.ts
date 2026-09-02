@@ -2,6 +2,7 @@ import { API_BASE, authorizedFetch } from "./portal-auth";
 
 export type DentistPin = {
   tier: "platform" | "general";
+  source?: "platform" | "osm" | "curated" | string;
   dentist_id: string | null;
   place_id: string | null;
   name: string;
@@ -9,6 +10,7 @@ export type DentistPin = {
   lng: number;
   address: string;
   phone: string | null;
+  website?: string | null;
   rating: number | null;
   distance_km: number;
   specialties: string[];
