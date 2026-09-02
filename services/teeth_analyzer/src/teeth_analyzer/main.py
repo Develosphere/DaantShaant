@@ -16,9 +16,11 @@ def health() -> dict:
     return {
         "status": "ok",
         "service": "teeth-analyzer",
-        "version": "0.2.0",
+        "version": "0.3.0",
         "backend": settings.backend,
         "model_id": settings.model_id,
+        "qwen_configured": bool(settings.dashscope_api_key and settings.qwen_base_url),
+        "qwen_vision_model": settings.qwen_vision_model,
         "gemini_configured": bool(settings.gemini_api_key),
         "fallback_to_stub": settings.fallback_to_stub,
         "env_files": list(settings.model_config.get("env_file") or []),
@@ -26,9 +28,9 @@ def health() -> dict:
 
 
 @app.post("/v1/analyze", response_model=AnalyzeResponse)
-def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
+async def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     try:
-        return analyze_image(request)
+        return await analyze_image(request)
     except ImageQualityError as exc:
         raise HTTPException(
             status_code=422,

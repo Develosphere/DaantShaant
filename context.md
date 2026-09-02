@@ -1,7 +1,7 @@
 # DaantShaant Context
 
 > Current implementation state. Read this first in every engineering chat.
-> Last updated: Phase 2B.2 - Production Semantic Relevance Integration (Phase 2B COMPLETE), September 2026.
+> Last updated: Phase 2C - Qwen Clinical Vision (Teeth Analyzer Qwen primary + Gemini fallback; OpenRouter removed project-wide), September 2026.
 
 ## Product
 
@@ -82,7 +82,7 @@ MongoDB and its runtime drivers/configuration are removed. There are no active r
 - Patient portal: dashboard, snapshot/upload/live scan, chat, dentist discovery
 - Dentist portal: registration/login, product CRUD, AI descriptions, orders
 - Admin login and dashboard routes
-- Gemini vision baseline and rule-based diagnosis
+- Clinical vision (Teeth Analyzer) now runs Qwen primary with a Gemini technical fallback (Phase 2C); rule-based diagnosis is unchanged
 - Conversational chat now generates text through the shared AI gateway (Qwen primary, Gemini fallback); FAISS/sentence-transformers RAG behavior is unchanged
 - Product descriptions now use the shared AI gateway (Qwen primary, Gemini fallback); the product recommendation LangGraph also generates its reranking and final patient-facing text through the shared gateway
 - Product and dentist recommendation LangGraphs
@@ -101,7 +101,7 @@ Phases 2A.1-2A.4 built and now run the shared, provider-neutral AI stack at `orc
 - Second migrated real caller (Phase 2A.5a): `dentist_portal/description_generator.generate_product_description` (the last direct OpenRouter consumer) now calls `AIGateway.generate_text(TextRequest)` through the same shared gateway. The public function signature, the returned `{"ai_description": ..., "problems_solved": [...]}` dict, the system/user prompt content, temperature/max_tokens, markdown-fence stripping, and the deterministic fallback on failure are all preserved. Configuration and programming errors propagate; a full double-provider technical failure or an empty/unparseable reply degrades to the pre-existing deterministic product description. The module no longer imports `openrouter_client`.
 - Third and fourth migrated real callers (Phase 2A.5b): the product recommendation AI path in `recommendation_ai_system/` now uses the shared gateway. `recommendation_agent.generate_response_node` (final patient-facing message) and `tools.rank_recommendations` (candidate reranking) each call `AIGateway.generate_text(TextRequest)` with `model=None` (Qwen resolves `QWEN_CHAT_MODEL`, Gemini fallback resolves `GEMINI_MODEL`). The gateway is resolved lazily via a module-level `_get_gateway()` handle and injected through an optional `gateway` kwarg for tests; neither module imports `llm_provider` or `openrouter_client`. The LangGraph topology (`START -> search_products -> conditional similarity -> get_details -> rank -> log_session -> generate_response -> END`), ranking/product-selection behavior, database queries, similarity behavior, session logging, and the public response contract are unchanged. Failure policy: technical double failure (`AllProvidersFailedError`) or empty gateway output degrades to the pre-existing deterministic template/ranking fallback; `ProviderConfigurationError`/`ProviderInternalError` propagate and are never masked. `rank_recommendations` still returns the JSON-array ranking the graph consumes, so it stayed on `generate_text` + existing parsing rather than being forced into `generate_structured` (the shared structured contract is a `dict`, and the array output would require restructuring).
 - Legacy cleanup (Phase 2A.5c): `get_deterministic_fallback` relocated from `llm_provider.py` to `ai/fallbacks.py` (provider-independent, no AI/network dependency). `llm_provider.py` and `openrouter_client.py` deleted. Zero orchestrator runtime references to `LLMProvider`, `openrouter_client`, or `OPENROUTER_*` remain. The deterministic dental fallback table and behavior are fully preserved.
-- Remaining legacy AI callers (not yet migrated, deliberately): clinical vision in the Teeth Analyzer (direct Gemini + its own separate OpenRouter backend) and the recommendation embedding service (Gemini text-embedding capability — not a chat/gateway concern).
+- Remaining legacy AI caller (not yet migrated, deliberately): the recommendation embedding service (Gemini text-embedding capability — not a chat/gateway concern). Clinical vision in the Teeth Analyzer was migrated in Phase 2C (Qwen primary + Gemini fallback; see below).
 - No automated test makes a real AI API call; `scripts/test_qwen_connection.py` and `scripts/test_gemini_connection.py` remain manual, developer-run smoke tests.
 - `AISettings` in `config.py` defines the Qwen-primary / Gemini-fallback contract; `.env`/`.env.example` carry the keys.
 
@@ -127,9 +127,25 @@ All three production scan modes (snapshot, upload, live WebSocket) now gate clin
 - Logging: a safe `[RELEVANCE] classification=... action=... confidence=... scan_mode=... duration_ms=...` line; never image bytes, prompts, or keys.
 - Mechanical-quality ordering limitation (temporary): the Teeth Analyzer still combines mechanical quality and clinical vision in one request, so relevance now runs at the earliest safe orchestrator point - BEFORE that combined call. Relevant images still get the analyzer's existing quality behavior; gated (retake/unrelated) images skip the analyzer entirely, so expensive clinical vision is never run for them. Phase 2C may reorganize the clinical vision/quality boundary.
 
+## Clinical Vision Provider Policy - PHASE 2C COMPLETE (TEETH ANALYZER)
+
+The Teeth Analyzer service (`services/teeth_analyzer/`, :8001) now runs clinical vision through a SERVICE-LOCAL provider policy: **Qwen PRIMARY -> Gemini TECHNICAL FALLBACK**. It does NOT call the orchestrator and shares no code with the orchestrator gateway (no circular dependency); it mirrors the same proven design in a self-contained stack under `src/teeth_analyzer/`:
+
+- `backends/errors.py` - typed exception hierarchy. `ProviderTechnicalError` subclasses (timeout, unavailable, rate-limit, server, invalid-response) carry `fallback_eligible=True`; `ProviderConfigurationError` / `ProviderInternalError` are non-fallback and propagate. `AllProvidersFailedError` when both providers fail technically.
+- `backends/vision_common.py` - ONE shared clinical-vision prompt + `parse_findings` normalizer, so both providers return the SAME internal shape (`VisualFinding[]`). Output is structured VISUAL SCREENING (oral_regions_visible, findings[finding_code/observation/region/tooth_reference/confidence/visibility], overall_observation, limitations), explicitly "NOT a definitive diagnosis and NOT treatment advice". Finding codes are preserved for downstream Diagnosis but worded as possible/suspected.
+- `backends/qwen.py` - `analyze_with_qwen` (async, plain httpx): Alibaba Model Studio OpenAI-compatible `{QWEN_BASE_URL}/chat/completions`, `Authorization: Bearer {DASHSCOPE_API_KEY}`, multimodal (text + `data:image/jpeg;base64,...`), `response_format=json_object`.
+- `backends/gemini.py` - `analyze_with_gemini` (async, plain httpx; Google SDK removed): `v1beta` `{model}:generateContent`, `x-goog-api-key` header, `inlineData` base64, `responseMimeType=application/json`. Technical fallback only.
+- `provider_policy.py` - `run_clinical_vision(jpeg_bytes, locale) -> ClinicalVisionOutcome(findings, provider, model, latency_ms, fallback_used)`. Tries Qwen; on a `fallback_eligible` technical error tries Gemini once; non-fallback (config/programming) errors propagate immediately and are NEVER masked; both-technical-failure raises `AllProvidersFailedError`. Emits `[CLINICAL_VISION] provider=... model=... fallback_used=... latency_ms=...` (never base64/keys/Authorization).
+- `inference.py` - `analyze_image` is now async. The mechanical-quality gate is PRESERVED and runs BEFORE any AI call (a low-quality image is rejected without calling Qwen/Gemini). `backend="stub"` forces the offline deterministic backend; `AllProvidersFailedError` degrades to the stub ONLY if `TEETH_ANALYZER_FALLBACK_TO_STUB` is explicitly enabled (dev), else surfaces `VisionBackendError` (HTTP 503).
+- `config.py` - shared-first env via `AliasChoices`: `DASHSCOPE_API_KEY`, `QWEN_BASE_URL`, `QWEN_VISION_MODEL` (default `qwen3.7-plus`), `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_BASE_URL`, `AI_REQUEST_TIMEOUT_SECONDS` (default 60). `TEETH_ANALYZER_*` aliases preserved. `backend` default changed `stub -> qwen`. OpenRouter config fields removed.
+
+Preserved: image preprocessing / mechanical-quality logic (untouched), the public `AnalyzeResponse` contract (`findings: VisualFinding[]`, with provider/model/fallback metadata kept internal and never leaked into the public scan API), and Diagnosis (:8002) compatibility - Diagnosis still derives its finding-label list from the analyzer findings; disease/severity mapping was NOT rewritten (that is Phase 3B). OpenRouter is PERMANENTLY ABANDONED: `backends/openrouter.py` deleted, `TEETH_ANALYZER_OPENROUTER_*` config removed, ZERO active runtime references project-wide (only historical doc mentions and the test asserting its absence remain).
+
+Validation: `services/teeth_analyzer/tests/test_clinical_vision.py` - 19 passed (16 required + 3 extra), zero real AI calls (httpx.MockTransport + fakes + a stubbed quality gate).
+
 ## Known Remaining Issues
 
-- AI usage is still partly fragmented: chat text generation, product descriptions, and the product recommendation graph now go through the shared gateway, but clinical vision (Teeth Analyzer) and clinical RAG still use direct Gemini paths. The Teeth Analyzer also has its own separate OpenRouter backend for clinical vision (Phase 2C target).
+- AI usage is less fragmented but not fully unified: chat text generation, product descriptions, and the product recommendation graph go through the shared orchestrator gateway, and Teeth Analyzer clinical vision now runs a service-local Qwen-primary / Gemini-fallback policy (Phase 2C). Clinical RAG and the recommendation embedding service still use direct Gemini paths. OpenRouter has ZERO active runtime references project-wide.
 - Clinical scan-to-care flow is not yet a unified LangGraph.
 - Google Maps/Places remains active and paid-key dependent.
 - Clinical rule/evidence architecture still needs later phases.
@@ -151,9 +167,10 @@ All three production scan modes (snapshot, upload, live WebSocket) now gate clin
 | 2A.5c | Remove Legacy OpenRouter / LLM Infrastructure | COMPLETE |
 | 2B.1 | Semantic Dental Relevance Core (standalone, not yet wired) | COMPLETE |
 | 2B.2 | Production Semantic Relevance Integration (snapshot + upload + live) | COMPLETE |
+| 2C | Qwen Clinical Vision (Teeth Analyzer Qwen primary + Gemini fallback; OpenRouter removed) | COMPLETE |
 
 The former Phase 1C is obsolete because its domain migration scope was merged into Phase 1B.
 
 ## Next Phase
 
-**Phase 2C - Qwen Clinical Vision** (migrate the Teeth Analyzer's direct Gemini/OpenRouter clinical vision onto the shared gateway and reconsider the mechanical-quality / clinical-vision boundary)
+**Phase 3B-lite - Evidence / Rule-Based Triage** (structure the Teeth Analyzer visual-screening findings into evidence-backed, rule-based triage guidance while keeping the product an awareness tool, not a diagnosis). Do NOT start deep Phase 3A RAG yet.

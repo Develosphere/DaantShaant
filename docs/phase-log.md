@@ -524,3 +524,60 @@ Wired the Phase 2B.1 semantic-relevance core into all three production scan mode
 ### Next
 
 Phase 2C - Qwen Clinical Vision.
+
+---
+
+## Phase 2C - Qwen Clinical Vision (Teeth Analyzer) - COMPLETE
+
+**Date:** September 2026
+**Status:** COMPLETE
+
+### Summary
+
+Migrated the Teeth Analyzer service's clinical vision to a SERVICE-LOCAL provider policy: **Qwen PRIMARY -> Gemini TECHNICAL FALLBACK**, and removed all active OpenRouter runtime usage project-wide (ZERO active references). The service stays self-contained - it does NOT call the orchestrator and shares no code with the orchestrator gateway (no circular dependency); it mirrors the proven gateway design in its own stack. Image preprocessing / mechanical-quality logic and the public scan contract were preserved; Diagnosis (:8002) was not rewritten. Clinical output is structured VISUAL SCREENING (not a definitive diagnosis), compatible with existing downstream.
+
+### Files Created
+
+- `services/teeth_analyzer/src/teeth_analyzer/backends/errors.py` - typed exception hierarchy: `ProviderTechnicalError` subclasses (timeout/unavailable/rate-limit/server/invalid-response) carry `fallback_eligible=True`; `ProviderConfigurationError` / `ProviderInternalError` are non-fallback; `AllProvidersFailedError`.
+- `services/teeth_analyzer/src/teeth_analyzer/backends/vision_common.py` - ONE shared clinical-vision prompt + `parse_findings` normalizer so both providers return the SAME internal shape (`VisualFinding[]`). Screening wording ("NOT a definitive diagnosis and NOT treatment advice"); allowed finding codes preserved for Diagnosis but worded possible/suspected.
+- `services/teeth_analyzer/src/teeth_analyzer/backends/qwen.py` - `analyze_with_qwen` (async, plain httpx): OpenAI-compatible `{QWEN_BASE_URL}/chat/completions`, `Authorization: Bearer {DASHSCOPE_API_KEY}`, multimodal (text + `data:image/jpeg;base64,...`), `response_format=json_object`; provider/HTTP errors mapped to the typed hierarchy; keys/base64 redacted from errors.
+- `services/teeth_analyzer/src/teeth_analyzer/provider_policy.py` - `run_clinical_vision(jpeg_bytes, locale) -> ClinicalVisionOutcome(findings, provider, model, latency_ms, fallback_used)`: Qwen first, single Gemini retry only on a `fallback_eligible` technical error, non-fallback errors propagate, both-technical-failure raises `AllProvidersFailedError`; `[CLINICAL_VISION]` log line (never base64/keys/Authorization).
+- `services/teeth_analyzer/tests/conftest.py` - `sys.path` shim so the focused tests import `teeth_analyzer` from any venv/cwd.
+- `services/teeth_analyzer/tests/test_clinical_vision.py` - 19 tests (16 required + 3 extra); zero real AI (httpx.MockTransport + fakes + stubbed quality gate + tiny fake base64).
+
+### Files Modified
+
+- `services/teeth_analyzer/src/teeth_analyzer/backends/gemini.py` - rewritten to async plain-httpx `v1beta` `{model}:generateContent` (`x-goog-api-key` header, `inlineData` base64, `responseMimeType=application/json`); `google-generativeai` SDK removed; technical-fallback error mapping.
+- `services/teeth_analyzer/src/teeth_analyzer/inference.py` - `analyze_image` now async; mechanical-quality gate PRESERVED and runs BEFORE any AI call; policy-driven vision; `AllProvidersFailedError` degrades to stub only if `TEETH_ANALYZER_FALLBACK_TO_STUB` is enabled, else `VisionBackendError` (503); config/programming errors propagate.
+- `services/teeth_analyzer/src/teeth_analyzer/config.py` - shared-first env via `AliasChoices` (`DASHSCOPE_API_KEY`, `QWEN_BASE_URL`, `QWEN_VISION_MODEL=qwen3.7-plus`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_BASE_URL`, `AI_REQUEST_TIMEOUT_SECONDS=60`), `TEETH_ANALYZER_*` aliases preserved; `backend` default `stub -> qwen`; OpenRouter fields removed.
+- `services/teeth_analyzer/src/teeth_analyzer/main.py` - endpoint awaits async `analyze_image`; `/health` bumped to v0.3.0 with `qwen_configured` / `qwen_vision_model` / `gemini_configured`.
+- `services/teeth_analyzer/src/teeth_analyzer/backends/__init__.py` - exports `analyze_with_qwen` / `analyze_with_gemini` / `analyze_with_stub`.
+- `services/teeth_analyzer/pyproject.toml` - removed `google-generativeai`; added `httpx>=0.27.0`.
+- `orchestrator/src/orchestrator/conversation_engine.py` - stale docstring reference to the legacy router reworded (no behavior change).
+
+### Files Deleted
+
+- `services/teeth_analyzer/src/teeth_analyzer/backends/openrouter.py` - the last active OpenRouter consumer in the repo.
+
+### Key Decisions
+
+- Service-local policy, NOT an orchestrator HTTP call: avoids a circular dependency and keeps the analyzer independently deployable, while mirroring the gateway's proven fallback classification.
+- Fallback is TECHNICAL only (timeout/connection/429/5xx/malformed envelope). Configuration/programming errors propagate and are NEVER masked by fallback or the offline stub.
+- Both providers normalize to the SAME `VisualFinding[]` shape via one shared prompt/parser, so the public `AnalyzeResponse` and Diagnosis (:8002) are unchanged; provider/model/latency/fallback metadata stays internal (never leaked into the public scan API).
+- Clinical output is framed as visual SCREENING observations (possible/suspected), not definitive diagnosis or treatment advice - consistent with the awareness-tool positioning.
+- Mechanical-quality rejection skips AI entirely (preserved ordering); preprocessing was NOT rewritten.
+- Disease/severity mapping and Diagnosis logic left for Phase 3B (not touched here).
+
+### OpenRouter audit (post-removal)
+
+- `services/teeth_analyzer/src/teeth_analyzer/backends/openrouter.py`: deleted.
+- `TEETH_ANALYZER_OPENROUTER_API_KEY` / `_MODEL` config fields: removed (`.env.example` already clean; any stray legacy env is ignored via `extra="ignore"`).
+- Active runtime references project-wide: **0** - verified by `test_16_openrouter_has_zero_runtime_callers`, which asserts the module is unimportable and that inference/provider_policy/qwen/gemini/vision_common contain no OpenRouter token. Remaining mentions are historical docs (`prd.md`, `TROUBLESHOOTING.md`, prior phase-log entries) and the assertion test only.
+
+### Validation
+
+- `services/teeth_analyzer/tests/test_clinical_vision.py`: 19 passed (run via `orchestrator/.venv` with a `conftest.py` path shim). Zero external AI API calls. Only the focused Teeth Analyzer suite was run (not the monorepo suite), per phase scope.
+
+### Next
+
+Phase 3B-lite - Evidence / Rule-Based Triage (do NOT start deep Phase 3A RAG).

@@ -1,10 +1,11 @@
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def _repo_root() -> Path:
-    # services/teeth_analyzer/src/teeth_analyzer/config.py → repo root
+    # services/teeth_analyzer/src/teeth_analyzer/config.py -> repo root
     return Path(__file__).resolve().parents[4]
 
 
@@ -27,12 +28,52 @@ class Settings(BaseSettings):
 
     host: str = "0.0.0.0"
     port: int = 8001
-    backend: str = "stub"  # stub | gemini | openrouter
+    # "qwen" runs the locked clinical-vision policy (Qwen primary -> Gemini
+    # technical fallback). "stub" forces the offline deterministic backend.
+    backend: str = "qwen"
     model_id: str = "stub-v0"
-    gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.0-flash"
-    openrouter_api_key: str = ""
-    openrouter_model: str = "google/gemini-2.0-flash-exp:free"
+
+    # --- Qwen (PRIMARY clinical vision) ---
+    # Shared project env is read first; a TEETH_ANALYZER_ alias is preserved for
+    # backward compatibility. Unknown or legacy provider keys are ignored
+    # (extra="ignore").
+    dashscope_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("DASHSCOPE_API_KEY", "TEETH_ANALYZER_DASHSCOPE_API_KEY"),
+    )
+    qwen_base_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("QWEN_BASE_URL", "TEETH_ANALYZER_QWEN_BASE_URL"),
+    )
+    qwen_vision_model: str = Field(
+        default="qwen3.7-plus",
+        validation_alias=AliasChoices(
+            "QWEN_VISION_MODEL", "QWEN_DEFAULT_MODEL", "TEETH_ANALYZER_QWEN_VISION_MODEL"
+        ),
+    )
+
+    # --- Gemini (TECHNICAL FALLBACK clinical vision) ---
+    gemini_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("GEMINI_API_KEY", "TEETH_ANALYZER_GEMINI_API_KEY"),
+    )
+    gemini_model: str = Field(
+        default="gemini-flash-lite-latest",
+        validation_alias=AliasChoices("GEMINI_MODEL", "TEETH_ANALYZER_GEMINI_MODEL"),
+    )
+    gemini_base_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("GEMINI_BASE_URL", "TEETH_ANALYZER_GEMINI_BASE_URL"),
+    )
+
+    # Shared AI request timeout (seconds).
+    ai_request_timeout_seconds: float = Field(
+        default=60.0,
+        validation_alias=AliasChoices(
+            "AI_REQUEST_TIMEOUT_SECONDS", "TEETH_ANALYZER_AI_REQUEST_TIMEOUT_SECONDS"
+        ),
+    )
+
     fallback_to_stub: bool = False
     reject_low_quality: bool = False
     quality_gate_threshold: float = 0.45

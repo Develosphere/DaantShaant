@@ -1,5 +1,10 @@
-"""
-Vision inference: OpenCV preprocess → Gemini/OpenRouter (or stub) → VisualFinding[].
+"""Vision inference: OpenCV preprocess -> Qwen primary / Gemini fallback clinical
+vision -> VisualFinding[] (Phase 2C).
+
+The mechanical-quality gate is preserved exactly: a low-quality image is
+rejected BEFORE any AI clinical-vision call. Clinical vision now runs through
+the service-local provider policy (Qwen primary, Gemini technical fallback);
+the legacy third-party router backend has been removed.
 """
 
 from __future__ import annotations
@@ -10,11 +15,11 @@ from uuid import uuid4
 
 from dantshaant_common.schemas import AnalyzeRequest, AnalyzeResponse
 
-from teeth_analyzer.backends.gemini import analyze_with_gemini
-from teeth_analyzer.backends.openrouter import analyze_with_openrouter
+from teeth_analyzer.backends.errors import AllProvidersFailedError, ClinicalVisionError
 from teeth_analyzer.backends.stub import analyze_with_stub
 from teeth_analyzer.config import settings
 from teeth_analyzer.preprocess import preprocess_frame
+from teeth_analyzer.provider_policy import run_clinical_vision
 
 logger = logging.getLogger(__name__)
 
@@ -30,50 +35,40 @@ class VisionBackendError(RuntimeError):
     pass
 
 
-def _run_vision(jpeg_bytes: bytes, locale: str) -> tuple[list, str]:
-    backend = settings.backend.lower()
-    
-    if backend == "gemini":
-        try:
-            findings = analyze_with_gemini(jpeg_bytes, locale)
-            return findings, settings.gemini_model
-        except Exception as exc:
-            logger.exception("Gemini vision failed: %s", exc)
-            if settings.fallback_to_stub:
-                logger.warning("Falling back to stub (disable TEETH_ANALYZER_FALLBACK_TO_STUB)")
-                return analyze_with_stub(jpeg_bytes, locale), "stub-fallback"
-            raise VisionBackendError(
-                f"Gemini vision failed: {exc}. "
-                "Check API key, model name, and billing. "
-                "Set TEETH_ANALYZER_FALLBACK_TO_STUB=true only for offline dev."
-            ) from exc
-    
-    elif backend == "openrouter":
-        try:
-            findings = analyze_with_openrouter(jpeg_bytes, locale)
-            return findings, settings.openrouter_model
-        except Exception as exc:
-            logger.exception("OpenRouter vision failed: %s", exc)
-            if settings.fallback_to_stub:
-                logger.warning("Falling back to stub (disable TEETH_ANALYZER_FALLBACK_TO_STUB)")
-                return analyze_with_stub(jpeg_bytes, locale), "stub-fallback"
-            raise VisionBackendError(
-                f"OpenRouter vision failed: {exc}. "
-                "Check API key and model name. "
-                "Set TEETH_ANALYZER_FALLBACK_TO_STUB=true only for offline dev."
-            ) from exc
-    
-    return analyze_with_stub(jpeg_bytes, locale), settings.model_id
-
-
-def analyze_image(request: AnalyzeRequest) -> AnalyzeResponse:
+async def analyze_image(request: AnalyzeRequest) -> AnalyzeResponse:
     start = time.perf_counter()
     pre = preprocess_frame(request.image_base64)
 
+    # Mechanical-quality gate: reject BEFORE calling Qwen/Gemini. A quality
+    # rejection is distinct from semantic-relevance rejection and from a
+    # clinical finding.
     if not pre.passed_gate and settings.reject_low_quality:
         raise ImageQualityError(pre.hint or "Low image quality", pre.quality_score)
 
-    findings, model_id = _run_vision(pre.jpeg_bytes, request.locale)
+    if settings.backend.lower() == "stub":
+        # Offline/dev deterministic backend - no AI call.
+        findings = analyze_with_stub(pre.jpeg_bytes, request.locale)
+        model_id = settings.model_id
+    else:
+        try:
+            outcome = await run_clinical_vision(pre.jpeg_bytes, request.locale)
+            findings, model_id = outcome.findings, outcome.model
+        except AllProvidersFailedError as exc:
+            # Both providers failed technically. Only an explicit offline-dev
+            # opt-in degrades to the stub; otherwise surface a backend error.
+            if settings.fallback_to_stub:
+                logger.warning(
+                    "Clinical vision providers failed; using offline stub "
+                    "(disable TEETH_ANALYZER_FALLBACK_TO_STUB in production)"
+                )
+                findings = analyze_with_stub(pre.jpeg_bytes, request.locale)
+                model_id = "stub-fallback"
+            else:
+                raise VisionBackendError(f"Clinical vision failed on all providers: {exc}") from exc
+        except ClinicalVisionError as exc:
+            # Configuration / programming errors propagate (never masked by stub).
+            raise VisionBackendError(str(exc)) from exc
+
     elapsed_ms = int((time.perf_counter() - start) * 1000)
 
     return AnalyzeResponse(

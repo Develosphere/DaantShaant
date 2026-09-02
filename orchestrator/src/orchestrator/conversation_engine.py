@@ -202,7 +202,7 @@ class ConversationEngine:
         )
 
     async def _try_complete_response(self, system_prompt: str, user_message: str, partial_response: str) -> str:
-        """Attempt to complete an abruptly ended response using a fast OpenRouter call, falling back to trimming."""
+        """Attempt to complete an abruptly ended response using a fast gateway completion call, falling back to trimming."""
         if not partial_response:
             return partial_response
             

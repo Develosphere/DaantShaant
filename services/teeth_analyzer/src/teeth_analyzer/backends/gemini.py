@@ -1,119 +1,150 @@
-"""Gemini Flash vision — dental visual findings as structured JSON."""
+"""Gemini clinical-vision backend - TECHNICAL FALLBACK (Phase 2C).
+
+Google ``v1beta`` ``generateContent`` REST call over plain async httpx. No
+Google SDK is used (the previous ``google.generativeai`` dependency is removed).
+This mirrors the Qwen backend so both return the SAME internal shape and the
+downstream never sees a provider-specific envelope.
+
+The API key is sent in the ``x-goog-api-key`` header (never the URL). Only
+technical failures are surfaced as fallback-eligible typed errors; Google reports
+invalid/missing keys as HTTP 400/401/403, which are configuration errors and are
+NOT fallback-eligible. Image base64 and the API key never leak into errors/logs.
+"""
 
 from __future__ import annotations
 
-import json
+import base64
 import logging
-import re
+import time
+from typing import Any
+
+import httpx
 
 from dantshaant_common.schemas import VisualFinding
 
+from teeth_analyzer.backends.errors import (
+    InvalidProviderResponseError,
+    ProviderConfigurationError,
+    ProviderRateLimitError,
+    ProviderServerError,
+    ProviderTimeoutError,
+    ProviderUnavailableError,
+)
+from teeth_analyzer.backends.vision_common import build_prompt, parse_findings
 from teeth_analyzer.config import settings
 
 logger = logging.getLogger(__name__)
 
-VISION_PROMPT = """You are a dental vision assistant analyzing a photo of teeth or the mouth.
-Inspect carefully for: cavities/decay, plaque, tartar, gum inflammation, discoloration,
-missing or damaged teeth, cracks, and overall oral health.
-
-Return ONLY valid JSON (no markdown fences) in this exact shape:
-{
-  "findings": [
-    {"label": "<snake_case_label>", "confidence": 0.0-1.0, "region": "<optional area>"}
-  ]
-}
-
-Allowed labels (use the most specific match):
-- healthy_tissue — only if teeth and gums look clearly healthy
-- plaque_detected
-- tartar
-- cavity_suspect — early decay, dark spots, holes starting
-- cavity_advanced — obvious large cavities or severe decay
-- gingivitis_signs — red/swollen/bleeding gums
-- gum_disease_severe
-- discoloration — yellow/brown/stained teeth
-- missing_or_damaged_teeth — broken, chipped, or missing teeth
-
-Rules:
-- List ALL visible issues, not only the dominant one.
-- Do NOT label healthy_tissue with high confidence if decay, heavy plaque, or gum disease is visible.
-- If the image is not a clear teeth/mouth photo, return one finding: unknown with low confidence.
-- Be clinically conservative: flag suspected problems rather than calling severe cases healthy.
-Locale hint: __LOCALE__.
-"""
+DEFAULT_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+_MAX_ERROR_BODY_CHARS = 300
 
 
-def _build_prompt(locale: str) -> str:
-    return VISION_PROMPT.replace("__LOCALE__", locale)
+async def analyze_with_gemini(
+    jpeg_bytes: bytes,
+    locale: str,
+    *,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> tuple[list[VisualFinding], str, float]:
+    """Run Gemini clinical vision. Returns ``(findings, model, latency_ms)``."""
+    api_key = settings.gemini_api_key
+    model = settings.gemini_model
+    base = (settings.gemini_base_url or DEFAULT_GEMINI_BASE_URL).rstrip("/")
+    if not api_key:
+        raise ProviderConfigurationError("GEMINI_API_KEY is required for Gemini clinical vision")
+    if not model:
+        raise ProviderConfigurationError("GEMINI_MODEL is required for Gemini clinical vision")
 
+    endpoint = f"{base}/{model}:generateContent"
+    image_b64 = base64.b64encode(jpeg_bytes).decode("utf-8")
+    payload: dict[str, Any] = {
+        "contents": [
+            {
+                "role": "user",
+                "parts": [
+                    {"text": build_prompt(locale)},
+                    {"inlineData": {"mimeType": "image/jpeg", "data": image_b64}},
+                ],
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.1,
+            "maxOutputTokens": 1024,
+            "responseMimeType": "application/json",
+        },
+    }
+    headers = {
+        "x-goog-api-key": api_key,
+        "Content-Type": "application/json",
+    }
 
-def _extract_response_text(response) -> str:
-    if getattr(response, "text", None):
-        return response.text
-    candidates = getattr(response, "candidates", None) or []
-    if not candidates:
-        feedback = getattr(response, "prompt_feedback", None)
-        raise RuntimeError(f"Gemini returned no candidates. feedback={feedback}")
-    parts = candidates[0].content.parts
-    texts = [p.text for p in parts if getattr(p, "text", None)]
-    if not texts:
-        finish = getattr(candidates[0], "finish_reason", "unknown")
-        raise RuntimeError(f"Gemini response has no text (finish_reason={finish})")
-    return "".join(texts)
-
-
-def _parse_findings(text: str) -> list[VisualFinding]:
-    text = text.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
-    match = re.search(r"\{[\s\S]*\}", text)
-    if match:
-        text = match.group(0)
-    data = json.loads(text)
-    raw = data.get("findings", data if isinstance(data, list) else [])
-    findings: list[VisualFinding] = []
-    for item in raw:
-        findings.append(
-            VisualFinding(
-                label=str(item.get("label", "unknown")).lower().replace(" ", "_"),
-                confidence=float(item.get("confidence", 0.5)),
-                region=item.get("region"),
-            )
-        )
-    return findings or [VisualFinding(label="unknown", confidence=0.3, region="general")]
-
-
-def analyze_with_gemini(jpeg_bytes: bytes, locale: str) -> list[VisualFinding]:
-    if not settings.gemini_api_key:
-        raise RuntimeError(
-            "TEETH_ANALYZER_GEMINI_API_KEY is not set. Add it to the repo root .env file."
-        )
-
-    import google.generativeai as genai
-
-    genai.configure(api_key=settings.gemini_api_key)
-    model = genai.GenerativeModel(settings.gemini_model)
-    prompt = _build_prompt(locale)
-    part = {"mime_type": "image/jpeg", "data": jpeg_bytes}
-
+    started = time.perf_counter()
     try:
-        response = model.generate_content(
-            [prompt, part],
-            generation_config={
-                "temperature": 0.1,
-                "max_output_tokens": 1024,
-                "response_mime_type": "application/json",
-            },
-        )
-    except TypeError:
-        # Older google-generativeai without response_mime_type
-        response = model.generate_content(
-            [prompt, part],
-            generation_config={"temperature": 0.1, "max_output_tokens": 1024},
-        )
+        kwargs: dict[str, Any] = {"timeout": settings.ai_request_timeout_seconds}
+        if transport is not None:
+            kwargs["transport"] = transport
+        async with httpx.AsyncClient(**kwargs) as client:
+            response = await client.post(endpoint, headers=headers, json=payload)
+    except httpx.TimeoutException as exc:
+        raise ProviderTimeoutError("Gemini clinical vision request timed out") from exc
+    except httpx.TransportError as exc:
+        raise ProviderUnavailableError(f"Gemini endpoint unreachable ({type(exc).__name__})") from exc
+    latency_ms = round((time.perf_counter() - started) * 1000.0, 3)
 
-    text = _extract_response_text(response)
-    findings = _parse_findings(text)
-    logger.info("Gemini findings: %s", [f.model_dump() for f in findings])
-    return findings
+    _raise_for_status(response, api_key)
+    return parse_findings(_extract_text(response)), model, latency_ms
+
+
+def _raise_for_status(response: httpx.Response, api_key: str) -> None:
+    """Map HTTP failures to the correct fallback class. Never echoes secrets."""
+    status = response.status_code
+    if 200 <= status < 300:
+        return
+    detail = _safe_detail(response, api_key)
+    if status in (400, 401, 403):
+        raise ProviderConfigurationError(
+            f"Gemini authentication/config rejected (HTTP {status}) - check GEMINI_API_KEY; {detail}"
+        )
+    if status == 429:
+        raise ProviderRateLimitError(f"Gemini rate limited (HTTP {status}); {detail}")
+    if 500 <= status <= 599:
+        raise ProviderServerError(f"Gemini server error (HTTP {status}); {detail}")
+    raise InvalidProviderResponseError(f"Gemini returned unexpected HTTP {status}; {detail}")
+
+
+def _safe_detail(response: httpx.Response, api_key: str) -> str:
+    """Short body excerpt; the API key is redacted if it were ever echoed."""
+    try:
+        body = response.text[:_MAX_ERROR_BODY_CHARS]
+    except Exception:  # noqa: BLE001 - unreadable body must not mask the status
+        body = "<unreadable response body>"
+    if api_key:
+        body = body.replace(api_key, "***")
+    return f"body: {body}"
+
+
+def _extract_text(response: httpx.Response) -> str:
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise InvalidProviderResponseError("Gemini returned a non-JSON body") from exc
+    if not isinstance(payload, dict):
+        raise InvalidProviderResponseError("Gemini returned a non-object JSON body")
+    candidates = payload.get("candidates")
+    if not isinstance(candidates, list) or not candidates:
+        raise InvalidProviderResponseError("Gemini response is missing 'candidates'")
+    first = candidates[0]
+    content = first.get("content") if isinstance(first, dict) else None
+    parts = content.get("parts") if isinstance(content, dict) else None
+    if not isinstance(parts, list):
+        raise InvalidProviderResponseError("Gemini candidate content is missing 'parts'")
+    text = "".join(
+        part.get("text", "")
+        for part in parts
+        if isinstance(part, dict) and isinstance(part.get("text"), str)
+    )
+    if not text:
+        raise InvalidProviderResponseError("Gemini response contained no text")
+    return text
+
+
+__all__ = ["analyze_with_gemini", "DEFAULT_GEMINI_BASE_URL"]

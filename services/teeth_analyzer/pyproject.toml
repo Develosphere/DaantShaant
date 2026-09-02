@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "dantshaant-common",
     "fastapi>=0.115.0",
-    "google-generativeai>=0.8.0",
+    "httpx>=0.27.0",
     "numpy>=1.26.0,<2.0.0",
     "opencv-python-headless>=4.9.0",
     "Pillow>=10.0.0",
