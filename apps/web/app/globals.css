@@ -1027,10 +1027,38 @@ body {
 }
 
 .urgency-badge {
-  margin-left: 0.35rem;
-  color: var(--accent);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--glass-border);
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.22rem 0.6rem;
+  border-radius: 6px;
+}
+
+.urgency-badge--routine {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.urgency-badge--soon {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.urgency-badge--urgent {
+  color: #fb923c;
+  background: rgba(251, 146, 60, 0.18);
+  border: 1px solid rgba(251, 146, 60, 0.35);
+}
+
+.urgency-badge--emergency {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.22);
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  box-shadow: 0 0 10px rgba(248, 113, 113, 0.2);
 }
 
 /* Empty / loading states */

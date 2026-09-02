@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { getStoredUser } from "@/lib/portal-auth";
-import type { PickedLocation } from "@/lib/google-maps";
+import type { PickedLocation } from "@/lib/geo-location";
 import { LocationPickerModal } from "./LocationPickerModal";
 
 type Props = {

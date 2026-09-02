@@ -9,6 +9,14 @@ import { DiagnosisReport } from "./DiagnosisReport";
 
 type Mode = "snapshot" | "live" | "upload";
 
+const PROGRESS_STAGES = [
+  { label: "Preparing image", thresholdSec: 0 },
+  { label: "Checking dental relevance", thresholdSec: 3 },
+  { label: "Analyzing visible oral findings", thresholdSec: 9 },
+  { label: "Evaluating screening urgency", thresholdSec: 20 },
+  { label: "Building your report", thresholdSec: 32 },
+];
+
 export function CameraPanel() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -19,12 +27,42 @@ export function CameraPanel() {
   const [mode, setMode] = useState<Mode>("snapshot");
   const [cameraOn, setCameraOn] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [elapsedSec, setElapsedSec] = useState(0);
+  const [currentStageIdx, setCurrentStageIdx] = useState(0);
   const [status, setStatus] = useState("");
   const [hint, setHint] = useState("");
   const [report, setReport] = useState<PipelineResult | null>(null);
   const [liveActive, setLiveActive] = useState(false);
   const [upload, setUpload] = useState<ImagePayload | null>(null);
   const [dragOver, setDragOver] = useState(false);
+
+  // Timer effect for long analysis UX
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
+    if (loading) {
+      setElapsedSec(0);
+      setCurrentStageIdx(0);
+      timer = setInterval(() => {
+        setElapsedSec((prev) => {
+          const next = prev + 1;
+          // Determine stage
+          for (let i = PROGRESS_STAGES.length - 1; i >= 0; i--) {
+            if (next >= PROGRESS_STAGES[i].thresholdSec) {
+              setCurrentStageIdx(i);
+              break;
+            }
+          }
+          return next;
+        });
+      }, 1000);
+    } else {
+      setElapsedSec(0);
+      setCurrentStageIdx(0);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [loading]);
 
   const captureBase64 = useCallback((): string | null => {
     const video = videoRef.current;
@@ -52,13 +90,13 @@ export function CameraPanel() {
   }, []);
 
   const switchMode = (next: Mode) => {
-    if (liveActive) return;
+    if (liveActive || loading) return;
     if (next === "upload") stopCamera();
     setMode(next);
     setHint("");
     if (next !== "upload") {
       setUpload(null);
-      setStatus(next === "snapshot" ? "" : "");
+      setStatus("");
     } else {
       setStatus("");
     }
@@ -92,16 +130,18 @@ export function CameraPanel() {
   }, []);
 
   const runAnalysis = async (base64: string, mimeType: string, statusMsg: string) => {
+    if (loading) return;
     setLoading(true);
     setHint("");
+    setReport(null);
     setStatus(statusMsg);
     try {
       const result = await analyzeSnapshot(base64, mimeType);
       setReport(result);
       setStatus("Analysis complete");
     } catch (e) {
-      setStatus("Analysis failed");
-      setHint(e instanceof Error ? e.message : "Unknown error");
+      setStatus("Screening note");
+      setHint(e instanceof Error ? e.message : "We couldn't complete the screening. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -113,7 +153,7 @@ export function CameraPanel() {
       setHint("Wait for the camera to load, then try again.");
       return;
     }
-    await runAnalysis(b64, "image/jpeg", "Analyzing snapshot…");
+    await runAnalysis(b64, "image/jpeg", "Analyzing oral snapshot…");
   };
 
   const handleUploadSelect = async (file: File) => {
@@ -123,7 +163,7 @@ export function CameraPanel() {
       setHint("");
       setStatus(`Ready: ${payload.fileName}`);
     } catch (e) {
-      setHint(e instanceof Error ? e.message : "Invalid file");
+      setHint(e instanceof Error ? e.message : "Invalid image file");
     }
   };
 
@@ -142,13 +182,30 @@ export function CameraPanel() {
 
   const handleAnalyzeUpload = async () => {
     if (!upload) {
-      setHint("Choose a teeth photo first.");
+      setHint("Choose a dental photo first.");
       return;
     }
-    await runAnalysis(upload.base64, upload.mimeType, "Analyzing uploaded image…");
+    await runAnalysis(upload.base64, upload.mimeType, "Analyzing uploaded dental image…");
+  };
+
+  const handleLoadSample = async () => {
+    try {
+      setStatus("Loading sample dental image…");
+      const res = await fetch("/landing/hero-teeth-white.png");
+      const blob = await res.blob();
+      const file = new File([blob], "sample-dental-scan.png", { type: "image/png" });
+      const payload = await fileToImagePayload(file);
+      setUpload(payload);
+      setMode("upload");
+      setStatus("Sample image loaded — click Analyze upload");
+      setHint("");
+    } catch {
+      setHint("Could not load sample image. Please upload a photo.");
+    }
   };
 
   const clearUpload = () => {
+    if (loading) return;
     setUpload(null);
     setStatus("");
     setHint("");
@@ -179,7 +236,7 @@ export function CameraPanel() {
         onHint: (msg) => setHint(msg),
         onPartial: (result) => {
           setReport(result);
-          setStatus("Updating diagnosis…");
+          setStatus("Updating screening report…");
         },
         onFinal: (result) => {
           setReport(result);
@@ -218,7 +275,7 @@ export function CameraPanel() {
               aria-selected={mode === "snapshot"}
               className={mode === "snapshot" ? "active" : ""}
               onClick={() => switchMode("snapshot")}
-              disabled={liveActive}
+              disabled={liveActive || loading}
             >
               Snapshot
             </button>
@@ -228,7 +285,7 @@ export function CameraPanel() {
               aria-selected={mode === "live"}
               className={mode === "live" ? "active" : ""}
               onClick={() => switchMode("live")}
-              disabled={liveActive}
+              disabled={liveActive || loading}
             >
               Live
             </button>
@@ -238,7 +295,7 @@ export function CameraPanel() {
               aria-selected={mode === "upload"}
               className={mode === "upload" ? "active" : ""}
               onClick={() => switchMode("upload")}
-              disabled={liveActive}
+              disabled={liveActive || loading}
             >
               Upload
             </button>
@@ -250,17 +307,18 @@ export function CameraPanel() {
             className={`upload-zone ${upload ? "upload-zone--filled" : ""} ${dragOver ? "upload-zone--drag" : ""} ${loading ? "upload-zone--busy" : ""}`}
             onDragOver={(e) => {
               e.preventDefault();
-              setDragOver(true);
+              if (!loading) setDragOver(true);
             }}
             onDragLeave={() => setDragOver(false)}
             onDrop={handleDrop}
-            onClick={() => !upload && fileInputRef.current?.click()}
+            onClick={() => !upload && !loading && fileInputRef.current?.click()}
           >
             <input
               ref={fileInputRef}
               type="file"
               accept="image/jpeg,image/png,image/webp"
               hidden
+              disabled={loading}
               onChange={handleFileInput}
             />
             {upload ? (
@@ -269,23 +327,36 @@ export function CameraPanel() {
                 <img src={upload.previewUrl} alt="Uploaded teeth" className="upload-preview" />
                 <div className="upload-meta">
                   <span className="upload-name">{upload.fileName}</span>
-                  <button
-                    type="button"
-                    className="upload-change"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      fileInputRef.current?.click();
-                    }}
-                  >
-                    Change image
-                  </button>
+                  {!loading && (
+                    <button
+                      type="button"
+                      className="upload-change"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        fileInputRef.current?.click();
+                      }}
+                    >
+                      Change image
+                    </button>
+                  )}
                 </div>
               </>
             ) : (
               <div className="upload-empty">
                 <div className="upload-icon">↑</div>
-                <p className="upload-title">Drop a teeth photo here</p>
+                <p className="upload-title">Drop a dental photo here</p>
                 <span className="upload-sub">or click to browse · JPEG, PNG, WebP</span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ marginTop: "0.85rem", fontSize: "0.8rem" }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void handleLoadSample();
+                  }}
+                >
+                  ⚡ Try sample demo scan
+                </button>
               </div>
             )}
           </div>
@@ -298,7 +369,7 @@ export function CameraPanel() {
               <div className="viewport-placeholder">
                 <div className="placeholder-icon">📷</div>
                 <p>Camera off</p>
-                <span>Enable camera to begin scanning</span>
+                <span>Enable camera to begin oral screening</span>
               </div>
             )}
             {cameraOn && (
@@ -317,11 +388,59 @@ export function CameraPanel() {
         )}
         <canvas ref={canvasRef} hidden />
 
+        {/* Long analysis reassurance & stage indicators */}
+        {loading && (
+          <div className="scan-progress-box" style={{ marginTop: "1rem", padding: "1rem", borderRadius: "12px", background: "rgba(15, 23, 42, 0.8)", border: "1px solid rgba(56, 189, 248, 0.2)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+              <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "#38bdf8" }}>
+                AI Screening in progress
+              </span>
+              <span style={{ fontSize: "0.75rem", padding: "2px 8px", borderRadius: "999px", background: "rgba(56, 189, 248, 0.15)", color: "#bae6fd", fontFamily: "monospace" }}>
+                ⏱️ {elapsedSec}s elapsed
+              </span>
+            </div>
+
+            <div className="progress-steps" style={{ display: "flex", flexDirection: "column", gap: "0.35rem", margin: "0.6rem 0" }}>
+              {PROGRESS_STAGES.map((s, idx) => {
+                const isCurrent = idx === currentStageIdx;
+                const isDone = idx < currentStageIdx;
+                return (
+                  <div
+                    key={s.label}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                      fontSize: "0.78rem",
+                      color: isCurrent ? "#38bdf8" : isDone ? "#4ade80" : "#64748b",
+                      fontWeight: isCurrent ? 600 : 400,
+                    }}
+                  >
+                    <span>{isDone ? "✓" : isCurrent ? "⏳" : "○"}</span>
+                    <span>{s.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {elapsedSec >= 15 && elapsedSec < 35 && (
+              <p style={{ fontSize: "0.75rem", color: "#94a3b8", margin: "0.4rem 0 0", fontStyle: "italic" }}>
+                ℹ️ Detailed visual screening can take a little longer.
+              </p>
+            )}
+            {elapsedSec >= 35 && (
+              <p style={{ fontSize: "0.75rem", color: "#94a3b8", margin: "0.4rem 0 0", fontStyle: "italic" }}>
+                ℹ️ DaantShaant is evaluating multiple oral-health signals and nearby specialists.
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="control-row">
           {mode === "upload" ? (
             <>
               {upload && (
-                <button type="button" className="btn btn-ghost" onClick={clearUpload}>
+                <button type="button" className="btn btn-ghost" onClick={clearUpload} disabled={loading}>
                   Clear
                 </button>
               )}
@@ -331,16 +450,27 @@ export function CameraPanel() {
                 onClick={handleAnalyzeUpload}
                 disabled={loading || !upload}
               >
-                {loading ? "Analyzing…" : "Analyze upload"}
+                {loading ? `Analyzing (${elapsedSec}s)…` : "Analyze upload"}
               </button>
               {!upload && (
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  Choose file
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={loading}
+                  >
+                    Choose file
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={handleLoadSample}
+                    disabled={loading}
+                  >
+                    Try sample
+                  </button>
+                </>
               )}
             </>
           ) : (
@@ -362,7 +492,7 @@ export function CameraPanel() {
                   onClick={handleTakePhoto}
                   disabled={loading}
                 >
-                  {loading ? "Analyzing…" : "Capture & analyze"}
+                  {loading ? `Analyzing (${elapsedSec}s)…` : "Capture & analyze"}
                 </button>
               )}
 
@@ -394,14 +524,14 @@ export function CameraPanel() {
                 {status}
               </p>
             )}
-            {hint && <p className="hint-text">{hint}</p>}
+            {hint && <p className="hint-text">⚠️ {hint}</p>}
           </div>
         )}
       </section>
 
       <DiagnosisReport
         result={report}
-        label={liveActive ? "Live diagnosis" : "AI diagnosis report"}
+        label={liveActive ? "Live screening report" : "AI screening report"}
         loading={loading && !report}
         liveActive={liveActive}
       />

@@ -174,8 +174,8 @@ export function ChatInterface({
     <div className="chat-interface">
       <div className="chat-header">
         <div className="chat-header-content">
-          <h2 className="chat-title">DantShaant AI Assistant</h2>
-          <p className="chat-subtitle">Your oral health companion</p>
+          <h2 className="chat-title">DaantShaant AI Assistant</h2>
+          <p className="chat-subtitle">Your AI oral-health companion</p>
         </div>
         <button
           type="button"
@@ -192,13 +192,13 @@ export function ChatInterface({
             <div className="chat-empty-icon">💬</div>
             <h3 className="chat-empty-title">Start a conversation</h3>
             <p className="chat-empty-text">
-              Ask me about oral health, or share a photo of your teeth for analysis
+              Ask questions about oral hygiene, dental care tips, or share a photo of your teeth for screening.
             </p>
             <div className="chat-suggestions">
               <button
                 type="button"
                 className="chat-suggestion"
-                onClick={() => setInputText("How often should I brush my teeth?")}
+                onClick={() => setInputText("How often should I brush and floss?")}
               >
                 How often should I brush?
               </button>
@@ -214,7 +214,7 @@ export function ChatInterface({
                 className="chat-suggestion"
                 onClick={() => fileInputRef.current?.click()}
               >
-                📷 Analyze my teeth
+                📷 Screen teeth photo
               </button>
             </div>
           </div>
@@ -226,7 +226,7 @@ export function ChatInterface({
             {loading && (
               <div className="chat-message chat-message--assistant">
                 <div className="chat-message-header">
-                  <span className="chat-message-sender">DantShaant AI</span>
+                  <span className="chat-message-sender">DaantShaant AI</span>
                 </div>
                 <div className="chat-message-content">
                   <div className="chat-typing">

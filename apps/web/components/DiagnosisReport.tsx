@@ -31,12 +31,26 @@ function conditionIcon(label: string): string {
   return "?";
 }
 
-function formatAction(action: string): string {
-  return action.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+const FINDING_NAME_MAP: Record<string, string> = {
+  cavity_suspect: "Possible decay-related visual finding",
+  cavity_advanced: "Possible structural decay / tooth wear",
+  tartar: "Visible tartar / calculus",
+  plaque_detected: "Visible plaque deposits",
+  gingivitis_signs: "Visible signs of gum inflammation",
+  gum_disease_severe: "Visible signs of advanced gum concern",
+  missing_or_damaged_teeth: "Missing or visibly damaged tooth structure",
+  discoloration: "Visible tooth surface discoloration",
+  healthy_tissue: "Healthy oral tissue appearance",
+};
+
+function formatFindingName(label: string): string {
+  const key = label.toLowerCase().trim();
+  if (FINDING_NAME_MAP[key]) return FINDING_NAME_MAP[key];
+  return label.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function formatLabel(label: string): string {
-  return label.replace(/_/g, " ");
+function formatAction(action: string): string {
+  return action.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export function DiagnosisReport({
@@ -68,7 +82,7 @@ export function DiagnosisReport({
     let highestConf = 0;
     if (result.analysis && result.analysis.findings) {
       result.analysis.findings.forEach((f: any) => {
-        const lbl = f.label.toLowerCase();
+        const lbl = (f.label || "").toLowerCase();
         if (lbl !== "healthy_tissue" && lbl !== "healthy" && f.confidence > highestConf) {
           highestConf = f.confidence;
           highestFinding = lbl;
@@ -82,7 +96,6 @@ export function DiagnosisReport({
         const API_BASE = process.env.NEXT_PUBLIC_ORCHESTRATOR_URL ?? "http://127.0.0.1:8000";
         
         if (condition.includes("HEALTHY")) {
-          // Query for toothbrush and toothpaste category products
           const [resBrush, resPaste] = await Promise.all([
             fetch(`${API_BASE}/portal/products/?category=toothbrush&limit=1`),
             fetch(`${API_BASE}/portal/products/?category=toothpaste&limit=1`)
@@ -124,7 +137,6 @@ export function DiagnosisReport({
           return;
         }
 
-        // Map condition or highest visual finding to search query
         let searchQuery = "";
         if (condition.includes("CAVITY") || highestFinding.includes("cavity") || highestFinding.includes("decay")) {
           searchQuery = "cavity";
@@ -141,7 +153,6 @@ export function DiagnosisReport({
         const res = await fetch(`${API_BASE}/portal/products/?search=${encodeURIComponent(searchQuery)}&limit=3`);
         if (res.ok) {
           let data = await res.json();
-          // Fallback if search returns nothing
           if (data.length === 0) {
             const fallbackRes = await fetch(`${API_BASE}/portal/products/?limit=3`);
             if (fallbackRes.ok) {
@@ -170,7 +181,7 @@ export function DiagnosisReport({
         <div className="loader-ring">
           <div className="loader-ring-inner" />
         </div>
-        <p className="loader-text">Running vision model & clinical mapping…</p>
+        <p className="loader-text">Screening oral findings & evaluating clinical urgency…</p>
       </aside>
     );
   }
@@ -183,27 +194,27 @@ export function DiagnosisReport({
         </div>
         <div className="empty-illustration">
           <div className="empty-icon">🦷</div>
-          <p className="empty-title">Your report appears here</p>
+          <p className="empty-title">Your screening report appears here</p>
           <p className="empty-desc">
-            Start the camera, upload a photo, or run live analysis. Results
-            update in real time.
+            Capture a snapshot, upload an image, or start live analysis. Real-time screening
+            evaluates oral findings and nearby care recommendations.
           </p>
         </div>
         <ul className="empty-steps">
-          <li><span>1</span> Camera or upload</li>
-          <li><span>2</span> Align teeth in frame</li>
-          <li><span>3</span> Analyze</li>
+          <li><span>1</span> Take snapshot or upload image</li>
+          <li><span>2</span> AI evaluates oral relevance & findings</li>
+          <li><span>3</span> Get screening report & specialist routing</li>
         </ul>
       </aside>
     );
   }
 
   const { analysis, diagnosis } = result;
-  const confidencePct = Math.round(diagnosis.confidence * 100);
+  const confidencePct = Math.round((diagnosis.confidence || 0) * 100);
   const sevClass = severityClass(diagnosis.severity);
-  // Phase 3B-lite: prefer the safer screening wording when the backend provides it.
   const triage = diagnosis.triage ?? null;
-  const headline = triage?.condition_summary ?? diagnosis.condition_label;
+  const headline = triage?.condition_summary ?? diagnosis.condition_label.replace(/_/g, " ");
+  const urgency = triage?.urgency_level ?? "routine";
 
   return (
     <aside className={`report-panel report-panel--ready ${liveActive ? "report-panel--live" : ""}`}>
@@ -219,14 +230,21 @@ export function DiagnosisReport({
       <div className={`condition-hero ${sevClass}`}>
         <div className="condition-icon">{conditionIcon(diagnosis.condition_label)}</div>
         <div className="condition-body">
-          <span className="condition-label">AI screening — possible concern</span>
+          <span className="condition-label">
+            {triage ? "AI Screening Verdict" : "AI Screening — Possible Concern"}
+          </span>
           <h3 className="condition-name">{headline}</h3>
-          <span className={`severity-badge ${sevClass}`}>{diagnosis.severity}</span>
-          {triage && (
-            <span className="severity-badge urgency-badge">{triage.urgency_level}</span>
-          )}
+          <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", alignItems: "center" }}>
+            {triage ? (
+              <span className={`severity-badge urgency-badge urgency-badge--${urgency}`}>
+                Urgency: {urgency.toUpperCase()}
+              </span>
+            ) : (
+              <span className={`severity-badge ${sevClass}`}>{diagnosis.severity}</span>
+            )}
+          </div>
         </div>
-        <div className="confidence-ring" style={{ "--pct": confidencePct } as React.CSSProperties}>
+        <div className="confidence-ring" style={{ "--pct": confidencePct } as React.CSSProperties} title="AI visual confidence">
           <svg viewBox="0 0 36 36">
             <path
               className="ring-bg"
@@ -244,7 +262,7 @@ export function DiagnosisReport({
 
       <div className="stat-cards">
         <div className="stat-card stat-card-wide">
-          <span className="stat-label">Recommended action</span>
+          <span className="stat-label">Recommended Action</span>
           <span className="stat-action">
             {triage?.recommended_actions?.[0] ?? formatAction(diagnosis.action_trigger)}
           </span>
@@ -252,11 +270,11 @@ export function DiagnosisReport({
         {triage && (
           <>
             <div className="stat-card">
-              <span className="stat-label">Visit timeframe</span>
+              <span className="stat-label">Visit Timeframe</span>
               <span className="stat-action">{triage.visit_timeframe}</span>
             </div>
             <div className="stat-card">
-              <span className="stat-label">Recommended specialist</span>
+              <span className="stat-label">Recommended Specialist</span>
               <span className="stat-action">
                 {triage.recommended_specialist ?? "General dentist"}
               </span>
@@ -267,11 +285,11 @@ export function DiagnosisReport({
 
       {triage && (
         <div className="findings-block triage-block">
-          <h4>AI screening triage</h4>
+          <h4>Clinical Screening Summary</h4>
           <p className="triage-verdict">{triage.verdict}</p>
           {triage.possible_concerns.length > 0 && (
             <>
-              <span className="triage-sublabel">Possible concerns</span>
+              <span className="triage-sublabel">Possible Concerns Identified</span>
               <ul className="triage-list">
                 {triage.possible_concerns.map((concern) => (
                   <li key={concern}>{concern}</li>
@@ -281,9 +299,9 @@ export function DiagnosisReport({
           )}
           {triage.recommended_actions.length > 1 && (
             <>
-              <span className="triage-sublabel">Recommended next steps</span>
+              <span className="triage-sublabel">Recommended Next Steps</span>
               <ul className="triage-list">
-                {triage.recommended_actions.map((action) => (
+                {triage.recommended_actions.slice(1).map((action) => (
                   <li key={action}>{action}</li>
                 ))}
               </ul>
@@ -291,7 +309,7 @@ export function DiagnosisReport({
           )}
           {triage.limitations.length > 0 && (
             <>
-              <span className="triage-sublabel">Limitations</span>
+              <span className="triage-sublabel">Screening Limitations</span>
               <ul className="triage-list triage-list--dim">
                 {triage.limitations.map((limitation) => (
                   <li key={limitation}>{limitation}</li>
@@ -302,13 +320,18 @@ export function DiagnosisReport({
         </div>
       )}
 
-      {analysis.findings.length > 0 && (
+      {analysis && analysis.findings && analysis.findings.length > 0 && (
         <div className="findings-block">
-          <h4>Visual screening findings</h4>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.65rem" }}>
+            <h4 style={{ margin: 0 }}>Visual Screening Findings</h4>
+            <span style={{ fontSize: "0.72rem", color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              AI Visual Confidence
+            </span>
+          </div>
           <div className="finding-chips">
             {analysis.findings.map((f, i) => (
               <div key={i} className="finding-chip">
-                <span className="finding-name">{formatLabel(f.label)}</span>
+                <span className="finding-name">{formatFindingName(f.label)}</span>
                 <div className="finding-bar-wrap">
                   <div
                     className="finding-bar"
@@ -323,17 +346,22 @@ export function DiagnosisReport({
       )}
 
       {diagnosis.meets_threshold === false && (
-        <p className="alert alert-warn">Low confidence — try a clearer, well-lit teeth photo.</p>
+        <p className="alert alert-warn">Low visual clarity — try a well-lit photo with teeth clearly visible.</p>
       )}
-      {analysis.model_id === "stub-fallback" && (
-        <p className="alert alert-warn">
-          Gemini unavailable — showing placeholder data. Check API key and restart backend.
-        </p>
+
+      {!loading && result && !liveActive && (
+        <div style={{ marginTop: "1.25rem" }}>
+          <FindDentistsButton
+            issue={diagnosis.triage?.recommended_specialist || diagnosis.condition_label}
+            scanId={diagnosis.diagnosis_id}
+            severity={diagnosis.severity}
+          />
+        </div>
       )}
 
       {!loading && result && !liveActive && recommendedProducts.length > 0 && (
-        <div className="recommendations-block">
-          <h4>🦷 Recommended Products</h4>
+        <div className="recommendations-block" style={{ marginTop: "1.5rem" }}>
+          <h4>🦷 Oral Care Products for You</h4>
           <div className="recommendations-list">
             {recommendedProducts.map((p, idx) => {
               const imageSrc = p.images && p.images.length > 0 ? p.images[0] : "";
@@ -378,18 +406,10 @@ export function DiagnosisReport({
         </div>
       )}
 
-      {!loading && result && !liveActive && diagnosis.meets_threshold !== false && (
-        <div style={{ marginTop: "1.25rem" }}>
-          <FindDentistsButton
-            issue={diagnosis.triage?.recommended_specialist || diagnosis.condition_label}
-            scanId={diagnosis.diagnosis_id}
-            severity={diagnosis.severity}
-          />
-        </div>
-      )}
+      <div className="safety-statement" style={{ marginTop: "1.5rem", padding: "0.85rem 1rem", borderRadius: "10px", background: "rgba(30, 41, 59, 0.6)", border: "1px solid rgba(255, 255, 255, 0.08)", fontSize: "0.78rem", color: "#94a3b8", lineHeight: 1.5 }}>
+        🛡️ <strong>Safety Statement:</strong> DaantShaant provides AI-assisted screening, not a medical diagnosis. A licensed dentist should confirm concerns and treatment needs.
+      </div>
 
-      <p className="disclaimer">{diagnosis.disclaimer}</p>
-      
       <CheckoutModal
         product={selectedProduct}
         isOpen={isCheckoutOpen}

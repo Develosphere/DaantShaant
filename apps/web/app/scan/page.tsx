@@ -18,14 +18,14 @@ export default function ScanPage() {
             <span className="hero-gradient"> Know your teeth.</span>
           </h1>
           <p className="hero-desc">
-            Capture a photo or run live video — DantShaant analyzes teeth in seconds
-            and returns a clear diagnosis report powered by Gemini vision.
+            Capture a photo or run live video — DaantShaant screens your smile in seconds
+            and provides an AI-assisted screening report and specialist recommendations.
           </p>
           <ul className="feature-pills">
-            <li>Snapshot analysis</li>
-            <li>Live WebSocket scan</li>
+            <li>Oral snapshot</li>
+            <li>Live camera scan</li>
             <li>Upload image</li>
-            <li>OpenCV quality gate</li>
+            <li>Dentist navigation</li>
           </ul>
         </section>
 
@@ -35,9 +35,9 @@ export default function ScanPage() {
       </main>
 
       <footer className="site-footer">
-        <span>DantShaant © 2026</span>
+        <span>DaantShaant © 2026</span>
         <span className="footer-dot" />
-        <span>Awareness tool — not a medical diagnosis</span>
+        <span>AI-assisted screening tool — not a medical diagnosis</span>
       </footer>
     </div>
   );

@@ -783,4 +783,43 @@ Implemented a reproducible, lightweight clinical evaluation harness and metric c
 
 Phase 10 Fast Track — Final UI Integration + Demo UX.
 
+---
+
+## Phase 10 Fast Track — Final UI Integration + Demo UX Polish
+
+**Date:** September 2026
+**Status:** COMPLETE
+
+### Summary
+
+Unified and polished the frontend interface across the end-to-end patient journey for hackathon demonstration:
+- **Hero Oral Scan Experience:** Multi-stage client-side progress tracker with elapsed time indicators and reassuring phased messages (15s/35s) for smooth long-running inference UX. Prevented duplicate requests while keeping the active preview image preserved. Added a built-in "Try sample demo scan" option for instant evaluation without uploading external files.
+- **Triage-First Screening Report:** Prioritized "AI Screening Verdict" over definitive diagnosis labels, displaying readable possible concerns, semantic urgency levels (`routine`, `soon`, `urgent`, `emergency`), human-friendly finding names (e.g. "Possible decay-related visual finding", "Visible tartar / calculus"), confidence labeled as "AI visual confidence", explicit limitations, and visible non-medical screening safety disclaimers.
+- **Dentist Discovery & MapLibre OpenFreeMap:** Enhanced bi-directional interaction between dentist cards and OpenFreeMap vector map (clicking a card pans/zooms to the pin; clicking a pin selects the dentist). Distinguished verified platform providers (supporting consultation booking) from external OpenStreetMap clinics (providing direct call and directions without fake booking buttons). Provided clean, friendly geolocation error handling with instant location search.
+- **Safety Identity & Friendly Error Mapping:** Standardized chat assistant branding to "DaantShaant AI Assistant" / "Your AI oral-health companion". Intercepted raw backend JSON errors (`downstream_unavailable`, timeouts, relevance retakes/rejections) into clean, polite user-facing guidance.
+
+### Files Modified
+
+- `apps/web/lib/types.ts` (Added `RelevanceInfo`, enhanced `PipelineResult` with status and relevance metadata)
+- `apps/web/lib/api.ts` (Friendly user-facing error message mapping, relevance status check, removed raw JSON errors)
+- `apps/web/components/dentists/FindDentistsButton.tsx` (Removed legacy `google-maps` import, replaced with `geo-location`)
+- `apps/web/components/dentists/DentistMapView.tsx` (Card-to-map focus interaction, external clinic badge, friendly geolocation denial fallback)
+- `apps/web/components/DiagnosisReport.tsx` (Triage-first presentation, human-readable finding names, urgency levels, safety statement)
+- `apps/web/components/CameraPanel.tsx` (Multi-stage progress UX, elapsed timer, 15s/35s messages, demo sample image helper)
+- `apps/web/components/ChatInterface.tsx` (Branding and assistant safety identity updates)
+- `apps/web/components/ChatMessage.tsx` (Standardized assistant sender label)
+- `apps/web/app/scan/page.tsx` (Polished copy and screening tool description)
+- `apps/web/app/globals.css` (Added semantic urgency classes and progress styles)
+- `context.md` (Updated state and completed phases)
+- `docs/phase-log.md` (Appended Phase 10 Fast Track log)
+
+### Validation
+
+- Next.js Production Build (`npm run build` in `apps/web`): Succeeded with exit code 0. All 26 static routes generated cleanly.
+- Code audit completed for scan, report, dentist map, and chat interfaces.
+
+### Next
+
+Phase 11 — Deployment Fast Track.
+
 

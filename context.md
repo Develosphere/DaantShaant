@@ -226,6 +226,29 @@ Phase 8-lite added a reproducible clinical evaluation harness and metrics calcul
 - **Dentist Ranking Benchmark**: Validates specialist clinical relevance priority over commercial partner status across standard scenarios.
 - **CLI Runner (`scripts/run_evaluation.py`)**: Offline mock simulation mode (default, zero external network calls) and explicit `--real` mode; outputs human-readable console tables and demo summary JSON.
 
+## Final UI Integration & Demo UX — PHASE 10 FAST TRACK COMPLETE
+
+Phase 10 Fast Track unified and polished the frontend user experience across the primary patient demo journey:
+
+- **Scan Page & Loading Experience**:
+  - Safe multi-stage client-side progress tracker (Preparing image → Checking dental relevance → Analyzing oral findings → Evaluating screening urgency → Building report).
+  - Live elapsed timer (`⏱️ Ns elapsed`) and phased reassurance messages at 15s and 35s to eliminate uncertainty during long-running inference.
+  - Prevention of duplicate analyze clicks while preserving the selected image.
+  - Built-in "Try sample demo scan" helper for instant evaluation without uploading local files.
+- **AI Screening & Triage Report**:
+  - Triage-first presentation: "AI Screening Verdict" headline with "Possible Concerns" list and semantic urgency badges (`urgency-routine`, `urgency-soon`, `urgency-urgent`, `urgency-emergency`).
+  - Human-readable visual finding names (e.g. "Possible decay-related visual finding", "Visible tartar / calculus", "Visible signs of gum inflammation", "Missing or visibly damaged tooth structure").
+  - Confidence explicitly presented as "AI visual confidence" rather than diagnostic certainty.
+  - Prominent non-medical screening safety statement: *"DaantShaant provides AI-assisted screening, not a medical diagnosis. A licensed dentist should confirm concerns and treatment needs."*
+- **Dentist Discovery & MapLibre OpenFreeMap Integration**:
+  - Seamless interactive link between dentist cards and OpenFreeMap vector map (clicking a card focuses and pans the map; clicking a pin selects the card).
+  - Clear distinction between verified platform dentists (with consultation booking) and external OpenStreetMap clinic listings (with direct call/directions, no fake booking).
+  - Graceful geolocation permission denial fallback with friendly guidance and instant location search modal.
+  - Visible OpenStreetMap contributors and OpenFreeMap attribution maintained.
+- **Chat Safety Identity & Error Handling**:
+  - AI assistant identity set to "DaantShaant AI Assistant" / "Your AI oral-health companion" without claiming to be a licensed human dentist.
+  - Intercepts raw backend JSON errors (`downstream_unavailable`, `downstream_error`, timeout, relevance reject/retake) into clean, friendly user-facing messages.
+
 ## Known Remaining Issues
 
 - AI usage is less fragmented but not fully unified: chat text generation, product descriptions, and the product recommendation graph go through the shared orchestrator gateway, and Teeth Analyzer clinical vision now runs a service-local Qwen-primary / Gemini-fallback policy (Phase 2C). Clinical RAG and the recommendation embedding service still use direct Gemini paths. OpenRouter has ZERO active runtime references project-wide.
@@ -253,9 +276,10 @@ Phase 8-lite added a reproducible clinical evaluation harness and metrics calcul
 | 4-lite | Unified Clinical LangGraph (deterministic scan-to-care pipeline orchestration) | COMPLETE |
 | 6 Fast Track | Dentist Discovery + OSM/Overpass + MapLibre/OpenFreeMap | COMPLETE |
 | 8-lite | Evaluation Harness + Demo Metrics | COMPLETE |
+| 10 Fast Track | Final UI Integration + Demo UX Polish | COMPLETE |
 
 The former Phase 1C is obsolete because its domain migration scope was merged into Phase 1B.
 
 ## Next Phase
 
-**Phase 10 Fast Track — Final UI Integration + Demo UX**.
+**Phase 11 — Deployment Fast Track**.

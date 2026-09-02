@@ -150,7 +150,12 @@ export function DentistMapView() {
         renderMap({ lat: data.patient_lat, lng: data.patient_lng }, data.dentists);
       } catch (err) {
         console.error("Error loading recommendations:", err);
-        setError(err instanceof Error ? err.message : "Could not load recommendations");
+        const msg = err instanceof Error ? err.message : "";
+        if (msg.includes("Location access was denied") || msg.includes("denied")) {
+          setError("Location access wasn't enabled. Search by city or address instead.");
+        } else {
+          setError("Could not load nearby dental recommendations. Search by city or address instead.");
+        }
       } finally {
         setLoading(false);
       }
@@ -285,7 +290,12 @@ export function DentistMapView() {
                   className={`${styles.listItem} ${d.is_best ? styles.listItemBest : ""} ${
                     selected?.rank === d.rank ? styles.listItemActive : ""
                   }`}
-                  onClick={() => setSelected(d)}
+                  onClick={() => {
+                    setSelected(d);
+                    if (mapInstance.current) {
+                      mapInstance.current.flyTo({ center: [d.lng, d.lat], zoom: 14, essential: true });
+                    }
+                  }}
                 >
                   {d.is_best && <span className={styles.badgeBest}>Best match</span>}
                   {d.tier === "platform" && (
@@ -294,8 +304,8 @@ export function DentistMapView() {
                     </span>
                   )}
                   {d.tier !== "platform" && (
-                    <span style={{ fontSize: "0.72rem", padding: "2px 6px", background: "rgba(100,116,139,0.2)", color: "#94a3b8", borderRadius: 4, marginLeft: 4 }}>
-                      OSM
+                    <span style={{ fontSize: "0.72rem", padding: "2px 7px", background: "rgba(100,116,139,0.25)", color: "#cbd5e1", borderRadius: 4, marginLeft: 4, fontWeight: 500 }}>
+                      External listing
                     </span>
                   )}
                   <div className={styles.listName}>{d.name}</div>

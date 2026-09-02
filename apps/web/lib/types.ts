@@ -53,7 +53,19 @@ export type DiagnosisResult = {
   triage?: TriageResult | null;
 };
 
+export type RelevanceInfo = {
+  classification: "relevant" | "retake" | "unrelated";
+  recommended_action: "continue" | "retake" | "reject";
+  reason: string;
+  retake_reason?: string | null;
+  confidence: number;
+  relevance_score: number;
+  visible_regions: string[];
+};
+
 export type PipelineResult = {
+  status?: "analyzed" | "retake" | "rejected";
+  relevance?: RelevanceInfo | null;
   analysis: AnalysisResult;
   diagnosis: DiagnosisResult;
 };

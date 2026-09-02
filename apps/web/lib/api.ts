@@ -24,11 +24,35 @@ export async function analyzeSnapshot(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(
-      typeof err.detail === "string"
-        ? err.detail
-        : JSON.stringify(err.detail ?? res.statusText)
-    );
+    let friendlyMessage = "We couldn't complete the screening right now. Please try again.";
+    const detail = err.detail;
+    if (typeof detail === "object" && detail !== null) {
+      if (detail.code === "downstream_unavailable" || detail.code === "downstream_error") {
+        friendlyMessage = "Screening service is temporarily busy or unavailable. Please try again in a moment.";
+      } else if (detail.code === "timeout") {
+        friendlyMessage = "Analysis took longer than expected. Please retry.";
+      } else if (typeof detail.detail === "string" && detail.detail) {
+        friendlyMessage = detail.detail;
+      }
+    } else if (typeof detail === "string" && detail.length > 0) {
+      if (detail.includes("downstream_unavailable") || detail.includes("Connection refused")) {
+        friendlyMessage = "Screening services are currently unavailable. Please check your backend connection.";
+      } else {
+        friendlyMessage = detail;
+      }
+    } else if (res.status === 504 || res.status === 408) {
+      friendlyMessage = "Analysis took longer than expected. Please retry.";
+    }
+    throw new Error(friendlyMessage);
   }
-  return res.json();
+  const data = (await res.json()) as PipelineResult;
+  if (data.status === "rejected") {
+    const reason = data.relevance?.reason || "This image doesn't appear suitable for oral screening.";
+    throw new Error(reason);
+  }
+  if (data.status === "retake") {
+    const reason = data.relevance?.retake_reason || "Please take another photo with your mouth/teeth more clearly visible.";
+    throw new Error(reason);
+  }
+  return data;
 }
