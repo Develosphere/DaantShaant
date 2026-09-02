@@ -735,3 +735,52 @@ Google Maps / Places active runtime callers: **ZERO**.
 
 Phase 8-lite — Evaluation Harness + Demo Metrics.
 
+---
+
+## Phase 8-lite — Evaluation Harness + Demo Metrics
+
+**Date:** September 2026
+**Status:** COMPLETE
+
+### Summary
+
+Implemented a reproducible, lightweight clinical evaluation harness and metric calculation engine for DaantShaant:
+- **Manifest Schema & Fixture:** Flexible JSON manifest supporting `expected_relevance`, `expected_findings`, `expected_urgency`, `expected_specialist`, and third-party provenance metadata (`source`, `license`, `attribution`).
+- **Metrics Calculation:**
+  - Semantic relevance accuracy, class counts, and confusion matrix
+  - Multi-label clinical findings set-based precision, recall, F1, and exact match rate
+  - Deterministic triage urgency and specialist match accuracy
+  - Patient-facing safety phrasing violation detection (flags definitive diagnosis claims)
+  - Latency distribution statistics (mean, median, p95, min, max)
+  - AI provider fallback rate monitoring
+- **Dentist Ranking Benchmark:** Verifies specialist clinical relevance priority over commercial partner status across standard scenarios.
+- **Modes:** Offline/mock simulation mode (default) and explicit `--real` mode.
+- **CLI:** `scripts/run_evaluation.py` producing human-readable tables and judge-friendly demo summary JSON.
+- **Data Policy:** Zero private or patient medical images committed; raw dataset files remain external to Git.
+
+### Files Created
+
+- `orchestrator/src/orchestrator/evaluation/__init__.py`
+- `orchestrator/src/orchestrator/evaluation/schemas.py`
+- `orchestrator/src/orchestrator/evaluation/metrics.py`
+- `orchestrator/src/orchestrator/evaluation/runner.py`
+- `orchestrator/src/orchestrator/evaluation/fixtures/manifest.example.json`
+- `scripts/run_evaluation.py`
+- `orchestrator/tests/test_evaluation.py` (16 unit tests)
+- `docs/evaluation.md`
+
+### Files Modified
+
+- `context.md`
+- `docs/phase-log.md`
+
+### Validation
+
+- `orchestrator/tests/test_evaluation.py`: 16 passed, 0 failed in 0.60s. Zero real external network calls.
+- `scripts/run_evaluation.py`: Successfully generated summary table and JSON output.
+
+### Next
+
+Phase 10 Fast Track — Final UI Integration + Demo UX.
+
+

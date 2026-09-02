@@ -1,0 +1,66 @@
+{
+  "description": "DaantShaant Synthetic Evaluation Manifest (Phase 8-lite)",
+  "version": "1.0",
+  "cases": [
+    {
+      "id": "case-rel-001",
+      "image_path": "external/fixtures/intraoral_cavity_01.jpg",
+      "expected_relevance": "relevant",
+      "expected_findings": ["cavity_suspect"],
+      "expected_urgency": "soon",
+      "expected_specialist": "restorative dentist",
+      "source": "Synthetic Fixture / Caries Benchmark Candidate",
+      "license": "CC-BY-4.0",
+      "attribution": "DaantShaant Screening Test Suite",
+      "notes": "Clear intraoral view showing molar pit discoloration."
+    },
+    {
+      "id": "case-rel-002",
+      "image_path": "external/fixtures/tartar_buildup_02.jpg",
+      "expected_relevance": "relevant",
+      "expected_findings": ["tartar", "gingivitis_signs"],
+      "expected_urgency": "routine",
+      "expected_specialist": "dental hygienist",
+      "source": "Synthetic Fixture / Hygiene Benchmark Candidate",
+      "license": "CC-BY-4.0",
+      "attribution": "DaantShaant Screening Test Suite",
+      "notes": "Lower anterior lingual calculus deposit."
+    },
+    {
+      "id": "case-retake-001",
+      "image_path": "external/fixtures/blurry_lighting_03.jpg",
+      "expected_relevance": "retake",
+      "expected_findings": [],
+      "expected_urgency": "routine",
+      "expected_specialist": null,
+      "source": "Synthetic Fixture / Quality Benchmark Candidate",
+      "license": "CC-BY-4.0",
+      "attribution": "DaantShaant Screening Test Suite",
+      "notes": "Extreme blur / insufficient lighting requiring image retake."
+    },
+    {
+      "id": "case-unrelated-001",
+      "image_path": "external/fixtures/room_photo_04.jpg",
+      "expected_relevance": "unrelated",
+      "expected_findings": [],
+      "expected_urgency": "routine",
+      "expected_specialist": null,
+      "source": "Synthetic Fixture / Non-Dental Benchmark Candidate",
+      "license": "CC-BY-4.0",
+      "attribution": "DaantShaant Screening Test Suite",
+      "notes": "Non-oral scene (room photo) to verify rejection gate."
+    },
+    {
+      "id": "case-urgent-001",
+      "image_path": "external/fixtures/deep_decay_05.jpg",
+      "expected_relevance": "relevant",
+      "expected_findings": ["cavity_advanced"],
+      "expected_urgency": "urgent",
+      "expected_specialist": "endodontist",
+      "source": "Synthetic Fixture / Advanced Caries Candidate",
+      "license": "CC-BY-4.0",
+      "attribution": "DaantShaant Screening Test Suite",
+      "notes": "Extensive structural tooth decay."
+    }
+  ]
+}

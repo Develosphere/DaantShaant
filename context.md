@@ -1,7 +1,7 @@
 # DaantShaant Context
 
 > Current implementation state. Read this first in every engineering chat.
-> Last updated: Phase 6 Fast Track - Dentist Discovery + OSM/Overpass + MapLibre/OpenFreeMap, September 2026.
+> Last updated: Phase 8-lite - Evaluation Harness + Demo Metrics, September 2026.
 
 ## Product
 
@@ -211,6 +211,21 @@ Phase 6 Fast Track replaced Google Maps / Places runtime dependencies across fro
 - **Attribution**: Proper attribution for OpenStreetMap contributors and OpenFreeMap is visibly rendered on the map.
 - **Google Maps / Places**: ZERO active runtime callers.
 
+## Evaluation Harness & Demo Metrics — PHASE 8-LITE COMPLETE
+
+Phase 8-lite added a reproducible clinical evaluation harness and metrics calculation engine (`orchestrator/src/orchestrator/evaluation/`):
+
+- **Dataset Manifest (`schemas.py`)**: Format supporting `expected_relevance`, `expected_findings`, `expected_urgency`, `expected_specialist`, and provenance metadata (`source`, `license`, `attribution`). No patient images are committed; raw datasets stay external to Git.
+- **Evaluation Metrics (`metrics.py`)**:
+  - Semantic relevance accuracy & confusion matrix
+  - Multi-label clinical findings set-based precision, recall, F1, and exact-match rate
+  - Deterministic triage urgency accuracy and specialist match accuracy
+  - Safety phrasing violation detection (flags definitive diagnosis language)
+  - Latency distribution statistics (mean, median, p95, min, max)
+  - AI provider fallback rate monitoring
+- **Dentist Ranking Benchmark**: Validates specialist clinical relevance priority over commercial partner status across standard scenarios.
+- **CLI Runner (`scripts/run_evaluation.py`)**: Offline mock simulation mode (default, zero external network calls) and explicit `--real` mode; outputs human-readable console tables and demo summary JSON.
+
 ## Known Remaining Issues
 
 - AI usage is less fragmented but not fully unified: chat text generation, product descriptions, and the product recommendation graph go through the shared orchestrator gateway, and Teeth Analyzer clinical vision now runs a service-local Qwen-primary / Gemini-fallback policy (Phase 2C). Clinical RAG and the recommendation embedding service still use direct Gemini paths. OpenRouter has ZERO active runtime references project-wide.
@@ -237,9 +252,10 @@ Phase 6 Fast Track replaced Google Maps / Places runtime dependencies across fro
 | 3B-lite | Deterministic Clinical Triage (rule-based screening triage, safety fixes, no LLM) | COMPLETE |
 | 4-lite | Unified Clinical LangGraph (deterministic scan-to-care pipeline orchestration) | COMPLETE |
 | 6 Fast Track | Dentist Discovery + OSM/Overpass + MapLibre/OpenFreeMap | COMPLETE |
+| 8-lite | Evaluation Harness + Demo Metrics | COMPLETE |
 
 The former Phase 1C is obsolete because its domain migration scope was merged into Phase 1B.
 
 ## Next Phase
 
-**Phase 8-lite — Evaluation Harness + Demo Metrics**.
+**Phase 10 Fast Track — Final UI Integration + Demo UX**.
