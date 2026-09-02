@@ -41,7 +41,8 @@ cd ..\apps\web
 npm ci
 
 cd ..\..
-.\scripts\start-services.ps1
+.\start-backends.bat
+# or .\start-backends.ps1
 ```
 
 Required environment values include `DATABASE_URL`, `DATABASE_MIGRATION_URL`, and `JWT_SECRET`. Copy safe placeholders from `.env.example`; never commit a real `.env`.
