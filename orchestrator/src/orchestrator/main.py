@@ -115,23 +115,19 @@ async def analyze_teeth(
     """Snapshot/upload scan. Serves both modes over the shared relevance-gated
     pipeline: clinical analysis runs only for ``relevant`` images; ``retake``
     and ``unrelated`` short-circuit before clinical vision. Relevant scans are
-    persisted with their relevance verdict. Technical relevance-provider
-    failures propagate (they are never reported as ``unrelated``).
+    persisted with their relevance verdict via the clinical LangGraph.
+    Technical relevance-provider failures propagate (they are never reported
+    as ``unrelated``).
     """
     try:
         owned_request = TeethAnalyzePipelineRequest(
             user_id=user["user_id"], **request.model_dump()
         )
-        outcome = await run_scan_with_relevance(owned_request)
-        if outcome.status == "analyzed":
-            from orchestrator.repositories import ScanRepository
-            await ScanRepository(session).add_result(
-                patient_user_id=user["user_id"],
-                input_mode="snapshot",
-                analysis=outcome.analysis,
-                diagnosis=outcome.diagnosis,
-                relevance=outcome.relevance,
-            )
+        outcome = await run_scan_with_relevance(
+            owned_request,
+            db_session=session,
+            input_mode="snapshot",
+        )
         return outcome
     except httpx.HTTPStatusError as exc:
         detail = exc.response.text

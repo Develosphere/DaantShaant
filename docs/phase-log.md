@@ -628,3 +628,56 @@ Replaced the legacy hard-coded disease/severity mapping in the Diagnosis service
 ### Next
 
 Phase 4-lite — Unified Clinical LangGraph.
+
+---
+
+## Phase 4-lite — Unified Clinical LangGraph - COMPLETE
+
+**Date:** September 2026
+**Status:** COMPLETE
+
+### Summary
+
+Unified the clinical scan-to-care flow into a single, deterministic LangGraph StateGraph (`orchestrator/src/orchestrator/clinical/graph.py`). The graph orchestrates the end-to-end pipeline:
+`START → intake → relevance → [route] → clinical_vision → triage → report → persist → END`
+
+Relevance gating (`evaluate_dental_relevance`), clinical vision (`TeethAnalyzerClient` HTTP boundary), diagnosis and deterministic triage (`DiagnosisClient` HTTP boundary), and persistence (`ScanRepository`) remain modular service boundaries. No triage rules or AI provider logic are duplicated inside the orchestrator or graph.
+
+### Topology
+
+```text
+START
+  ↓
+intake
+  ↓
+relevance ──[retake]───→ END
+          ──[reject]───→ END
+          ──[continue]─→ clinical_vision
+                              ↓
+                            triage (extracts DiagnosisClient triage payload)
+                              ↓
+                            report
+                              ↓
+                            persist (persists if db_session provided)
+                              ↓
+                             END
+```
+
+### Key Highlights & Boundaries Preserved
+
+- **Deterministic Orchestration:** LangGraph serves purely as a state machine coordinator; no external LLM calls or patient data leakage introduced by the graph layer.
+- **Service Boundaries Maintained:**
+  - `relevance_node` calls `evaluate_dental_relevance()`.
+  - `clinical_vision_node` calls `run_teeth_analysis_pipeline()` (Teeth Analyzer HTTP service).
+  - `triage_node` reads `DiagnoseResponse.triage` returned by the Diagnosis service (does not import `diagnosis.triage` directly).
+  - `persist_node` invokes `ScanRepository.add_result()` when `db_session` is provided.
+- **Shared Common Path:** `pipeline.run_scan_with_relevance(...)` delegates to `run_clinical_graph(...)`, preserving the exact `ScanOutcome` response shape across snapshot, upload, and live WebSocket frame processing.
+- **Safe Observability Trace:** Appends node execution records `{"node": ..., "status": ..., "duration_ms": ...}` without image base64, prompts, or secrets.
+
+### Validation
+
+- `orchestrator/tests/test_clinical_graph.py` + `orchestrator/tests/test_scan_relevance_integration.py`: 26 passed, 0 failed in 4.15s. Zero external AI API calls.
+
+### Next
+
+Phase 6 Fast Track — Dentist Discovery + OSM/Overpass + MapLibre/OpenFreeMap.

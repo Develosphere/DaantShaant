@@ -1,7 +1,7 @@
 # DaantShaant Context
 
 > Current implementation state. Read this first in every engineering chat.
-> Last updated: Phase 3B-lite - Deterministic Clinical Triage, September 2026.
+> Last updated: Phase 4-lite - Unified Clinical LangGraph, September 2026.
 
 ## Product
 
@@ -13,7 +13,7 @@ DaantShaant is an AI-assisted oral-health screening and care-navigation platform
 Next.js 14
     |
 FastAPI Orchestrator
-    |-- Snapshot/upload/live scan pipeline
+    |-- Unified Clinical LangGraph screening pipeline (snapshot/upload/live)
     |-- Chat + FAISS RAG
     |-- Product recommendation LangGraph
     |-- Dentist recommendation LangGraph
@@ -179,10 +179,23 @@ Phase 3B-lite replaced the legacy hard-coded disease/severity mapping in the Dia
 
 - `services/diagnosis/tests/test_triage.py`: 27 passed. Zero external AI calls. Covers: per-finding urgency, safety wording, missing_or_damaged_teeth safety fix, multiple findings highest-urgency, deduplication, limited visibility/low confidence limitations, specialist routing, visit timeframe, API endpoint compatibility, low quality legacy path, below-threshold confidence, unrecognised finding, no provider/network call, determinism, safe observability logging.
 
+## Unified Clinical LangGraph — PHASE 4-LITE COMPLETE
+
+Phase 4-lite unified the end-to-end clinical screening flow into a single, deterministic StateGraph (`orchestrator/src/orchestrator/clinical/graph.py`).
+
+- **Topology**: `START → intake → relevance → [route] → clinical_vision → triage → report → persist → END`
+- **Relevance routing**: `retake` and `unrelated` short-circuit directly to `END` before expensive clinical vision; `continue` proceeds to `clinical_vision`.
+- **Boundaries**:
+  - `relevance_node` delegates to `evaluate_dental_relevance()`.
+  - `clinical_vision_node` delegates to `run_teeth_analysis_pipeline()` (Teeth Analyzer HTTP boundary). Mechanical image quality remains inside Teeth Analyzer for MVP.
+  - `triage_node` reads `DiagnoseResponse.triage` returned by the Diagnosis HTTP service (does not duplicate rules or import diagnosis internals).
+  - `persist_node` uses `ScanRepository.add_result()` when `db_session` is provided.
+- **Shared Path**: `pipeline.run_scan_with_relevance(...)` is the single integration point calling `run_clinical_graph(...)`, preserving the `ScanOutcome` contract across snapshot, upload, and live WebSocket modes.
+- **Observability**: Safe node execution trace (`node`, `status`, `duration_ms`) appended without image bytes, prompts, or API keys.
+
 ## Known Remaining Issues
 
 - AI usage is less fragmented but not fully unified: chat text generation, product descriptions, and the product recommendation graph go through the shared orchestrator gateway, and Teeth Analyzer clinical vision now runs a service-local Qwen-primary / Gemini-fallback policy (Phase 2C). Clinical RAG and the recommendation embedding service still use direct Gemini paths. OpenRouter has ZERO active runtime references project-wide.
-- Clinical scan-to-care flow is not yet a unified LangGraph.
 - Google Maps/Places remains active and paid-key dependent.
 - Deep evidence grounding (Phase 3A RAG) not yet started — triage rules carry lightweight metadata only (rule_id, rationale), no citations or guideline references.
 - The frontend dependency audit currently reports three high-severity advisories; dependency upgrades require a separate compatibility/security phase.
@@ -205,9 +218,10 @@ Phase 3B-lite replaced the legacy hard-coded disease/severity mapping in the Dia
 | 2B.2 | Production Semantic Relevance Integration (snapshot + upload + live) | COMPLETE |
 | 2C | Qwen Clinical Vision (Teeth Analyzer Qwen primary + Gemini fallback; OpenRouter removed) | COMPLETE |
 | 3B-lite | Deterministic Clinical Triage (rule-based screening triage, safety fixes, no LLM) | COMPLETE |
+| 4-lite | Unified Clinical LangGraph (deterministic scan-to-care pipeline orchestration) | COMPLETE |
 
 The former Phase 1C is obsolete because its domain migration scope was merged into Phase 1B.
 
 ## Next Phase
 
-**Phase 4-lite — Unified Clinical LangGraph** (unify the scan-to-care flow into a single LangGraph). Do NOT start deep Phase 3A RAG yet.
+**Phase 6 Fast Track — Dentist Discovery + OSM/Overpass + MapLibre/OpenFreeMap** (replace Google Maps/Places with open mapping stack).

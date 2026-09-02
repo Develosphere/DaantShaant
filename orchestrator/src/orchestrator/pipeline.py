@@ -1,9 +1,13 @@
 """Compose Teeth Analyzer → Diagnosis (MCP analyze_teeth_image flow).
 
-Phase 2B.2: production scan flow gates the expensive clinical vision/analysis
-behind semantic dental relevance.  ``run_scan_with_relevance`` is the single
-reusable entry point shared by the snapshot/upload HTTP route and the live
-WebSocket frame handler, so relevance routing lives in exactly one place.
+Phase 4-lite: ``run_scan_with_relevance`` now delegates to the unified clinical
+LangGraph (``clinical.graph.run_clinical_graph``) while preserving the exact
+same ``ScanOutcome`` response shape. The graph orchestrates the existing
+pipeline — relevance → clinical vision → triage → report → persist — inside
+a deterministic StateGraph.
+
+``run_teeth_analysis_pipeline`` remains the low-level boundary that the graph
+calls for the Teeth Analyzer + Diagnosis HTTP calls.
 """
 
 import logging
@@ -97,44 +101,29 @@ def _relevance_info(relevance: DentalRelevanceResult) -> RelevanceInfo:
 async def run_scan_with_relevance(
     request: TeethAnalyzePipelineRequest,
     gateway: AIGateway | None = None,
+    *,
+    db_session: object | None = None,
+    input_mode: str = "snapshot",
 ) -> ScanOutcome:
     """Relevance-gate a single image, then run clinical analysis if allowed.
 
+    Phase 4-lite: this function now delegates to the unified clinical
+    LangGraph (``clinical.graph.run_clinical_graph``) which orchestrates
+    the same pipeline — relevance → clinical vision → triage → report →
+    persist — inside a deterministic StateGraph.
+
     This is the ONE shared integration point for snapshot, upload and live.
-    Semantic relevance is evaluated before the Teeth Analyzer request so that
-    expensive clinical vision never runs for ``retake``/``unrelated`` images.
     Provider failures from relevance propagate unchanged - a technical outage
     is never reported as an ``unrelated`` rejection.
     """
-    started = time.perf_counter()
-    relevance = await evaluate_dental_relevance(
-        request.image_base64,
-        request.image_mime_type,
+    from orchestrator.clinical.graph import run_clinical_graph
+
+    return await run_clinical_graph(
+        request,
         gateway=gateway,
+        db_session=db_session,
+        input_mode=input_mode,
     )
-    elapsed_ms = int((time.perf_counter() - started) * 1000)
-    # Safe-by-construction: never log image bytes, prompts, keys, or payload.
-    logger.info(
-        "[RELEVANCE] classification=%s action=%s confidence=%.2f scan_mode=scan duration_ms=%d",
-        relevance.classification,
-        relevance.recommended_action,
-        relevance.confidence,
-        elapsed_ms,
-    )
-
-    info = _relevance_info(relevance)
-
-    if relevance.recommended_action == "continue":
-        result = await run_teeth_analysis_pipeline(request)
-        return ScanOutcome(
-            status="analyzed",
-            relevance=info,
-            analysis=result.analysis,
-            diagnosis=result.diagnosis,
-        )
-    if relevance.classification == "retake":
-        return ScanOutcome(status="retake", relevance=info)
-    return ScanOutcome(status="rejected", relevance=info)
 
 
 async def run_teeth_analysis_pipeline(

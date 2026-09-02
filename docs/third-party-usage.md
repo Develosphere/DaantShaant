@@ -19,7 +19,7 @@ Statuses describe the current runtime after Phase 2C.
 | httpx | **ACTIVE** | Service-to-service HTTP and direct Qwen/Gemini vision REST calls (no AI SDKs) |
 | Gemini | **ACTIVE (fallback)** | Recommendation embeddings still call Gemini directly. Since 2A.4 `GeminiProvider` is the orchestrator gateway FALLBACK (chat text, product descriptions, recommendation reranking/final message). Since 2C it is ALSO the Teeth Analyzer clinical-vision TECHNICAL FALLBACK, service-local over plain httpx `v1beta` `generateContent` (the `google-generativeai` SDK dependency was removed from the analyzer). No Google SDK introduced anywhere |
 | OpenRouter | **REMOVED - PROJECT-WIDE (ZERO active runtime references)** | Removed from orchestrator business text-generation paths (2A.5a–2A.5c). `llm_provider.py` and `openrouter_client.py` deleted. Phase 2C removed the last consumer - Teeth Analyzer clinical vision: `services/teeth_analyzer/src/teeth_analyzer/backends/openrouter.py` deleted and `TEETH_ANALYZER_OPENROUTER_API_KEY`/`_MODEL` config dropped. Only historical doc mentions and a test asserting its absence remain. PERMANENTLY ABANDONED |
-| LangGraph / langchain-core | **ACTIVE** | Product and dentist recommendation graphs |
+| LangGraph / langchain-core | **ACTIVE** | Unified clinical screening pipeline orchestration (Phase 4-lite); product and dentist recommendation graphs. Pure deterministic orchestration — no patient data sent externally by LangGraph itself |
 | FAISS / sentence-transformers | **ACTIVE** | Local dental RAG |
 | OpenCV / Pillow | **ACTIVE** | Image processing |
 | Google Maps / Places / Geocoding | **ACTIVE - TO BE REMOVED** | Existing dentist discovery/map path |
