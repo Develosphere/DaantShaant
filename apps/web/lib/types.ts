@@ -2,6 +2,8 @@ export type VisualFinding = {
   label: string;
   confidence: number;
   region?: string | null;
+  /** Visual clarity reported by clinical vision: "clear" | "partial" | "limited". */
+  visibility?: string | null;
 };
 
 export type AnalysisResult = {
@@ -12,6 +14,27 @@ export type AnalysisResult = {
   model_id: string;
   inference_ms: number;
   analyzed_at: string;
+};
+
+export type UrgencyLevel = "routine" | "soon" | "urgent" | "emergency";
+
+/**
+ * Deterministic AI screening triage (Phase 3B-lite). Screening guidance only -
+ * never a confirmed diagnosis and never treatment advice.
+ */
+export type TriageResult = {
+  verdict: string;
+  condition_summary: string;
+  possible_concerns: string[];
+  urgency_level: UrgencyLevel;
+  recommended_actions: string[];
+  recommended_specialist?: string | null;
+  visit_timeframe: string;
+  limitations: string[];
+  supporting_findings: string[];
+  rule_ids: string[];
+  confidence?: number | null;
+  disclaimer: string;
 };
 
 export type DiagnosisResult = {
@@ -26,6 +49,8 @@ export type DiagnosisResult = {
   action_trigger: string;
   disclaimer: string;
   diagnosed_at: string;
+  /** Additive/optional: safer screening wording; legacy keys stay authoritative for routing. */
+  triage?: TriageResult | null;
 };
 
 export type PipelineResult = {

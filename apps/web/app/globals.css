@@ -989,6 +989,50 @@ body {
   transition: width 0.5s ease;
 }
 
+/* AI screening triage (Phase 3B-lite) */
+.triage-block {
+  margin-bottom: 1rem;
+}
+
+.triage-verdict {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 0.6rem;
+}
+
+.triage-sublabel {
+  display: block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  margin: 0.6rem 0 0.3rem;
+}
+
+.triage-list {
+  margin: 0;
+  padding-left: 1.05rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.triage-list--dim {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
+.urgency-badge {
+  margin-left: 0.35rem;
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--glass-border);
+}
+
 /* Empty / loading states */
 .report-panel--empty,
 .report-panel--loading {

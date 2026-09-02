@@ -581,3 +581,50 @@ Migrated the Teeth Analyzer service's clinical vision to a SERVICE-LOCAL provide
 ### Next
 
 Phase 3B-lite - Evidence / Rule-Based Triage (do NOT start deep Phase 3A RAG).
+
+---
+
+## Phase 3B-lite - Deterministic Clinical Triage - COMPLETE
+
+**Date:** September 2026
+**Status:** COMPLETE
+
+### Summary
+
+Replaced the legacy hard-coded disease/severity mapping in the Diagnosis service (`services/diagnosis/`) with a deterministic, rule-based triage engine. Visual findings from the Teeth Analyzer are now screening observations that feed explicit rules producing safer, non-definitive patient-facing wording. NO LLM call is introduced — the same input always produces the same output.
+
+### Files Created
+
+- `services/diagnosis/src/diagnosis/triage.py` — the deterministic rule engine: one `TriageRule` per finding code, urgency ordering (routine < soon < urgent < emergency), deduplication, limitation injection, specialist merging, and safe observability logging. No imports of any AI provider, HTTP client, or external service.
+- `services/diagnosis/tests/test_triage.py` — 27 focused tests covering all acceptance criteria. Zero external AI calls.
+- `services/diagnosis/tests/conftest.py` — path shim so the focused tests run from any venv/cwd.
+
+### Files Modified
+
+- `packages/dantshaant_common/src/dantshaant_common/schemas.py` — additive: `UrgencyLevel` enum, `TriageResult` model, `ConditionLabel.MISSING_OR_DAMAGED_TOOTH`, `VisualFinding.visibility`, `DiagnoseResponse.triage: TriageResult | None`.
+- `services/diagnosis/src/diagnosis/classifier.py` — refactored to delegate finding→concern/severity/action mapping to `triage.py`; legacy `DiagnoseResponse` contract preserved by adapting `TriageDecision` back into the existing fields; old inline `LABEL_MAP`/`CONDITION_META`/`CONDITION_PRIORITY`/`_pick_primary_finding` removed.
+- `services/teeth_analyzer/src/teeth_analyzer/backends/vision_common.py` — `parse_findings` now passes through the `visibility` field from clinical vision JSON output (Phase 3B-lite triage uses it only to state screening limitations).
+- `apps/web/lib/types.ts` — additive: `TriageResult` type, `UrgencyLevel` type, `visibility` on `VisualFinding`, `triage` on `DiagnosisResult`.
+- `apps/web/components/DiagnosisReport.tsx` — prefers safer triage wording when available (condition_summary as headline, triage verdict/concerns/actions/limitations block); falls back gracefully when `triage` is null; label "AI Diagnosis" → "AI Screening Report"; "Detected condition" → "AI screening — possible concern".
+- `apps/web/app/globals.css` — styles for the triage block (verdict, sublabel, list, urgency badge).
+- `context.md` — Phase 3B-lite recorded as complete; next phase updated.
+- `docs/phase-log.md` — this entry.
+
+### Safety Fixes
+
+- `missing_or_damaged_teeth` previously mapped to `ConditionLabel.ADVANCED_CAVITY`. Now routes to `ConditionLabel.MISSING_OR_DAMAGED_TOOTH` with urgency `soon` and restorative evaluation. Legacy aliases (`broken_teeth`, `missing_teeth`, `damaged_teeth`) corrected.
+- `cavity_advanced` patient-facing output: "Possible significant tooth decay / structural damage" (never "Advanced Cavity" or "you have advanced cavity").
+- All rule outputs use non-definitive language: "possible concern", "may be consistent with", "AI screening suggests", "should be confirmed by a licensed dentist". No rule claims a confirmed disease, prescribes treatment, or guarantees an outcome.
+
+### API / Frontend Compatibility
+
+- Legacy `DiagnoseResponse` contract fully preserved (condition_label, severity, confidence, confidence_threshold, meets_threshold, action_trigger, disclaimer, diagnosed_at). The `triage` field is additive and optional — a consumer that ignores it validates without error.
+- Frontend renders safer wording from `triage` when present, falls back to legacy fields otherwise.
+
+### Validation
+
+- `services/diagnosis/tests/test_triage.py`: 27 passed, 0 failed. Zero external AI API calls. Only the focused diagnosis test suite was run.
+
+### Next
+
+Phase 4-lite — Unified Clinical LangGraph.

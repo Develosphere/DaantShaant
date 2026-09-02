@@ -1,7 +1,7 @@
 # DaantShaant Context
 
 > Current implementation state. Read this first in every engineering chat.
-> Last updated: Phase 2C - Qwen Clinical Vision (Teeth Analyzer Qwen primary + Gemini fallback; OpenRouter removed project-wide), September 2026.
+> Last updated: Phase 3B-lite - Deterministic Clinical Triage, September 2026.
 
 ## Product
 
@@ -82,7 +82,7 @@ MongoDB and its runtime drivers/configuration are removed. There are no active r
 - Patient portal: dashboard, snapshot/upload/live scan, chat, dentist discovery
 - Dentist portal: registration/login, product CRUD, AI descriptions, orders
 - Admin login and dashboard routes
-- Clinical vision (Teeth Analyzer) now runs Qwen primary with a Gemini technical fallback (Phase 2C); rule-based diagnosis is unchanged
+- Clinical vision (Teeth Analyzer) now runs Qwen primary with a Gemini technical fallback (Phase 2C); rule-based diagnosis replaced by deterministic triage (Phase 3B-lite)
 - Conversational chat now generates text through the shared AI gateway (Qwen primary, Gemini fallback); FAISS/sentence-transformers RAG behavior is unchanged
 - Product descriptions now use the shared AI gateway (Qwen primary, Gemini fallback); the product recommendation LangGraph also generates its reranking and final patient-facing text through the shared gateway
 - Product and dentist recommendation LangGraphs
@@ -143,12 +143,48 @@ Preserved: image preprocessing / mechanical-quality logic (untouched), the publi
 
 Validation: `services/teeth_analyzer/tests/test_clinical_vision.py` - 19 passed (16 required + 3 extra), zero real AI calls (httpx.MockTransport + fakes + a stubbed quality gate).
 
+## Deterministic Clinical Triage - PHASE 3B-LITE COMPLETE
+
+Phase 3B-lite replaced the legacy hard-coded disease/severity mapping in the Diagnosis service with a deterministic, rule-based triage engine (`services/diagnosis/src/diagnosis/triage.py`). NO LLM call is introduced — the same input always produces the same output.
+
+### Triage Engine
+
+- One explicit `TriageRule` per canonical finding code (healthy_tissue, plaque_detected, tartar, cavity_suspect, cavity_advanced, gingivitis_signs, gum_disease_severe, discoloration, missing_or_damaged_teeth) plus an UNKNOWN fallback rule for unrecognised codes.
+- Each rule maps to: verdict, possible_concerns, urgency_level (routine/soon/urgent/emergency), recommended_actions, recommended_specialist, visit_timeframe, and limitations.
+- Urgency ordering: routine < soon < urgent < emergency. Multiple findings → highest urgency wins. Concerns, actions, limitations and supporting findings are deduplicated.
+- Low confidence or limited visibility only add a limitation statement — they never increase diagnostic certainty and never escalate urgency.
+- Wording is deliberately non-definitive: "possible concern", "may be consistent with", "AI screening suggests", "should be confirmed by a licensed dentist". No rule claims a confirmed disease, says "you have X", prescribes treatment, or guarantees an outcome.
+
+### Safety Fixes
+
+- `missing_or_damaged_teeth` previously mapped to `ConditionLabel.ADVANCED_CAVITY`. It now routes to the new `ConditionLabel.MISSING_OR_DAMAGED_TOOTH` with urgency `soon` and a restorative evaluation recommendation. Legacy aliases (`broken_teeth`, `missing_teeth`, `damaged_teeth`) are corrected the same way.
+- `cavity_advanced` internal finding code is preserved for compatibility, but patient-facing output says "Possible significant tooth decay / structural damage", never "Advanced Cavity" or "you have advanced cavity".
+
+### Schema Additions (additive/optional)
+
+- `UrgencyLevel` enum: `routine`, `soon`, `urgent`, `emergency`.
+- `TriageResult` model: verdict, condition_summary, possible_concerns, urgency_level, recommended_actions, recommended_specialist, visit_timeframe, limitations, supporting_findings, rule_ids, confidence, disclaimer.
+- `DiagnoseResponse.triage: TriageResult | None` — additive field; existing consumers that only read legacy fields keep working unchanged.
+- `VisualFinding.visibility: str | None` — additive field passed through from clinical vision.
+- `ConditionLabel.MISSING_OR_DAMAGED_TOOTH` — new enum member.
+
+### API / Frontend Compatibility
+
+- The legacy `DiagnoseResponse` contract (condition_label, severity, confidence, confidence_threshold, meets_threshold, action_trigger, disclaimer, diagnosed_at) is preserved unchanged. The `triage` field is additive and optional.
+- `classifier.py` now delegates finding→concern mapping to `triage.py` and adapts the `TriageDecision` back into the legacy response fields.
+- Frontend `DiagnosisReport.tsx` prefers the safer triage wording when the backend provides it (condition_summary as headline, triage verdict/concerns/actions/limitations rendered in a new block). Falls back gracefully when `triage` is null. Label changed from "AI Diagnosis" to "AI Screening Report"; "Detected condition" to "AI screening — possible concern".
+- Frontend `types.ts` adds `TriageResult`, `UrgencyLevel`, and the optional `triage` field on `DiagnosisResult`.
+
+### Validation
+
+- `services/diagnosis/tests/test_triage.py`: 27 passed. Zero external AI calls. Covers: per-finding urgency, safety wording, missing_or_damaged_teeth safety fix, multiple findings highest-urgency, deduplication, limited visibility/low confidence limitations, specialist routing, visit timeframe, API endpoint compatibility, low quality legacy path, below-threshold confidence, unrecognised finding, no provider/network call, determinism, safe observability logging.
+
 ## Known Remaining Issues
 
 - AI usage is less fragmented but not fully unified: chat text generation, product descriptions, and the product recommendation graph go through the shared orchestrator gateway, and Teeth Analyzer clinical vision now runs a service-local Qwen-primary / Gemini-fallback policy (Phase 2C). Clinical RAG and the recommendation embedding service still use direct Gemini paths. OpenRouter has ZERO active runtime references project-wide.
 - Clinical scan-to-care flow is not yet a unified LangGraph.
 - Google Maps/Places remains active and paid-key dependent.
-- Clinical rule/evidence architecture still needs later phases.
+- Deep evidence grounding (Phase 3A RAG) not yet started — triage rules carry lightweight metadata only (rule_id, rationale), no citations or guideline references.
 - The frontend dependency audit currently reports three high-severity advisories; dependency upgrades require a separate compatibility/security phase.
 
 ## Completed Phases
@@ -168,9 +204,10 @@ Validation: `services/teeth_analyzer/tests/test_clinical_vision.py` - 19 passed 
 | 2B.1 | Semantic Dental Relevance Core (standalone, not yet wired) | COMPLETE |
 | 2B.2 | Production Semantic Relevance Integration (snapshot + upload + live) | COMPLETE |
 | 2C | Qwen Clinical Vision (Teeth Analyzer Qwen primary + Gemini fallback; OpenRouter removed) | COMPLETE |
+| 3B-lite | Deterministic Clinical Triage (rule-based screening triage, safety fixes, no LLM) | COMPLETE |
 
 The former Phase 1C is obsolete because its domain migration scope was merged into Phase 1B.
 
 ## Next Phase
 
-**Phase 3B-lite - Evidence / Rule-Based Triage** (structure the Teeth Analyzer visual-screening findings into evidence-backed, rule-based triage guidance while keeping the product an awareness tool, not a diagnosis). Do NOT start deep Phase 3A RAG yet.
+**Phase 4-lite — Unified Clinical LangGraph** (unify the scan-to-care flow into a single LangGraph). Do NOT start deep Phase 3A RAG yet.

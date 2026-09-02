@@ -8,9 +8,10 @@ provider, its SDK, or its response envelope.
 The model performs VISUAL SCREENING only. It never produces a definitive
 diagnosis, never prescribes treatment, and finding codes are observational
 ("suspected"/"possible"), not confirmed conditions. Findings are normalized to
-the existing downstream-compatible ``VisualFinding`` list; the richer screening
-fields (observation/visibility/limitations) are intentionally not exposed on the
-public scan API.
+the existing downstream-compatible ``VisualFinding`` list; ``visibility`` is
+passed through (Phase 3B-lite triage uses it only to state screening
+limitations), while the remaining screening fields (observation/limitations) are
+intentionally not exposed on the public scan API.
 """
 
 from __future__ import annotations
@@ -118,6 +119,11 @@ def parse_findings(text: str) -> list[VisualFinding]:
                 label=str(code).lower().replace(" ", "_"),
                 confidence=min(1.0, max(0.0, confidence)),
                 region=item.get("region"),
+                visibility=(
+                    str(item["visibility"]).lower()
+                    if isinstance(item.get("visibility"), str)
+                    else None
+                ),
             )
         )
     return findings or [VisualFinding(label="unknown", confidence=0.3, region="general")]

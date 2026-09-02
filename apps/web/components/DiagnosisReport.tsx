@@ -41,7 +41,7 @@ function formatLabel(label: string): string {
 
 export function DiagnosisReport({
   result,
-  label = "AI Diagnosis",
+  label = "AI Screening Report",
   loading,
   liveActive,
 }: Props) {
@@ -201,6 +201,9 @@ export function DiagnosisReport({
   const { analysis, diagnosis } = result;
   const confidencePct = Math.round(diagnosis.confidence * 100);
   const sevClass = severityClass(diagnosis.severity);
+  // Phase 3B-lite: prefer the safer screening wording when the backend provides it.
+  const triage = diagnosis.triage ?? null;
+  const headline = triage?.condition_summary ?? diagnosis.condition_label;
 
   return (
     <aside className={`report-panel report-panel--ready ${liveActive ? "report-panel--live" : ""}`}>
@@ -216,9 +219,12 @@ export function DiagnosisReport({
       <div className={`condition-hero ${sevClass}`}>
         <div className="condition-icon">{conditionIcon(diagnosis.condition_label)}</div>
         <div className="condition-body">
-          <span className="condition-label">Detected condition</span>
-          <h3 className="condition-name">{diagnosis.condition_label}</h3>
+          <span className="condition-label">AI screening — possible concern</span>
+          <h3 className="condition-name">{headline}</h3>
           <span className={`severity-badge ${sevClass}`}>{diagnosis.severity}</span>
+          {triage && (
+            <span className="severity-badge urgency-badge">{triage.urgency_level}</span>
+          )}
         </div>
         <div className="confidence-ring" style={{ "--pct": confidencePct } as React.CSSProperties}>
           <svg viewBox="0 0 36 36">
@@ -239,13 +245,66 @@ export function DiagnosisReport({
       <div className="stat-cards">
         <div className="stat-card stat-card-wide">
           <span className="stat-label">Recommended action</span>
-          <span className="stat-action">{formatAction(diagnosis.action_trigger)}</span>
+          <span className="stat-action">
+            {triage?.recommended_actions?.[0] ?? formatAction(diagnosis.action_trigger)}
+          </span>
         </div>
+        {triage && (
+          <>
+            <div className="stat-card">
+              <span className="stat-label">Visit timeframe</span>
+              <span className="stat-action">{triage.visit_timeframe}</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-label">Recommended specialist</span>
+              <span className="stat-action">
+                {triage.recommended_specialist ?? "General dentist"}
+              </span>
+            </div>
+          </>
+        )}
       </div>
+
+      {triage && (
+        <div className="findings-block triage-block">
+          <h4>AI screening triage</h4>
+          <p className="triage-verdict">{triage.verdict}</p>
+          {triage.possible_concerns.length > 0 && (
+            <>
+              <span className="triage-sublabel">Possible concerns</span>
+              <ul className="triage-list">
+                {triage.possible_concerns.map((concern) => (
+                  <li key={concern}>{concern}</li>
+                ))}
+              </ul>
+            </>
+          )}
+          {triage.recommended_actions.length > 1 && (
+            <>
+              <span className="triage-sublabel">Recommended next steps</span>
+              <ul className="triage-list">
+                {triage.recommended_actions.map((action) => (
+                  <li key={action}>{action}</li>
+                ))}
+              </ul>
+            </>
+          )}
+          {triage.limitations.length > 0 && (
+            <>
+              <span className="triage-sublabel">Limitations</span>
+              <ul className="triage-list triage-list--dim">
+                {triage.limitations.map((limitation) => (
+                  <li key={limitation}>{limitation}</li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
 
       {analysis.findings.length > 0 && (
         <div className="findings-block">
-          <h4>Visual findings</h4>
+          <h4>Visual screening findings</h4>
           <div className="finding-chips">
             {analysis.findings.map((f, i) => (
               <div key={i} className="finding-chip">
