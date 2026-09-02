@@ -1,6 +1,7 @@
 """Retrieval service for RAG pipeline."""
 
 import logging
+import time
 from typing import List, Dict, Any, Optional
 import asyncio
 
@@ -38,26 +39,39 @@ class RetrievalService:
         """Retrieve relevant document chunks using hybrid search and issue priority."""
         logger.info(f"[RETRIEVAL] Retrieving chunks for query: '{query[:50]}' with active_issue: '{active_issue}'")
         
+        # Early return if vector store is empty — skip all embedding work.
+        if not vector_store.metadata:
+            logger.info("[RETRIEVAL] Vector store empty, skipping embedding generation")
+            return []
+        
+        _retrieve_t0 = time.perf_counter()
+        
         candidates = []
         try:
             # 1. Semantic search with user query
             semantic_results = []
+            _emb_t0 = time.perf_counter()
             try:
                 query_embedding = embedding_service.generate_embedding(query)
                 if query_embedding is not None:
                     semantic_results = vector_store.search(query_embedding, self.top_k * 2)
             except Exception as e:
                 logger.warning(f"[RETRIEVAL] Semantic embedding failed: {e}. Falling back to degraded keyword search.")
+            _embedding_ms = (time.perf_counter() - _emb_t0) * 1000
+            logger.info("[CHAT_TIMING] embedding_ms=%.1f vector_search_count=%d", _embedding_ms, 1 if semantic_results else 0)
             
             # 2. Semantic search with active issue if present
             issue_results = []
             if active_issue:
+                _issue_emb_t0 = time.perf_counter()
                 try:
                     issue_embedding = embedding_service.generate_embedding(active_issue)
                     if issue_embedding is not None:
                         issue_results = vector_store.search(issue_embedding, self.top_k)
                 except Exception as e:
                     logger.warning(f"[RETRIEVAL] Issue embedding failed: {e}")
+                _issue_embedding_ms = (time.perf_counter() - _issue_emb_t0) * 1000
+                logger.info("[CHAT_TIMING] issue_embedding_ms=%.1f", _issue_embedding_ms)
             
             # Combine semantic results
             all_semantic = {chunk["vector_id"]: chunk for chunk in (semantic_results + issue_results)}
@@ -119,7 +133,9 @@ class RetrievalService:
                 if c.get("hybrid_score", 0.0) >= self.similarity_threshold
             ]
             
-            logger.info(f"[RETRIEVAL] Retargeted and retrieved {len(filtered)} chunks (after dedup/threshold)")
+            logger.info(f"[RETRIEVAL] Retrieved and retrieved {len(filtered)} chunks (after dedup/threshold)")
+            _retrieve_total_ms = (time.perf_counter() - _retrieve_t0) * 1000
+            logger.info("[CHAT_TIMING] vector_search_total_ms=%.1f", _retrieve_total_ms)
             return filtered[:self.top_k]
             
         except Exception as e:

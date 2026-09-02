@@ -1,6 +1,7 @@
 """PostgreSQL-backed chat and conversation business logic."""
 
 import logging
+from time import perf_counter
 from typing import Optional
 from uuid import UUID
 
@@ -164,7 +165,7 @@ async def generate_conversational_response(
             )
         if intent == UserIntent.FOLLOW_UP:
             return await conversation_engine.generate_follow_up_response(
-                user_text, recent_messages, conversation_id=conv_id
+                user_text, recent_messages, conversation_id=conv_id, skip_rag=True
             )
         return await conversation_engine.generate_conversational_response(
             user_text,
@@ -181,6 +182,8 @@ async def generate_conversational_response(
 async def send_message(
     request: SendMessageRequest, patient_user_id: UUID, session: AsyncSession
 ) -> SendMessageResponse:
+    _send_t0 = perf_counter()
+    logger.info("[CHAT_TIMING] route_start")
     repository = ConversationRepository(session)
     conversation = None
     if request.conversation_id:
@@ -193,9 +196,12 @@ async def send_message(
         title = request.text[:50] + ("..." if len(request.text) > 50 else "")
         conversation = await repository.create(patient_user_id, title)
 
+    _t0 = perf_counter()
     recent_rows = await repository.list_messages(
         conversation.id, newest_first=True, limit=10
     )
+    _history_load_ms = (perf_counter() - _t0) * 1000
+    logger.info("[CHAT_TIMING] history_load_ms=%.1f", _history_load_ms)
     recent_messages = [_message_context(row) for row in reversed(recent_rows)]
     user_row = await repository.add_message(
         conversation_id=conversation.id,
@@ -204,12 +210,15 @@ async def send_message(
         content=request.text,
     )
 
+    _t0 = perf_counter()
     intent, context_info = intent_classifier.classify(
         request.text,
         has_image=bool(request.image_base64),
         is_first_message=not recent_messages,
     )
     cs.update_from_message(str(conversation.id), request.text, intent.value)
+    _routing_ms = (perf_counter() - _t0) * 1000
+    logger.info("[CHAT_TIMING] routing_ms=%.1f", _routing_ms)
 
     analysis_result = None
     if request.image_base64:
@@ -238,6 +247,7 @@ async def send_message(
         }
 
     previous_analyses = await get_recent_analysis_history(patient_user_id, session)
+    _t0 = perf_counter()
     assistant_text = await generate_conversational_response(
         request.text,
         intent,
@@ -247,6 +257,9 @@ async def send_message(
         previous_analyses=previous_analyses,
         context_info=context_info,
     )
+    _response_gen_ms = (perf_counter() - _t0) * 1000
+    logger.info("[CHAT_TIMING] response_generation_ms=%.1f", _response_gen_ms)
+    _t0 = perf_counter()
     assistant_row = await repository.add_message(
         conversation_id=conversation.id,
         user_id=None,
@@ -255,6 +268,10 @@ async def send_message(
         evidence_refs={"analysis_result": analysis_result} if analysis_result else None,
     )
     await repository.touch(conversation)
+    _persistence_ms = (perf_counter() - _t0) * 1000
+    logger.info("[CHAT_TIMING] persistence_ms=%.1f", _persistence_ms)
+    _total_ms = (perf_counter() - _send_t0) * 1000
+    logger.info("[CHAT_TIMING] total_ms=%.1f", _total_ms)
 
     return SendMessageResponse(
         conversation_id=conversation.id,

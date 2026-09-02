@@ -8,7 +8,7 @@ and foreign keys at the SQLAlchemy metadata level only.
 import uuid
 
 import pytest
-from sqlalchemy import inspect
+from sqlalchemy import inspect, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy import Numeric
 
@@ -103,6 +103,27 @@ class TestUsersModel:
     def test_password_hash_exists(self):
         mapper = inspect(User)
         assert "password_hash" in mapper.columns
+
+    def test_profile_image_url_is_text_unbounded(self):
+        """profile_image_url must be TEXT to hold base64 data-URIs (~60 KB+)."""
+        mapper = inspect(User)
+        col = mapper.columns["profile_image_url"]
+        assert isinstance(col.type, Text), (
+            f"profile_image_url should be Text, got {type(col.type)}"
+        )
+
+    def test_profile_image_url_accepts_long_data_uri(self):
+        """Simulate assigning a realistic base64 data-URI to the model."""
+        # ~70 KB synthetic data-URI — well beyond old VARCHAR(500) limit
+        fake_data_uri = "data:image/jpeg;base64," + "A" * 70_000
+        user = User(
+            email="img-test@example.com",
+            password_hash="hash",
+            role="patient",
+            profile_image_url=fake_data_uri,
+        )
+        assert user.profile_image_url == fake_data_uri
+        assert len(user.profile_image_url) > 500
 
 
 class TestDentistModel:
@@ -266,3 +287,28 @@ class TestMigrationImport:
         assert hasattr(mod, "upgrade")
         assert hasattr(mod, "downgrade")
         assert mod.revision == "001_baseline"
+
+
+class TestMigration003:
+    """Verify the profile_image_text migration can be imported."""
+
+    def test_migration_imports(self):
+        import importlib.util
+        from pathlib import Path
+
+        migration_path = (
+            Path(__file__).resolve().parent.parent
+            / "alembic"
+            / "versions"
+            / "003_profile_image_text.py"
+        )
+        assert migration_path.exists(), f"Migration file not found: {migration_path}"
+
+        spec = importlib.util.spec_from_file_location("003_profile_image_text", migration_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        assert hasattr(mod, "upgrade")
+        assert hasattr(mod, "downgrade")
+        assert mod.revision == "003_profile_image_text"
+        assert mod.down_revision == "002_domain_compatibility"

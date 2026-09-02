@@ -19,6 +19,7 @@ class ScanRepository:
         input_mode: str,
         analysis: object,
         diagnosis: object,
+        relevance: object | None = None,
     ) -> tuple[Scan, ClinicalReport]:
         scan = Scan(
             patient_user_id=patient_user_id,
@@ -27,6 +28,14 @@ class ScanRepository:
             mechanical_quality_score=analysis.overall_quality_score,
             ai_model=analysis.model_id,
         )
+        # Persist the provider-neutral relevance verdict when available (columns
+        # relevance_score / relevance_result already exist in the schema).
+        if relevance is not None:
+            scan.relevance_score = getattr(relevance, "relevance_score", None)
+            dump = getattr(relevance, "model_dump", None)
+            scan.relevance_result = (
+                dump(mode="json") if callable(dump) else dict(relevance)
+            )
         self.session.add(scan)
         await self.session.flush()
 

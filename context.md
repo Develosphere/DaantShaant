@@ -1,7 +1,7 @@
 # DaantShaant Context
 
 > Current implementation state. Read this first in every engineering chat.
-> Last updated: Phase 2A.5c - Remove Legacy OpenRouter / LLM Infrastructure (COMPLETE), September 2026.
+> Last updated: Phase 2B.2 - Production Semantic Relevance Integration (Phase 2B COMPLETE), September 2026.
 
 ## Product
 
@@ -105,6 +105,28 @@ Phases 2A.1-2A.4 built and now run the shared, provider-neutral AI stack at `orc
 - No automated test makes a real AI API call; `scripts/test_qwen_connection.py` and `scripts/test_gemini_connection.py` remain manual, developer-run smoke tests.
 - `AISettings` in `config.py` defines the Qwen-primary / Gemini-fallback contract; `.env`/`.env.example` carry the keys.
 
+## Semantic Dental Relevance - PHASE 2B COMPLETE (WIRED INTO PRODUCTION SCAN)
+
+Phase 2B.1 added `orchestrator/src/orchestrator/clinical/relevance.py`: `evaluate_dental_relevance(image_base64, content_type, gateway=None)` answers only "is this image semantically relevant enough for dental screening?" - it is separate from mechanical quality, clinical findings, and diagnosis/triage, and performs no diagnosis or treatment advice.
+
+- Categories: `relevant` -> `continue`, `retake` -> `retake`, `unrelated` -> `reject` (deterministic mapping, no confidence thresholds; model confidence/relevance_score preserved for evaluation). External jaw/cheek swelling can be relevant without visible teeth; ordinary face selfies without oral/jaw relevance are unrelated.
+- Returns a normalized `DentalRelevanceResult` (classification, is_dental_relevant, confidence, relevance_score, visible_regions, reason, retake_reason, recommended_action) built from `StructuredRequest` via `AIGateway.generate_structured` (Qwen primary, Gemini technical fallback, `model=None`). Uses `get_ai_gateway()` unless a gateway is injected; no concrete-provider imports.
+- Provider failures propagate as typed errors and are never converted to `unrelated`; image base64 is never logged, persisted, or embedded in errors.
+- Manual smoke: `scripts/test_dental_relevance.py --image <path>`.
+
+### Production Integration (Phase 2B.2) - ACTIVE
+
+All three production scan modes (snapshot, upload, live WebSocket) now gate clinical vision behind semantic relevance through ONE shared helper `pipeline.run_scan_with_relevance(request, gateway=None) -> ScanOutcome`. Snapshot and upload are the same HTTP endpoint (`POST /v1/teeth/analyze`, `response_model` moved to `ScanOutcome`); live `process_frame` calls the same helper. The helper routes on `recommended_action`/`classification` (never the `is_dental_relevant` boolean, so retake is distinct from unrelated):
+
+- `relevant` -> `continue` -> calls the existing `run_teeth_analysis_pipeline` (unchanged Teeth Analyzer clinical vision) and returns status `analyzed` with full `analysis` + `diagnosis` (backward-compatible keys).
+- `retake` -> stops before clinical vision; HTTP returns status `retake` (analysis/diagnosis null, `recommended_action="retake"`, `retake_reason`); live sends a lightweight `relevance.retake` status and keeps the session open.
+- `unrelated` -> stops before clinical vision; HTTP returns status `rejected` (`recommended_action="reject"`); live sends a lightweight `relevance.rejected` status and keeps the session open so later frames can still be analyzed.
+- Relevance provider technical failure propagates as a typed gateway error (route surfaces it; live falls to its safe analysis-error path and the session continues) - never reported as `unrelated`.
+- Response exposes a minimal provider-neutral `RelevanceInfo` (classification, recommended_action, reason, retake_reason, confidence, relevance_score, visible_regions) with no provider/model/prompt/base64 exposure.
+- Persistence: `ScanRepository.add_result(..., relevance=...)` now stores `relevance_score` and `relevance_result` (JSONB) for `analyzed` scan records; these columns already existed in the baseline migration (no new schema/migration). Retake/unrelated produce no scan record (no clinical analysis occurred).
+- Logging: a safe `[RELEVANCE] classification=... action=... confidence=... scan_mode=... duration_ms=...` line; never image bytes, prompts, or keys.
+- Mechanical-quality ordering limitation (temporary): the Teeth Analyzer still combines mechanical quality and clinical vision in one request, so relevance now runs at the earliest safe orchestrator point - BEFORE that combined call. Relevant images still get the analyzer's existing quality behavior; gated (retake/unrelated) images skip the analyzer entirely, so expensive clinical vision is never run for them. Phase 2C may reorganize the clinical vision/quality boundary.
+
 ## Known Remaining Issues
 
 - AI usage is still partly fragmented: chat text generation, product descriptions, and the product recommendation graph now go through the shared gateway, but clinical vision (Teeth Analyzer) and clinical RAG still use direct Gemini paths. The Teeth Analyzer also has its own separate OpenRouter backend for clinical vision (Phase 2C target).
@@ -127,9 +149,11 @@ Phases 2A.1-2A.4 built and now run the shared, provider-neutral AI stack at `orc
 | 2A.5a | Migrate Product Description Generator Off OpenRouter | COMPLETE |
 | 2A.5b | Migrate Recommendation AI Off Legacy LLM Provider | COMPLETE |
 | 2A.5c | Remove Legacy OpenRouter / LLM Infrastructure | COMPLETE |
+| 2B.1 | Semantic Dental Relevance Core (standalone, not yet wired) | COMPLETE |
+| 2B.2 | Production Semantic Relevance Integration (snapshot + upload + live) | COMPLETE |
 
 The former Phase 1C is obsolete because its domain migration scope was merged into Phase 1B.
 
 ## Next Phase
 
-**Phase 2B — Semantic Dental Relevance**
+**Phase 2C - Qwen Clinical Vision** (migrate the Teeth Analyzer's direct Gemini/OpenRouter clinical vision onto the shared gateway and reconsider the mechanical-quality / clinical-vision boundary)

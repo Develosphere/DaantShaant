@@ -17,7 +17,7 @@ from orchestrator.config import settings
 from orchestrator.pipeline import (
     TeethAnalyzePipelineRequest,
     TeethAnalyzePipelineResponse,
-    run_teeth_analysis_pipeline,
+    run_scan_with_relevance,
 )
 from orchestrator.session_log import log_event
 
@@ -94,17 +94,50 @@ async def process_frame(
 
     session.busy = True
     try:
-        await send_json(ws, {"type": "analysis.progress", "step": "opencv", "seq": seq})
-        await send_json(ws, {"type": "analysis.progress", "step": "vision", "seq": seq})
-
         req = TeethAnalyzePipelineRequest(
             user_id=session.user_id,
             image_base64=image_base64,
             locale=session.locale,
         )
-        result = await run_teeth_analysis_pipeline(req)
+        # Semantic relevance gates clinical vision for each analyzed frame.
+        await send_json(ws, {"type": "analysis.progress", "step": "relevance", "seq": seq})
+        outcome = await run_scan_with_relevance(req)
+
+        if outcome.status == "retake":
+            # Lightweight ask for a better oral view; no clinical vision, and
+            # the session stays open so later frames can still be analyzed.
+            await send_json(
+                ws,
+                {
+                    "type": "relevance.retake",
+                    "seq": seq,
+                    "message": outcome.relevance.reason
+                    or "Move closer and show a clearer view of your mouth/teeth.",
+                    "retake_reason": outcome.relevance.retake_reason,
+                    "recommended_action": outcome.relevance.recommended_action,
+                },
+            )
+            return
+        if outcome.status == "rejected":
+            # Unrelated frame: ask for the oral region; keep the session alive.
+            await send_json(
+                ws,
+                {
+                    "type": "relevance.rejected",
+                    "seq": seq,
+                    "message": "Point the camera at your mouth/jaw or oral region to continue.",
+                    "recommended_action": outcome.relevance.recommended_action,
+                },
+            )
+            return
+
+        # Relevant: clinical analysis already ran inside the shared helper.
+        result = TeethAnalyzePipelineResponse(
+            analysis=outcome.analysis, diagnosis=outcome.diagnosis
+        )
         session.frames_analyzed += 1
 
+        await send_json(ws, {"type": "analysis.progress", "step": "vision", "seq": seq})
         await send_json(ws, {"type": "analysis.progress", "step": "diagnosis", "seq": seq})
 
         condition = result.diagnosis.condition_label.value

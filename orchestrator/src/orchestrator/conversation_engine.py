@@ -138,6 +138,7 @@ class ConversationEngine:
             return get_deterministic_fallback(user_raw_message or user_message, active_issue)
 
         content = (result.content or "").strip()
+        self._log_ai_result("main", result)
         logger.info(
             "[CHAT] status=%s provider=%s model=%s latency_ms=%s fallback_used=%s",
             "ok" if content else "empty",
@@ -188,6 +189,17 @@ class ConversationEngine:
                 return True
                 
         return False
+
+    def _log_ai_result(self, stage: str, result) -> None:
+        """Log AI call metadata without exposing sensitive data."""
+        logger.info(
+            "[CHAT_AI] stage=%s provider=%s model=%s fallback_used=%s provider_latency_ms=%.1f",
+            stage,
+            result.provider,
+            result.model,
+            result.fallback_used,
+            result.latency_ms,
+        )
 
     async def _try_complete_response(self, system_prompt: str, user_message: str, partial_response: str) -> str:
         """Attempt to complete an abruptly ended response using a fast OpenRouter call, falling back to trimming."""
@@ -386,10 +398,12 @@ Finish the final sentence naturally and completely. Do not repeat what was alrea
         recent_messages: List[MessageContext],
         previous_analyses: Optional[List[AnalysisHistoryContext]] = None,
         context_info: Optional[Dict[str, Any]] = None,
-        conversation_id: Optional[str] = None
+        conversation_id: Optional[str] = None,
+        skip_rag: bool = False,
     ) -> str:
         """Generate natural conversational response."""
-        logger.info("[LLM] Generating conversational response")
+        logger.info("[LLM] Generating conversational response (skip_rag=%s)", skip_rag)
+        _prompt_t0 = time.perf_counter()
         
         # Build conversation memory with priority on recent context
         conversation_memory = self._build_conversation_memory(recent_messages)
@@ -426,8 +440,9 @@ Summarize the conversation naturally and concisely. Don't give generic dental ad
 IMPORTANT: Answer the user's question or address their concern FIRST in your opening sentences. Do NOT start with a follow-up question.
 Respond naturally in 2-4 sentences. Stay on the active topic. Reference what they told you before. If they ask a vague follow-up, answer directly using the active issue."""
         
-        # Enhance with RAG only if not a summary request
-        if not is_summary_request:
+        # Enhance with RAG only if not a summary request and RAG not skipped
+        if not is_summary_request and not skip_rag:
+            _rag_t0 = time.perf_counter()
             try:
                 enhanced_prompt = await retrieval_service.get_enhanced_prompt(
                     display_message, prompt, conversation_id
@@ -436,8 +451,14 @@ Respond naturally in 2-4 sentences. Stay on the active topic. Reference what the
             except Exception as e:
                 logger.warning(f"[RAG] Failed to enhance prompt: {e}")
                 enhanced_prompt = prompt
+            _rag_retrieval_ms = (time.perf_counter() - _rag_t0) * 1000
+            logger.info("[CHAT_TIMING] rag_retrieval_ms=%.1f", _rag_retrieval_ms)
         else:
+            if skip_rag:
+                logger.info("[RAG] Skipped for this intent")
             enhanced_prompt = prompt
+        _prompt_build_ms = (time.perf_counter() - _prompt_t0) * 1000
+        logger.info("[CHAT_TIMING] prompt_build_ms=%.1f", _prompt_build_ms)
         
         # Get active issue for deterministic fallback
         active_issue = None
@@ -446,6 +467,7 @@ Respond naturally in 2-4 sentences. Stay on the active topic. Reference what the
             active_issue = state.active_dental_issue
         
         # Generate response via the shared AI gateway (Qwen -> Gemini fallback)
+        _ai_t0 = time.perf_counter()
         response = await self._generate_text(
             system_prompt=ASSISTANT_SYSTEM_PROMPT,
             user_message=enhanced_prompt,
@@ -454,13 +476,18 @@ Respond naturally in 2-4 sentences. Stay on the active topic. Reference what the
             user_raw_message=user_message,
             active_issue=active_issue,
         )
+        _ai_call_ms = (time.perf_counter() - _ai_t0) * 1000
+        logger.info("[CHAT_TIMING] ai_call_ms=%.1f", _ai_call_ms)
         
         # Clean response
         response = self._clean_response(response) or response
         
         # Ensure completeness
         if self._is_incomplete(response):
+            _tail_t0 = time.perf_counter()
             response = await self._try_complete_response(ASSISTANT_SYSTEM_PROMPT, enhanced_prompt, response)
+            _tail_ms = (time.perf_counter() - _tail_t0) * 1000
+            logger.info("[CHAT_TIMING] tail_completion_ms=%.1f", _tail_ms)
         
         # Add dentist recommendation only if needed
         if self._needs_dentist_recommendation(user_message, {}):
@@ -476,10 +503,11 @@ Respond naturally in 2-4 sentences. Stay on the active topic. Reference what the
         recent_messages: List[MessageContext],
         previous_analyses: Optional[List[AnalysisHistoryContext]] = None,
         context_info: Optional[Dict[str, Any]] = None,
-        conversation_id: Optional[str] = None
+        conversation_id: Optional[str] = None,
+        skip_rag: bool = False,
     ) -> str:
         """Generate empathetic response to symptoms."""
-        logger.info("[LLM] Generating symptom response")
+        logger.info("[LLM] Generating symptom response (skip_rag=%s)", skip_rag)
         
         conversation_memory = self._build_conversation_memory(recent_messages)
         
@@ -506,16 +534,24 @@ CRITICAL: Your FIRST 1-3 sentences MUST explain what causes this symptom and giv
 After your explanation, you may optionally ask ONE brief follow-up question at the end if it would help you give better advice.
 Respond with empathy in 3-5 sentences. Be conversational and supportive. Plain text only."""
         
-        # Enhance with RAG context (lowest priority)
-        try:
-            enhanced_prompt = await retrieval_service.get_enhanced_prompt(
-                display_message, prompt, conversation_id
-            )
-        except Exception as e:
-            logger.warning(f"[RAG] Failed to enhance prompt: {e}")
+        # Enhance with RAG context (lowest priority) — skip if requested
+        _rag_t0 = time.perf_counter()
+        if not skip_rag:
+            try:
+                enhanced_prompt = await retrieval_service.get_enhanced_prompt(
+                    display_message, prompt, conversation_id
+                )
+            except Exception as e:
+                logger.warning(f"[RAG] Failed to enhance prompt: {e}")
+                enhanced_prompt = prompt
+        else:
+            logger.info("[RAG] Skipped for this intent")
             enhanced_prompt = prompt
+        _rag_retrieval_ms = (time.perf_counter() - _rag_t0) * 1000
+        logger.info("[CHAT_TIMING] rag_retrieval_ms=%.1f", _rag_retrieval_ms)
         
         # Generate via the shared AI gateway (Qwen -> Gemini fallback)
+        _ai_t0 = time.perf_counter()
         response = await self._generate_text(
             system_prompt=ASSISTANT_SYSTEM_PROMPT,
             user_message=enhanced_prompt,
@@ -524,13 +560,18 @@ Respond with empathy in 3-5 sentences. Be conversational and supportive. Plain t
             user_raw_message=user_message,
             active_issue=active_issue,
         )
+        _ai_call_ms = (time.perf_counter() - _ai_t0) * 1000
+        logger.info("[CHAT_TIMING] ai_call_ms=%.1f", _ai_call_ms)
         
         # Clean response
         response = self._clean_response(response) or response
         
         # Ensure completeness
         if self._is_incomplete(response):
+            _tail_t0 = time.perf_counter()
             response = await self._try_complete_response(ASSISTANT_SYSTEM_PROMPT, enhanced_prompt, response)
+            _tail_ms = (time.perf_counter() - _tail_t0) * 1000
+            logger.info("[CHAT_TIMING] tail_completion_ms=%.1f", _tail_ms)
         
         # Add dentist recommendation for serious symptoms
         if self._needs_dentist_recommendation(user_message, {}):
@@ -566,6 +607,7 @@ Respond with empathy in 3-5 sentences. Be conversational and supportive. Plain t
 
 Explain what you see in 4-6 sentences. Be conversational and honest but not alarming. Give practical advice. Keep it natural. Plain text only."""
         
+        _ai_t0 = time.perf_counter()
         response = await self._generate_text(
             system_prompt=ASSISTANT_SYSTEM_PROMPT,
             user_message=prompt,
@@ -573,6 +615,8 @@ Explain what you see in 4-6 sentences. Be conversational and honest but not alar
             max_tokens=400,
             user_raw_message=user_message,
         )
+        _ai_call_ms = (time.perf_counter() - _ai_t0) * 1000
+        logger.info("[CHAT_TIMING] ai_call_ms=%.1f", _ai_call_ms)
         
         # Clean response
         response = self._clean_response(response) or response
@@ -595,10 +639,15 @@ Explain what you see in 4-6 sentences. Be conversational and honest but not alar
         self,
         user_message: str,
         recent_messages: List[MessageContext],
-        conversation_id: Optional[str] = None
+        conversation_id: Optional[str] = None,
+        skip_rag: bool = True,
     ) -> str:
-        """Generate natural follow-up response with active issue context."""
-        logger.info("[LLM] Generating follow-up response")
+        """Generate natural follow-up response with active issue context.
+        
+        RAG is skipped by default for follow-ups — they rely on conversation
+        context, not external dental knowledge.
+        """
+        logger.info("[LLM] Generating follow-up response (skip_rag=%s)", skip_rag)
         
         conversation_memory = self._build_conversation_memory(recent_messages)
         
@@ -635,6 +684,7 @@ Respond naturally in 1-3 sentences based on the conversation context. Remember w
         if conversation_id:
             active_issue = state.active_dental_issue if hasattr(state, 'active_dental_issue') else None
         
+        _ai_t0 = time.perf_counter()
         response = await self._generate_text(
             system_prompt=ASSISTANT_SYSTEM_PROMPT,
             user_message=prompt,
@@ -643,12 +693,17 @@ Respond naturally in 1-3 sentences based on the conversation context. Remember w
             user_raw_message=user_message,
             active_issue=active_issue or resolved_issue,
         )
+        _ai_call_ms = (time.perf_counter() - _ai_t0) * 1000
+        logger.info("[CHAT_TIMING] ai_call_ms=%.1f", _ai_call_ms)
         
         cleaned = self._clean_response(response) or response
         
         # Ensure completeness
         if self._is_incomplete(cleaned):
+            _tail_t0 = time.perf_counter()
             cleaned = await self._try_complete_response(ASSISTANT_SYSTEM_PROMPT, prompt, cleaned)
+            _tail_ms = (time.perf_counter() - _tail_t0) * 1000
+            logger.info("[CHAT_TIMING] tail_completion_ms=%.1f", _tail_ms)
         
         logger.info("[LLM] Follow-up response generated successfully")
         return cleaned
@@ -692,6 +747,7 @@ Previous results (from {latest_prev.created_at.strftime('%Y-%m-%d')}):
 
 Analyze if their condition got better, worse, or stayed the same, and respond in 3-4 friendly sentences. Be encouraging, conversational, and direct. Plain text only."""
         
+        _ai_t0 = time.perf_counter()
         response = await self._generate_text(
             system_prompt=ASSISTANT_SYSTEM_PROMPT,
             user_message=prompt,
@@ -699,6 +755,8 @@ Analyze if their condition got better, worse, or stayed the same, and respond in
             max_tokens=300,
             user_raw_message=user_message,
         )
+        _ai_call_ms = (time.perf_counter() - _ai_t0) * 1000
+        logger.info("[CHAT_TIMING] ai_call_ms=%.1f", _ai_call_ms)
         cleaned = self._clean_response(response) or response
         if self._is_incomplete(cleaned):
             cleaned = await self._try_complete_response(ASSISTANT_SYSTEM_PROMPT, prompt, cleaned)

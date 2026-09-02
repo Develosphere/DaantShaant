@@ -14,10 +14,10 @@ from orchestrator.dentist_portal.auth import decode_access_token, get_current_pa
 from orchestrator.live_session import handle_live_websocket
 from orchestrator.pipeline import (
     AuthenticatedTeethAnalyzeRequest,
+    ScanOutcome,
     TeethAnalyzePipelineRequest,
-    TeethAnalyzePipelineResponse,
     check_dependencies,
-    run_teeth_analysis_pipeline,
+    run_scan_with_relevance,
 )
 from orchestrator.chat_schemas import (
     CreateConversationRequest,
@@ -106,25 +106,33 @@ async def health() -> dict:
 # --- Original Analysis Endpoints ---
 
 
-@app.post("/v1/teeth/analyze", response_model=TeethAnalyzePipelineResponse)
+@app.post("/v1/teeth/analyze", response_model=ScanOutcome)
 async def analyze_teeth(
     request: AuthenticatedTeethAnalyzeRequest,
     user: dict = Depends(get_current_patient),
     session: AsyncSession = Depends(get_db_session),
-) -> TeethAnalyzePipelineResponse:
+) -> ScanOutcome:
+    """Snapshot/upload scan. Serves both modes over the shared relevance-gated
+    pipeline: clinical analysis runs only for ``relevant`` images; ``retake``
+    and ``unrelated`` short-circuit before clinical vision. Relevant scans are
+    persisted with their relevance verdict. Technical relevance-provider
+    failures propagate (they are never reported as ``unrelated``).
+    """
     try:
         owned_request = TeethAnalyzePipelineRequest(
             user_id=user["user_id"], **request.model_dump()
         )
-        result = await run_teeth_analysis_pipeline(owned_request)
-        from orchestrator.repositories import ScanRepository
-        await ScanRepository(session).add_result(
-            patient_user_id=user["user_id"],
-            input_mode="snapshot",
-            analysis=result.analysis,
-            diagnosis=result.diagnosis,
-        )
-        return result
+        outcome = await run_scan_with_relevance(owned_request)
+        if outcome.status == "analyzed":
+            from orchestrator.repositories import ScanRepository
+            await ScanRepository(session).add_result(
+                patient_user_id=user["user_id"],
+                input_mode="snapshot",
+                analysis=outcome.analysis,
+                diagnosis=outcome.diagnosis,
+                relevance=outcome.relevance,
+            )
+        return outcome
     except httpx.HTTPStatusError as exc:
         detail = exc.response.text
         try:

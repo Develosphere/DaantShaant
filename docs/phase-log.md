@@ -454,3 +454,73 @@ All Phase 2A acceptance criteria satisfied:
 ### Next
 
 Phase 2B — Semantic Dental Relevance.
+
+---
+
+## Phase 2B.1 - Semantic Dental Relevance Core (MVP Fast Track) - COMPLETE
+
+### Summary
+
+Created the standalone Semantic Dental Relevance core: given an image, it decides whether the image is semantically appropriate for dental/oral screening. Categories: relevant / retake / unrelated. External jaw/cheek swelling may be relevant even without visible teeth; ordinary face selfies without useful oral/jaw visibility are unrelated. No diagnosis, severity, or treatment logic exists at this stage. Production scan routes (snapshot/upload/WebSocket) are NOT yet wired - deliberately, that is Phase 2B.2.
+
+### Files Created
+
+- `orchestrator/src/orchestrator/clinical/__init__.py` + `clinical/relevance.py` - `DentalRelevanceResult` (classification, is_dental_relevant, confidence, relevance_score, visible_regions, reason, retake_reason, recommended_action), a short relevance prompt, the JSON schema, and `evaluate_dental_relevance(image_base64, content_type, gateway=None)`. Uses `StructuredRequest` via `AIGateway.generate_structured` (Qwen primary -> Gemini technical fallback); `model=None` so each provider resolves its own configured default. Gateway resolved lazily via `get_ai_gateway()` when not injected; no concrete provider imports.
+- `orchestrator/tests/test_dental_relevance.py` (19 tests; fake gateways/in-memory providers; zero real AI calls; no real images or network)
+- `scripts/test_dental_relevance.py` - manual `--image` smoke script (developer-run only, not part of the test suite)
+
+### Key Decisions
+
+- Action mapping is deterministic: relevant -> continue, retake -> retake, unrelated -> reject. No confidence thresholds invented; model confidence/relevance_score are preserved for later evaluation. `is_dental_relevant` is derived (relevant -> true; retake is not "proceed").
+- Provider failures propagate as typed gateway errors - a provider outage is never reported as "unrelated". `ProviderConfigurationError`/`ProviderInternalError`/`StructuredOutputError` all propagate; malformed/missing structured output raises `StructuredOutputError`.
+- Privacy: image base64 is never logged, never embedded in errors, and not persisted by the service.
+
+### Validation
+
+- `tests/test_dental_relevance.py`: 19 passed. Zero external AI API calls. No other suites required (gateway core untouched).
+
+### Next
+
+Phase 2B.2 - Scan Pipeline Relevance Integration.
+
+---
+
+## Phase 2B.2 - Production Semantic Relevance Integration
+
+**Date:** September 2026
+**Status:** COMPLETE (Phase 2B fully complete)
+
+### Summary
+
+Wired the Phase 2B.1 semantic-relevance core into all three production scan modes (snapshot, upload, live WebSocket). Clinical vision is now gated behind relevance: relevant images continue to the unchanged Teeth Analyzer; retake/unrelated stop before clinical vision. Relevance routing lives in ONE shared helper consumed by every scan mode.
+
+### Integration Point
+
+`orchestrator/src/orchestrator/pipeline.py::run_scan_with_relevance(request, gateway=None) -> ScanOutcome` is the single reusable helper. Snapshot and upload are the same HTTP endpoint (`POST /v1/teeth/analyze`); live `process_frame` calls the same helper. No logic duplicated across routes.
+
+### Files Modified
+
+- `orchestrator/src/orchestrator/pipeline.py` - added `RelevanceInfo`, `ScanOutcome`, and `run_scan_with_relevance` (relevance evaluated before the combined quality+vision analyzer call; safe `[RELEVANCE]` log)
+- `orchestrator/src/orchestrator/main.py` - `/v1/teeth/analyze` now returns `ScanOutcome`, calls the helper, persists relevance only for `analyzed` scans
+- `orchestrator/src/orchestrator/live_session.py` - `process_frame` gates each analyzed frame on relevance; sends lightweight `relevance.retake` / `relevance.rejected` status without ending the session
+- `orchestrator/src/orchestrator/repositories/clinical.py` - `ScanRepository.add_result(..., relevance=...)` persists `relevance_score` + `relevance_result` (existing columns)
+
+### Files Created
+
+- `orchestrator/tests/test_scan_relevance_integration.py` - 13 focused tests (fake relevance + fake clinical analyzer)
+
+### Key Decisions
+
+- Routing uses `recommended_action`/`classification`, never the `is_dental_relevant` boolean, so retake stays distinct from unrelated/reject.
+- Provider failure != bad image: gateway errors propagate (HTTP) or fall to the safe analysis-error path (live) and the session continues; never fabricated as `unrelated`.
+- A bad live frame does not kill the session; `frames_analyzed` counts only real clinical analyses; later relevant frames are still processed.
+- Temporary ordering limitation: the Teeth Analyzer still fuses mechanical quality + clinical vision in one request, so relevance runs before that combined call (gated images skip the analyzer entirely, saving expensive vision). Phase 2C may reorganize the boundary.
+- No new DB schema/migration (relevance columns already in the baseline). No concrete-provider imports added to scan business logic.
+
+### Validation
+
+- `tests/test_scan_relevance_integration.py` + `tests/test_dental_relevance.py`: 31 passed. Zero external AI API calls. App import smoke OK.
+
+### Next
+
+Phase 2C - Qwen Clinical Vision.
