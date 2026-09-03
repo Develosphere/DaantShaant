@@ -330,56 +330,50 @@ export function DiagnosisReport({
         </div>
       )}
 
-      {!loading && result && !liveActive && (
+      {!loading && result && !liveActive && recommendedProducts.length > 0 && (
         <div className="recommendations-block" style={{ marginTop: "1.5rem" }}>
           <h4>🦷 {t("report.products_title")}</h4>
-          {recommendedProducts.length > 0 ? (
-            <div className="recommendations-list">
-              {recommendedProducts.map((p, idx) => {
-                const imageSrc = p.images && p.images.length > 0 ? p.images[0] : "";
-                return (
-                  <div key={idx} className="rec-product-card rec-product-card--split">
-                    <div className="rec-product-image-container">
-                      {imageSrc ? (
-                        <img src={imageSrc} alt={p.name} className="rec-product-image" />
-                      ) : (
-                        <div className="rec-product-image-placeholder">🦷</div>
-                      )}
-                    </div>
-                    <div className="rec-product-details">
-                      <div className="rec-product-header">
-                        <span className="rec-product-name">
-                          {p.product_id ? (
-                            <Link href={`/products/${p.product_id}`} style={{ textDecoration: "none", color: "inherit", fontWeight: 700 }}>
-                              {p.name}
-                            </Link>
-                          ) : (
-                            p.name
-                          )}
-                        </span>
-                        <span className="rec-product-price">${Number(p.price || 0).toFixed(2)}</span>
-                      </div>
-                      <p className="rec-product-desc">{p.ai_description}</p>
-                      {p.problems_solved && p.problems_solved.length > 0 && (
-                        <div className="rec-product-tags">
-                          {p.problems_solved.map((tItem: string, tIdx: number) => (
-                            <span key={tIdx} className="rec-product-tag">{tItem}</span>
-                          ))}
-                        </div>
-                      )}
-                      <button className="btn btn-buy btn-sm" onClick={() => handleBuy(p)}>
-                        {t("report.buy_now")}
-                      </button>
-                    </div>
+          <div className="recommendations-list">
+            {recommendedProducts.map((p, idx) => {
+              const imageSrc = p.images && p.images.length > 0 ? p.images[0] : "";
+              return (
+                <div key={idx} className="rec-product-card rec-product-card--split">
+                  <div className="rec-product-image-container">
+                    {imageSrc ? (
+                      <img src={imageSrc} alt={p.name} className="rec-product-image" />
+                    ) : (
+                      <div className="rec-product-image-placeholder">🦷</div>
+                    )}
                   </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p style={{ fontSize: "0.875rem", margin: "0.5rem 0", color: "var(--text-secondary)" }}>
-              {t("report.no_products_available")}
-            </p>
-          )}
+                  <div className="rec-product-details">
+                    <div className="rec-product-header">
+                      <span className="rec-product-name">
+                        {p.product_id ? (
+                          <Link href={`/products/${p.product_id}`} style={{ textDecoration: "none", color: "inherit", fontWeight: 700 }}>
+                            {p.name}
+                          </Link>
+                        ) : (
+                          p.name
+                        )}
+                      </span>
+                      <span className="rec-product-price">${Number(p.price || 0).toFixed(2)}</span>
+                    </div>
+                    <p className="rec-product-desc">{p.ai_description}</p>
+                    {p.problems_solved && p.problems_solved.length > 0 && (
+                      <div className="rec-product-tags">
+                        {p.problems_solved.map((tItem: string, tIdx: number) => (
+                          <span key={tIdx} className="rec-product-tag">{tItem}</span>
+                        ))}
+                      </div>
+                    )}
+                    <button className="btn btn-buy btn-sm" onClick={() => handleBuy(p)}>
+                      {t("report.buy_now")}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

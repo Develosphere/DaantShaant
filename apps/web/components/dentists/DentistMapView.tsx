@@ -20,8 +20,30 @@ function parseCoord(value: string | null): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+function createGeoJsonCircle(center: [number, number], radiusKm: number, points = 64) {
+  const coords: [number, number][] = [];
+  const distanceX = radiusKm / (111.32 * Math.cos((center[1] * Math.PI) / 180));
+  const distanceY = radiusKm / 110.574;
+
+  for (let i = 0; i < points; i++) {
+    const theta = (i / points) * (2 * Math.PI);
+    const x = distanceX * Math.cos(theta);
+    const y = distanceY * Math.sin(theta);
+    coords.push([center[0] + x, center[1] + y]);
+  }
+  coords.push(coords[0]);
+  return {
+    type: "Feature" as const,
+    geometry: {
+      type: "Polygon" as const,
+      coordinates: [coords],
+    },
+    properties: {},
+  };
+}
+
 export function DentistMapView() {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const router = useRouter();
   const searchParams = useSearchParams();
   const issue = searchParams.get("issue") ?? "dental checkup";
@@ -37,11 +59,17 @@ export function DentistMapView() {
   const markersRef = useRef<maplibregl.Marker[]>([]);
 
   const [dentists, setDentists] = useState<DentistPin[]>([]);
+  const [pickedLocation, setPickedLocation] = useState<PickedLocation | null>(
+    hasCoords && urlLat !== undefined && urlLng !== undefined
+      ? { label: locationLabel, lat: urlLat, lng: urlLng }
+      : null
+  );
   const [patientCoords, setPatientCoords] = useState<{ lat: number; lng: number } | null>(
     hasCoords && urlLat !== undefined && urlLng !== undefined
       ? { lat: urlLat, lng: urlLng }
       : null
   );
+  const [searchRadiusKm, setSearchRadiusKm] = useState<number | null>(null);
   const [sessionId, setSessionId] = useState<string>("");
   const [loading, setLoading] = useState(hasCoords);
   const [error, setError] = useState("");
@@ -51,7 +79,7 @@ export function DentistMapView() {
   const [locationModalOpen, setLocationModalOpen] = useState(!hasCoords);
 
   const renderMap = useCallback(
-    (center: { lat: number; lng: number }, pins: DentistPin[]) => {
+    (center: { lat: number; lng: number }, pins: DentistPin[], radiusKm?: number) => {
       if (!mapContainerRef.current) return;
       ensureMapLibreCSS();
 
@@ -98,7 +126,54 @@ export function DentistMapView() {
           .addTo(mapInstance.current);
         markersRef.current.push(patientMarker);
 
-        // 2. Dentist Pins
+        // 2. Search Radius Circle Visualization
+        if (radiusKm && radiusKm > 0) {
+          const circleFeature = createGeoJsonCircle([center.lng, center.lat], radiusKm);
+          const drawCircle = () => {
+            if (!mapInstance.current) return;
+            const existingSource = mapInstance.current.getSource("search-radius") as maplibregl.GeoJSONSource | undefined;
+            if (existingSource) {
+              existingSource.setData(circleFeature);
+            } else if (mapInstance.current.isStyleLoaded()) {
+              try {
+                mapInstance.current.addSource("search-radius", {
+                  type: "geojson",
+                  data: circleFeature,
+                });
+                mapInstance.current.addLayer({
+                  id: "search-radius-fill",
+                  type: "fill",
+                  source: "search-radius",
+                  paint: {
+                    "fill-color": "#00a2f0",
+                    "fill-opacity": 0.08,
+                  },
+                });
+                mapInstance.current.addLayer({
+                  id: "search-radius-stroke",
+                  type: "line",
+                  source: "search-radius",
+                  paint: {
+                    "line-color": "#00a2f0",
+                    "line-width": 1.5,
+                    "line-dasharray": [2, 2],
+                    "line-opacity": 0.5,
+                  },
+                });
+              } catch (e) {
+                // Ignore layer addition collision
+              }
+            }
+          };
+
+          if (mapInstance.current.isStyleLoaded()) {
+            drawCircle();
+          } else {
+            mapInstance.current.once("load", drawCircle);
+          }
+        }
+
+        // 3. Dentist Pins
         pins.forEach((d) => {
           const pinEl = document.createElement("div");
           pinEl.style.cursor = "pointer";
@@ -120,7 +195,7 @@ export function DentistMapView() {
           markersRef.current.push(marker);
         });
 
-        // 3. Fit bounds
+        // 4. Fit bounds locally to patient and returned pins
         if (pins.length > 0) {
           const bounds = new maplibregl.LngLatBounds();
           bounds.extend([center.lng, center.lat]);
@@ -135,9 +210,11 @@ export function DentistMapView() {
   );
 
   const loadRecommendations = useCallback(
-    async (lat: number, lng: number) => {
+    async (lat: number, lng: number, currentLabel?: string) => {
       setLoading(true);
       setError("");
+      const effectiveLabel = currentLabel || locationLabel;
+      console.log(`[DENTIST_UI] lat=${lat} lng=${lng} issue=${issue} location=${effectiveLabel}`);
       try {
         const data = await fetchDentistRecommendations({
           issue,
@@ -146,10 +223,13 @@ export function DentistMapView() {
           severity,
           scan_id: scanId,
         });
+        console.log(`[DENTIST_UI] response received count=${data.dentists?.length ?? 0} radius=${data.search_radius_km ?? 10}km`);
         setDentists(data.dentists);
         setSessionId(data.session_id);
+        const rad = data.search_radius_km || 10.0;
+        setSearchRadiusKm(rad);
         setPatientCoords({ lat: data.patient_lat, lng: data.patient_lng });
-        renderMap({ lat: data.patient_lat, lng: data.patient_lng }, data.dentists);
+        renderMap({ lat: data.patient_lat, lng: data.patient_lng }, data.dentists, rad);
       } catch (err) {
         console.error("Error loading recommendations:", err);
         const msg = err instanceof Error ? err.message : "";
@@ -162,21 +242,24 @@ export function DentistMapView() {
         setLoading(false);
       }
     },
-    [issue, scanId, severity, renderMap, t]
+    [issue, scanId, severity, renderMap, t, locationLabel]
   );
 
   useEffect(() => {
     if (!hasCoords || urlLat === undefined || urlLng === undefined) return;
-    loadRecommendations(urlLat, urlLng);
-  }, [hasCoords, urlLat, urlLng, loadRecommendations]);
+    loadRecommendations(urlLat, urlLng, locationLabel);
+  }, [hasCoords, urlLat, urlLng, locationLabel, loadRecommendations]);
 
   function handleLocationConfirm(loc: PickedLocation) {
     setLocationModalOpen(false);
+    setPickedLocation(loc);
+    setPatientCoords({ lat: loc.lat, lng: loc.lng });
     const params = new URLSearchParams(searchParams.toString());
     params.set("lat", String(loc.lat));
     params.set("lng", String(loc.lng));
     params.set("location", loc.label);
     router.replace(`/patient/dentists?${params.toString()}`);
+    loadRecommendations(loc.lat, loc.lng, loc.label);
   }
 
   async function handleBook() {
@@ -221,10 +304,10 @@ export function DentistMapView() {
           <h1 className={styles.title}>{t("dentists.title")}</h1>
           <p className={styles.sub}>
             {issue.replace(/_/g, " ")}
-            {locationLabel && (
+            {(pickedLocation?.label || locationLabel) && (
               <>
                 {" "}
-                · <strong>{locationLabel}</strong>
+                · <strong>{pickedLocation?.label || locationLabel}</strong>
               </>
             )}
           </p>
@@ -248,6 +331,16 @@ export function DentistMapView() {
               <span className={styles.legendDotOther} /> {t("dentists.external_clinic")}
             </span>
           </div>
+          {searchRadiusKm && dentists.length > 0 && (
+            <div style={{ marginTop: "0.75rem", fontSize: "0.88rem", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: "0.4rem", fontWeight: 600 }}>
+              <span>🎯</span>
+              <span>
+                {locale.startsWith("ur")
+                  ? `${dentists.length} ڈینٹل کلینکس ${searchRadiusKm} کلومیٹر کے دائرے میں ملے`
+                  : `${dentists.length} dental clinics found within ${searchRadiusKm} km`}
+              </span>
+            </div>
+          )}
         </div>
 
         {loading && (

@@ -989,6 +989,75 @@ Repaired nearby dentist discovery runtime execution and locked strict real-data 
 
 ### Next
 
+Phase 10.3 — Live Nearby Dentist Discovery Integration
+
+---
+
+## Phase 10.3 — Live Nearby Dentist Discovery Integration
+
+**Date:** September 2026  
+**Status:** COMPLETE
+
+### Summary
+
+Integrated live nearby-dentist discovery into the real DaantShaant patient flow using direct browser coordinates, adaptive search radius, resilient multi-source discovery, and clinical ranking:
+- **Direct Current-Location Discovery**:
+  - `navigator.geolocation` coordinates are passed directly from browser to the recommendation endpoint (`POST /portal/recommend/dentists/`), eliminating geocoding/reverse geocoding overhead on the discovery path.
+  - Reverse geocoding is performed asynchronously purely for the user-facing location badge.
+  - Location permission denial and timeouts produce friendly translated guidance without leaking raw browser errors.
+- **Adaptive Locality Radius (`[3, 5, 8, 10]` km)**:
+  - Searches nearest locality first (3 km) and only expands if fewer than target clinics are found (`MIN_RESULT_TARGET = 5`).
+  - Stops immediately when sufficient clinics are located, preventing unnecessary wide-city searches.
+  - Fallback is bounded at 10 km.
+  - Safe developer diagnostics log center coordinates, attempts, provider counts, merged counts, target status, final radius, and elapsed duration.
+- **Multi-Source External Discovery & Failure Isolation**:
+  - Primary external discovery via OpenStreetMap / Overpass API with 30-minute in-memory caching.
+  - Optional Foursquare (`FOURSQUARE_API_KEY`) and Geoapify (`GEOAPIFY_API_KEY`) adapters are safely queried when configured and skipped when unconfigured.
+  - Provider errors are strictly isolated: if external providers fail or time out, registered platform database dentists are always preserved and returned.
+- **Multi-Source Deduplication & Deterministic Ranking**:
+  - Intelligent deduplication merges clinics across platform and external providers using proximity (<80m), name token overlap, phone numbers, and website domains.
+  - Platform database records remain 100% authoritative for registered DaantShaant dentists.
+  - Missing ratings are preserved as `None` (never converted to 0 stars).
+  - General dental clinics lacking specific specialist metadata are preserved and ranked by distance.
+- **MapLibre UX & Search Radius Circle**:
+  - Map auto-fits local markers and patient position with sensible padding.
+  - Visualizes adaptive search radius with a subtle GeoJSON circle and summary text (`"X dental clinics found within Y km"`).
+  - External listings display direct contact info (Call, Directions, Website) with no fake booking; registered dentists retain "Book Consultation".
+- **Product Section Microfix**:
+  - In `DiagnosisReport.tsx`, when `recommendedProducts.length === 0`, the entire product recommendation block is hidden, continuing cleanly to the clinical safety disclaimer.
+
+### Files Modified
+
+- `apps/web/components/DiagnosisReport.tsx`
+- `apps/web/components/dentists/DentistMapView.tsx`
+- `apps/web/components/dentists/LocationPickerModal.tsx`
+- `apps/web/i18n/en.ts`
+- `apps/web/i18n/ur.ts`
+- `apps/web/lib/dentist-recommend.ts`
+- `docs/third-party-usage.md`
+- `orchestrator/src/orchestrator/dentist_portal/models.py`
+- `orchestrator/src/orchestrator/dentist_recommendation/dentist_agent.py`
+- `orchestrator/src/orchestrator/dentist_recommendation/osm_dentists.py`
+- `orchestrator/src/orchestrator/dentist_recommendation/ranking.py`
+- `orchestrator/src/orchestrator/dentist_recommendation/routes.py`
+- `context.md`
+- `docs/phase-log.md`
+
+### Files Created
+
+- `orchestrator/src/orchestrator/dentist_recommendation/external_providers.py`
+- `orchestrator/tests/test_phase10_3_dentist_discovery.py`
+
+### Validation
+
+- Dedicated Phase 10.3 Automated Test Suite (`test_phase10_3_dentist_discovery.py`): 10 passed, 0 failed.
+- Combined Dentist Automated Test Suites (`test_dentist_discovery.py` + `test_phase10_3_dentist_discovery.py`): 30 passed, 0 failed. Zero external AI calls.
+- Product Marketplace Test Suite (`test_product_marketplace_integrity.py`): 8 passed, 0 failed.
+- Next.js Production Build (`npm run build`): Exit code 0, 26/26 static routes generated successfully.
+- Live Karachi Coordinates Test (`24.905865, 67.030718`): Overpass live query returned real clinics (4 at 3km -> expanded adaptively to 5km -> 20 found -> target reached, final radius 5.0km, returned 15 ranked dentists).
+
+### Next
+
 Phase 11 — Deployment Fast Track.
 
 

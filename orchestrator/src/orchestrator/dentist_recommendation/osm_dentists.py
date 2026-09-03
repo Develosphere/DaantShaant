@@ -14,21 +14,21 @@ import httpx
 logger = logging.getLogger(__name__)
 
 OVERPASS_ENDPOINTS = [
+    "https://lz4.overpass-api.de/api/interpreter",
     "https://overpass-api.de/api/interpreter",
-    "https://overpass.kumi.systems/api/interpreter",
-    "https://overpass.private.coffee/api/interpreter",
+    "https://z.overpass-api.de/api/interpreter",
 ]
 OVERPASS_ENDPOINT = OVERPASS_ENDPOINTS[0]
-OVERPASS_TIMEOUT_SECONDS = 12.0
+OVERPASS_TIMEOUT_SECONDS = 4.0
 
 OVERPASS_HEADERS = {
     "User-Agent": "DaantShaant/1.0 (https://daantshaant.pk; contact@daantshaant.pk)",
     "Accept": "application/json",
 }
 
-# Simple short-lived in-memory cache to prevent duplicate external calls
-_CACHE_TTL_SECONDS = 300.0
-_cache: dict[tuple[float, float, float], tuple[float, list[dict[str, Any]]]] = {}
+# Simple short-lived in-memory cache to prevent duplicate external calls (30 min TTL)
+_CACHE_TTL_SECONDS = 1800.0
+_cache: dict[tuple[str, float, float, float], tuple[float, list[dict[str, Any]]]] = {}
 
 
 def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -149,7 +149,7 @@ async def search_osm_dentists(
 
     Returns normalized dentist candidates. Gracefully falls back to empty list on error.
     """
-    cache_key = (round(lat, 3), round(lng, 3), round(radius_km, 1))
+    cache_key = ("osm", round(lat, 3), round(lng, 3), round(radius_km, 1))
     now = time.time()
     if cache_key in _cache:
         cached_time, cached_data = _cache[cache_key]
@@ -161,18 +161,42 @@ async def search_osm_dentists(
 
     data = None
     if client is not None:
-        try:
-            res = await client.post(
-                OVERPASS_ENDPOINT,
-                data={"data": query},
-                headers=OVERPASS_HEADERS,
-                timeout=OVERPASS_TIMEOUT_SECONDS,
-            )
-            res.raise_for_status()
-            data = res.json()
-        except Exception as exc:
-            logger.warning("[OVERPASS] Dentist query failed: %s", exc)
-            return []
+        for endpoint in OVERPASS_ENDPOINTS:
+            try:
+                res = await client.post(
+                    endpoint,
+                    data={"data": query},
+                    headers=OVERPASS_HEADERS,
+                    timeout=OVERPASS_TIMEOUT_SECONDS,
+                )
+                res.raise_for_status()
+                data = res.json()
+                break
+            except httpx.HTTPStatusError as exc:
+                logger.warning(
+                    "[OVERPASS] Endpoint %s failed: status=%d http_code=%d exc=%s",
+                    endpoint,
+                    exc.response.status_code,
+                    exc.response.status_code,
+                    exc,
+                )
+                continue
+            except httpx.TimeoutException as exc:
+                logger.warning(
+                    "[OVERPASS] Endpoint %s failed: status=timeout timeout_type=%s exc=%s",
+                    endpoint,
+                    type(exc).__name__,
+                    exc,
+                )
+                continue
+            except Exception as exc:
+                logger.warning(
+                    "[OVERPASS] Endpoint %s failed: status=error exc_type=%s exc=%s",
+                    endpoint,
+                    type(exc).__name__,
+                    exc,
+                )
+                continue
     else:
         async with httpx.AsyncClient(timeout=OVERPASS_TIMEOUT_SECONDS) as local_client:
             for endpoint in OVERPASS_ENDPOINTS:
@@ -185,8 +209,30 @@ async def search_osm_dentists(
                     res.raise_for_status()
                     data = res.json()
                     break
+                except httpx.HTTPStatusError as exc:
+                    logger.warning(
+                        "[OVERPASS] Endpoint %s failed: status=%d http_code=%d exc=%s",
+                        endpoint,
+                        exc.response.status_code,
+                        exc.response.status_code,
+                        exc,
+                    )
+                    continue
+                except httpx.TimeoutException as exc:
+                    logger.warning(
+                        "[OVERPASS] Endpoint %s failed: status=timeout timeout_type=%s exc=%s",
+                        endpoint,
+                        type(exc).__name__,
+                        exc,
+                    )
+                    continue
                 except Exception as exc:
-                    logger.warning("[OVERPASS] Endpoint %s failed: %s", endpoint, exc)
+                    logger.warning(
+                        "[OVERPASS] Endpoint %s failed: status=error exc_type=%s exc=%s",
+                        endpoint,
+                        type(exc).__name__,
+                        exc,
+                    )
                     continue
 
     if not data:

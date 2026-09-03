@@ -30,6 +30,7 @@ export type DentistRecommendResponse = {
   patient_lat: number;
   patient_lng: number;
   dentists: DentistPin[];
+  search_radius_km?: number;
 };
 
 export async function fetchDentistRecommendations(params: {

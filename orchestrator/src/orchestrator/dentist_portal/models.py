@@ -215,6 +215,7 @@ class DentistRecommendResponse(BaseModel):
     patient_lat: float
     patient_lng: float
     dentists: list[DentistPin]
+    search_radius_km: Optional[float] = None
 
 
 class BookConsultationRequest(BaseModel):

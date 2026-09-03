@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useLanguage } from "@/i18n";
-import { getCurrentLocationLabel, type PickedLocation } from "@/lib/geo-location";
+import { getCurrentPosition, reverseGeocode, type PickedLocation } from "@/lib/geo-location";
 import { fetchAddressSuggestions, resolveAddressSuggestion, type AddressSuggestion } from "@/lib/location-autocomplete";
 import styles from "./location-picker.module.css";
 
@@ -102,6 +102,7 @@ export function LocationPickerModal({
       setPicked(loc);
       setQuery(s.label);
       setSuggestions([]);
+      onConfirm(loc);
       return;
     }
 
@@ -111,11 +112,23 @@ export function LocationPickerModal({
         setPicked(resolved);
         setQuery(resolved.label);
         setSuggestions([]);
+        onConfirm(resolved);
       } else {
         setError(t("dentists.location_timeout"));
       }
     } catch {
       setError(t("common.error"));
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (suggestions.length > 0) {
+        handleSelectSuggestion(suggestions[0]);
+      } else if (picked) {
+        onConfirm(picked);
+      }
     }
   }
 
@@ -125,16 +138,44 @@ export function LocationPickerModal({
     setError("");
 
     try {
-      const loc = await getCurrentLocationLabel(locale);
+      const pos = await getCurrentPosition();
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+
+      // Reverse geocode for display label with a fast timeout (so discovery is not blocked)
+      let displayLabel = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      try {
+        const timeoutPromise = new Promise<string>((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), 1200)
+        );
+        const fetchedLabel = await Promise.race([
+          reverseGeocode(lat, lng, locale),
+          timeoutPromise,
+        ]);
+        if (fetchedLabel) {
+          displayLabel = fetchedLabel;
+        }
+      } catch {
+        // Fallback to coordinates label
+      }
+
+      const loc: PickedLocation = {
+        lat,
+        lng,
+        label: displayLabel,
+      };
       setPicked(loc);
-      setQuery(loc.label);
-      setSuggestions([]);
+      // Immediately pass exact browser coordinates to discovery callback
+      onConfirm(loc);
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : t("dentists.location_denied")
-      );
+      const msg = err instanceof Error ? err.message.toLowerCase() : "";
+      if (msg.includes("denied") || msg.includes("permission")) {
+        setError(t("dentists.location_denied"));
+      } else if (msg.includes("timed out") || msg.includes("timeout")) {
+        setError(t("dentists.location_timeout"));
+      } else {
+        setError(t("dentists.location_denied"));
+      }
     } finally {
       setGpsLoading(false);
     }
@@ -148,6 +189,38 @@ export function LocationPickerModal({
         <h2 className={styles.title}>{displayTitle}</h2>
         <p className={styles.sub}>{displaySubtitle}</p>
 
+        <button
+          type="button"
+          disabled={gpsLoading}
+          onClick={handleGps}
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "0.6rem",
+            padding: "0.9rem 1.25rem",
+            marginBottom: "1rem",
+            borderRadius: "10px",
+            background: "linear-gradient(135deg, #00a2f0, #073564)",
+            color: "#ffffff",
+            fontWeight: 700,
+            fontSize: "0.95rem",
+            border: "none",
+            cursor: gpsLoading ? "wait" : "pointer",
+            boxShadow: "0 4px 14px rgba(0, 162, 240, 0.28)",
+          }}
+        >
+          <GpsIcon spinning={gpsLoading} />
+          <span>{gpsLoading ? t("common.loading") : t("dentists.use_gps")}</span>
+        </button>
+
+        <div style={{ display: "flex", alignItems: "center", margin: "0.5rem 0 1.25rem", color: "var(--text-muted)", fontSize: "0.82rem" }}>
+          <div style={{ flex: 1, height: 1, background: "var(--border-default)" }} />
+          <span style={{ padding: "0 0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>{t("common.or")}</span>
+          <div style={{ flex: 1, height: 1, background: "var(--border-default)" }} />
+        </div>
+
         <span className={styles.label}>{t("location.label")}</span>
         <div className={styles.inputRow}>
           <div style={{ flex: 1, position: "relative" }}>
@@ -157,6 +230,7 @@ export function LocationPickerModal({
               placeholder={t("location.placeholder")}
               value={query}
               onChange={handleQueryChange}
+              onKeyDown={handleKeyDown}
               style={{
                 width: "100%",
                 padding: "0.75rem 1rem",

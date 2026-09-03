@@ -10,9 +10,11 @@ Priority rules:
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from orchestrator.dentist_recommendation.condition_mapping import specialist_tags_for_issue
+from orchestrator.dentist_recommendation.osm_dentists import haversine_km
 
 logger = logging.getLogger(__name__)
 
@@ -81,43 +83,122 @@ def calculate_dentist_score(
     return score
 
 
+def _normalize_name(name: str) -> str:
+    cleaned = re.sub(r"[^\w\s]", "", str(name or "").lower())
+    words = [
+        w
+        for w in cleaned.split()
+        if w not in ("dr", "doctor", "clinic", "dental", "hospital", "care", "center", "centre", "the", "and")
+    ]
+    return " ".join(words) if words else cleaned.strip()
+
+
+def _normalize_phone_str(phone: str | None) -> str:
+    if not phone:
+        return ""
+    digits = re.sub(r"\D", "", str(phone))
+    if digits.startswith("92") and len(digits) > 9:
+        digits = "0" + digits[2:]
+    return digits
+
+
+def _is_duplicate(cand: dict[str, Any], existing: dict[str, Any]) -> bool:
+    # 1. Platform dentist_id match
+    c_id = cand.get("dentist_id")
+    e_id = existing.get("dentist_id")
+    if c_id and e_id and str(c_id) == str(e_id):
+        return True
+
+    # 2. Place_id match
+    c_pid = cand.get("place_id")
+    e_pid = existing.get("place_id")
+    if c_pid and e_pid and str(c_pid) == str(e_pid):
+        return True
+
+    # 3. Exact coordinates match (rounded to 4 decimals ~11 meters)
+    c_lat, c_lng = float(cand.get("lat", 0.0)), float(cand.get("lng", 0.0))
+    e_lat, e_lng = float(existing.get("lat", 0.0)), float(existing.get("lng", 0.0))
+    if round(c_lat, 4) == round(e_lat, 4) and round(c_lng, 4) == round(e_lng, 4):
+        return True
+
+    # 4. Proximity within 80 meters with name overlap
+    dist = haversine_km(c_lat, c_lng, e_lat, e_lng)
+    if dist < 0.08:
+        c_norm = _normalize_name(cand.get("name") or cand.get("clinic_name") or "")
+        e_norm = _normalize_name(existing.get("name") or existing.get("clinic_name") or "")
+        if not c_norm or not e_norm or c_norm in e_norm or e_norm in c_norm:
+            return True
+        c_words = set(c_norm.split())
+        e_words = set(e_norm.split())
+        if c_words and e_words and (c_words & e_words):
+            return True
+
+    # 5. Phone number match (min 7 digits)
+    c_phone = _normalize_phone_str(cand.get("phone"))
+    e_phone = _normalize_phone_str(existing.get("phone"))
+    if c_phone and e_phone and len(c_phone) >= 7 and c_phone == e_phone:
+        return True
+
+    return False
+
+
+def _merge_candidate(existing: dict[str, Any], new_cand: dict[str, Any]) -> dict[str, Any]:
+    """Merge two matching candidates. Platform source always remains authoritative."""
+    e_is_plat = existing.get("tier") == "platform" or existing.get("source") == "platform"
+    n_is_plat = new_cand.get("tier") == "platform" or new_cand.get("source") == "platform"
+
+    target = existing if e_is_plat or not n_is_plat else new_cand
+    source = new_cand if target is existing else existing
+
+    if not target.get("phone") and source.get("phone"):
+        target["phone"] = source["phone"]
+    if not target.get("website") and source.get("website"):
+        target["website"] = source["website"]
+    if not target.get("address") and source.get("address"):
+        target["address"] = source["address"]
+    if target.get("rating") is None and source.get("rating") is not None:
+        target["rating"] = source["rating"]
+
+    return target
+
+
 def rank_dentists(
     platform_dentists: list[dict[str, Any]],
-    osm_dentists: list[dict[str, Any]],
-    issue: str,
+    osm_dentists: list[dict[str, Any]] | None = None,
+    issue: str = "dental checkup",
     limit: int = 15,
+    *,
+    external_dentists: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Merge and rank platform and OSM dentists deterministically."""
+    """Merge, deduplicate and rank platform and external dentists deterministically."""
     specialist_tags = specialist_tags_for_issue(issue)
     clean_issue = issue.replace("_", " ").strip()
 
-    seen_keys: set[str] = set()
     merged: list[dict[str, Any]] = []
 
-    # 1. Add platform dentists
+    # 1. Add platform dentists (authoritative)
     for item in platform_dentists:
-        dentist_id = str(item.get("dentist_id") or "")
-        coord_key = f"{round(item.get('lat', 0), 4)}_{round(item.get('lng', 0), 4)}"
-        if (dentist_id and dentist_id in seen_keys) or coord_key in seen_keys:
-            continue
-        if dentist_id:
-            seen_keys.add(dentist_id)
-        seen_keys.add(coord_key)
         item_copy = dict(item)
         item_copy["rank_score"] = calculate_dentist_score(item_copy, specialist_tags)
-        merged.append(item_copy)
 
-    # 2. Add OSM dentists (skip duplicates with matching coordinates)
-    for item in osm_dentists:
-        coord_key = f"{round(item.get('lat', 0), 4)}_{round(item.get('lng', 0), 4)}"
-        place_key = item.get("place_id") or coord_key
-        if coord_key in seen_keys or place_key in seen_keys:
-            continue
-        seen_keys.add(coord_key)
-        seen_keys.add(place_key)
+        # Check against already added platform items
+        dup_idx = next((i for i, m in enumerate(merged) if _is_duplicate(item_copy, m)), None)
+        if dup_idx is not None:
+            merged[dup_idx] = _merge_candidate(merged[dup_idx], item_copy)
+        else:
+            merged.append(item_copy)
+
+    # 2. Add external dentists (OSM, FSQ, Geoapify, etc.)
+    ext_list = external_dentists if external_dentists is not None else (osm_dentists or [])
+    for item in ext_list:
         item_copy = dict(item)
         item_copy["rank_score"] = calculate_dentist_score(item_copy, specialist_tags)
-        merged.append(item_copy)
+
+        dup_idx = next((i for i, m in enumerate(merged) if _is_duplicate(item_copy, m)), None)
+        if dup_idx is not None:
+            merged[dup_idx] = _merge_candidate(merged[dup_idx], item_copy)
+        else:
+            merged.append(item_copy)
 
     # Sort primarily by rank_score (descending), then distance (ascending)
     merged.sort(key=lambda d: (-d.get("rank_score", 0.0), d.get("distance_km", 0.0)))

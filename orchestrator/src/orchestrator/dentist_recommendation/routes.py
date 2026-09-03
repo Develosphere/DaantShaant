@@ -70,6 +70,7 @@ async def recommend_dentists(
         patient_lat=result["patient_lat"],
         patient_lng=result["patient_lng"],
         dentists=[DentistPin(**item) for item in result["dentists"]],
+        search_radius_km=result.get("search_radius_km"),
     )
 
 

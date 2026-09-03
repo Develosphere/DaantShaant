@@ -243,7 +243,7 @@ export const en = {
   "dentists.call": "Call Clinic",
   "dentists.directions": "Get Directions",
   "dentists.book_consultation": "Book Consultation",
-  "dentists.no_results": "No dental clinics found in this area. Try searching a larger city or nearby neighborhood.",
+  "dentists.no_results": "We couldn't find clinic listings near this location right now. Try expanding your search or choose a nearby area.",
   "dentists.loading_map": "Loading map and nearby dental clinics…",
   "dentists.searching_nearby": "Searching nearby dental clinics…",
   "dentists.location_modal_title": "Select Your Location",

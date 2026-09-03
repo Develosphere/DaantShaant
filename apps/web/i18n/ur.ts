@@ -244,7 +244,7 @@ export const ur = {
   "dentists.call": "کلینک پر کال کریں",
   "dentists.directions": "راستہ دیکھیں",
   "dentists.book_consultation": "مشاورت بک کریں",
-  "dentists.no_results": "اس علاقے میں کوئی ڈینٹل کلینک نہیں ملا۔ بڑا شہر یا قریبی علاقہ تلاش کریں۔",
+  "dentists.no_results": "ہمیں اس وقت اس مقام کے قریب کلینک لسٹنگ نہیں مل سکی۔ اپنی تلاش کو وسعت دیں یا قریبی علاقہ منتخب کریں۔",
   "dentists.loading_map": "نقشہ اور قریبی ڈینٹل کلینکس لوڈ ہو رہے ہیں…",
   "dentists.searching_nearby": "قریبی ڈینٹل کلینکس تلاش کیے جا رہے ہیں…",
   "dentists.location_modal_title": "اپنا مقام منتخب کریں",
