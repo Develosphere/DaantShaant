@@ -1,13 +1,16 @@
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 200;
-  background: rgba(0, 0, 0, 0.6);
+  width: 100vw;
+  height: 100vh;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.65);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   display: grid;
   place-items: center;
   padding: 1rem;
+  box-sizing: border-box;
 }
 
 .modal {
@@ -21,6 +24,13 @@
   padding: 2rem;
   box-shadow: 0 24px 80px rgba(0, 162, 240, 0.3);
   overflow: visible;
+  box-sizing: border-box;
+}
+
+:global([data-theme="dark"]) .modal {
+  background: rgba(18, 24, 38, 0.96);
+  border-color: rgba(0, 162, 240, 0.35);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
 }
 
 .title {
@@ -33,11 +43,19 @@
   color: #073564;
 }
 
+:global([data-theme="dark"]) .title {
+  color: #f1f5f9;
+}
+
 .sub {
   margin: 0 0 1.5rem;
   font-size: 0.92rem;
   color: #5a5a5a;
   line-height: 1.5;
+}
+
+:global([data-theme="dark"]) .sub {
+  color: #94a3b8;
 }
 
 .label {
@@ -50,10 +68,13 @@
   margin-bottom: 0.65rem;
 }
 
+:global([data-theme="dark"]) .label {
+  color: #cbd5e1;
+}
+
 .inputRow {
-  display: flex;
-  gap: 0.65rem;
-  align-items: stretch;
+  position: relative;
+  width: 100%;
   margin-bottom: 0.65rem;
 }
 
@@ -215,4 +236,15 @@
 .btnGhost:hover:not(:disabled) {
   background: rgba(0, 162, 240, 0.15);
   border-color: #00a2f0;
+}
+
+:global([data-theme="dark"]) .btnGhost {
+  background: rgba(0, 162, 240, 0.12);
+  border-color: rgba(0, 162, 240, 0.3);
+  color: #38bdf8;
+}
+
+:global([data-theme="dark"]) .btnGhost:hover:not(:disabled) {
+  background: rgba(0, 162, 240, 0.22);
+  border-color: #38bdf8;
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLanguage } from "@/i18n";
 import { getCurrentPosition, reverseGeocode, type PickedLocation } from "@/lib/geo-location";
 import { fetchAddressSuggestions, resolveAddressSuggestion, type AddressSuggestion } from "@/lib/location-autocomplete";
@@ -43,6 +44,7 @@ export function LocationPickerModal({
   subtitle,
 }: Props) {
   const { t, locale } = useLanguage();
+  const [mounted, setMounted] = useState(false);
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
@@ -53,6 +55,10 @@ export function LocationPickerModal({
 
   const displayTitle = title || t("location.title");
   const displaySubtitle = subtitle || t("location.subtitle");
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) {
@@ -70,6 +76,9 @@ export function LocationPickerModal({
     const val = e.target.value;
     setQuery(val);
     setError("");
+
+    // Invalidate previously selected coordinates when user edits input
+    setPicked(null);
 
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
 
@@ -102,7 +111,6 @@ export function LocationPickerModal({
       setPicked(loc);
       setQuery(s.label);
       setSuggestions([]);
-      onConfirm(loc);
       return;
     }
 
@@ -112,7 +120,6 @@ export function LocationPickerModal({
         setPicked(resolved);
         setQuery(resolved.label);
         setSuggestions([]);
-        onConfirm(resolved);
       } else {
         setError(t("dentists.location_timeout"));
       }
@@ -125,6 +132,7 @@ export function LocationPickerModal({
     if (e.key === "Enter") {
       e.preventDefault();
       if (suggestions.length > 0) {
+        // Selecting with Enter behaves the same as clicking: select only, do NOT search
         handleSelectSuggestion(suggestions[0]);
       } else if (picked) {
         onConfirm(picked);
@@ -181,10 +189,10 @@ export function LocationPickerModal({
     }
   }
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
-    <div className={styles.overlay} onClick={onClose}>
+  return createPortal(
+    <div className={styles.overlay} onClick={onClose} role="dialog" aria-modal="true">
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <h2 className={styles.title}>{displayTitle}</h2>
         <p className={styles.sub}>{displaySubtitle}</p>
@@ -223,70 +231,59 @@ export function LocationPickerModal({
 
         <span className={styles.label}>{t("location.label")}</span>
         <div className={styles.inputRow}>
-          <div style={{ flex: 1, position: "relative" }}>
-            <input
-              type="text"
-              className="input-field"
-              placeholder={t("location.placeholder")}
-              value={query}
-              onChange={handleQueryChange}
-              onKeyDown={handleKeyDown}
+          <input
+            type="text"
+            className="input-field"
+            placeholder={t("location.placeholder")}
+            value={query}
+            onChange={handleQueryChange}
+            onKeyDown={handleKeyDown}
+            style={{
+              width: "100%",
+              padding: "0.75rem 1rem",
+              borderRadius: "8px",
+              border: "1px solid var(--border-default)",
+              background: "var(--bg-surface-raised)",
+              color: "var(--text-primary)",
+              fontSize: "0.95rem",
+              boxSizing: "border-box",
+            }}
+          />
+          {suggestions.length > 0 && (
+            <div
               style={{
-                width: "100%",
-                padding: "0.75rem 1rem",
+                position: "absolute",
+                top: "105%",
+                left: 0,
+                right: 0,
+                zIndex: 2000,
+                background: "var(--bg-surface)",
+                border: "1px solid var(--border-strong)",
                 borderRadius: "8px",
-                border: "1px solid var(--border-default)",
-                background: "var(--bg-surface-raised)",
-                color: "var(--text-primary)",
-                fontSize: "0.95rem",
+                maxHeight: "220px",
+                overflowY: "auto",
+                boxShadow: "var(--shadow-card)",
               }}
-            />
-            {suggestions.length > 0 && (
-              <div
-                style={{
-                  position: "absolute",
-                  top: "105%",
-                  left: 0,
-                  right: 0,
-                  zIndex: 2000,
-                  background: "var(--bg-surface)",
-                  border: "1px solid var(--border-strong)",
-                  borderRadius: "8px",
-                  maxHeight: "220px",
-                  overflowY: "auto",
-                  boxShadow: "var(--shadow-card)",
-                }}
-              >
-                {suggestions.map((s, idx) => (
-                  <div
-                    key={`${s.place_id}-${idx}`}
-                    onClick={() => handleSelectSuggestion(s)}
-                    style={{
-                      padding: "0.6rem 0.85rem",
-                      cursor: "pointer",
-                      borderBottom: "1px solid var(--border-default)",
-                      fontSize: "0.85rem",
-                      color: "var(--text-primary)",
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-surface-raised)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                  >
-                    📍 {s.label}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <button
-            type="button"
-            className={styles.gpsBtn}
-            title={t("dentists.use_gps")}
-            aria-label={t("dentists.use_gps")}
-            disabled={gpsLoading}
-            onClick={handleGps}
-          >
-            <GpsIcon spinning={gpsLoading} />
-          </button>
+            >
+              {suggestions.map((s, idx) => (
+                <div
+                  key={`${s.place_id}-${idx}`}
+                  onClick={() => handleSelectSuggestion(s)}
+                  style={{
+                    padding: "0.6rem 0.85rem",
+                    cursor: "pointer",
+                    borderBottom: "1px solid var(--border-default)",
+                    fontSize: "0.85rem",
+                    color: "var(--text-primary)",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-surface-raised)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                >
+                  📍 {s.label}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <p className={styles.hint}>
@@ -312,7 +309,8 @@ export function LocationPickerModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

@@ -108,8 +108,7 @@ foreach ($svc in $Services) {
         continue
     }
 
-    $uvicornArgs = "-m uvicorn $($svc.AppModule) --app-dir $($svc.AppDir) --host 127.0.0.1 --port $port"
-    $windowCmd = "`$host.UI.RawUI.WindowTitle = '$title'; Write-Host '$title' -ForegroundColor Cyan; & '$PythonExe' $uvicornArgs"
+    $windowCmd = "`$host.UI.RawUI.WindowTitle = '$title'; Write-Host '$title' -ForegroundColor Cyan; & '$PythonExe' -m uvicorn $($svc.AppModule) --app-dir $($svc.AppDir) --host 127.0.0.1 --port $port"
 
     Start-Process powershell.exe -ArgumentList "-NoExit", "-Command", $windowCmd -WorkingDirectory $RepoRoot
     Write-Host " -> Launched $name on http://127.0.0.1:$port" -ForegroundColor Green
