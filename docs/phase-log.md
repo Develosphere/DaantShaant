@@ -884,7 +884,113 @@ Implemented end-to-end bilingual English/Urdu localization, dynamic Light/Dark t
 
 ### Next
 
+Phase 10.1B — Localization, Copy, Address Language & Contrast Repair
+
+---
+
+## Phase 10.1B — Localization, Copy, Address Language & Contrast Repair
+
+**Date:** September 2026  
+**Status:** COMPLETE
+
+### Summary
+
+Repaired and normalized patient-facing localization, copy, address language formatting, and visual contrast:
+- **Zero Raw i18n Key Leakage:** Centralized translation fallback logic in `LanguageProvider` / `useLanguage().t()`. Added case-insensitive safety lookup, developer-mode missing key warnings, and safe humanized fallbacks ensuring raw technical keys never leak into the patient UI.
+- **Canonical Key Parity (257 Keys):** Synchronized `en.ts` and `ur.ts` with 100% key parity across all 257 keys, standardizing on canonical lowercase dot-notation (`scan.*`, `report.*`, `dashboard.*`, `location.*`, `dentists.*`, `auth.*`, `chat.*`, `common.*`, `finding.*`, `nav.*`, `scans.*`).
+- **Standard Dental Terminology:** Established verified English copy and authentic, high-quality Urdu dental phrasing for all screening stages, findings, urgency tiers, and clinical guidance.
+- **Address Language Normalization:** Updated Nominatim requests to send `addressdetails=1`, `namedetails=1`, and `accept-language={lang}`. Built `format_location_label` in Python orchestrator and `formatReverseGeocodeLabel` in TypeScript frontend to extract language-appropriate namedetails and structured address parts (`[Place, City, Region, Country]`) with smart multi-script deduplication, eliminating mixed Urdu/English administrative hierarchies in English mode.
+- **Professional Healthcare Typography & Contrast:**
+  - Light theme: Deep navy headings (`--text-heading: #0B315D`), high-contrast slate text (`--text-primary: #1E293B`, `--text-secondary: #475569`, `--text-muted: #64748B`).
+  - Dark theme: Soft crisp light neutrals (`--text-heading: #F1F5F9`, `--text-primary: #F8FAFC`, `--text-secondary: #CBD5E1`), high-contrast dark surfaces (`--bg-surface`, `--bg-surface-raised`), eliminating low-contrast and washed-out text.
+  - Removed decorative Anton font from body copy, buttons, and clinical text, reserving it only for major hero branding; restored readable system / Jakarta Sans font.
+  - Replaced oversaturated neon cyan text in report recommendations, specialist, and timeframe with readable primary text and subtle accents.
+
+### Files Modified
+
+- `apps/web/i18n/context.tsx`
+- `apps/web/i18n/en.ts`
+- `apps/web/i18n/ur.ts`
+- `apps/web/app/globals.css`
+- `apps/web/components/portal/patient-feature.module.css`
+- `apps/web/components/dentists/dentist-map.module.css`
+- `apps/web/components/dentists/LocationPickerModal.tsx`
+- `apps/web/components/dentists/DentistMapView.tsx`
+- `apps/web/lib/geo-location.ts`
+- `orchestrator/src/orchestrator/dentist_recommendation/autocomplete_service.py`
+- `context.md`
+- `docs/phase-log.md`
+
+### Validation
+
+- Dictionary Key Parity: 257 EN keys, 257 UR keys (100% parity, 0 missing).
+- Component i18n Key Verification: 130 unique component `t()` calls matched directly into dictionaries with 0 missing keys.
+- Next.js Production Build (`npm run build`): Exit code 0, 26/26 static routes generated successfully.
+- Address Formatter Unit Validation: Verified concise structured output in English and Urdu with multi-script deduplication.
+
+### Next
+
+Phase 10.2 — Nearby Dentist Repair + Product Marketplace Integrity
+
+---
+
+## Phase 10.2 — Nearby Dentist Repair + Product Marketplace Integrity
+
+**Date:** September 2026  
+**Status:** COMPLETE
+
+### Summary
+
+Repaired nearby dentist discovery runtime execution and locked strict real-data integrity for the oral care product marketplace:
+- **Nearby Dentist Discovery Repaired:**
+  - Diagnosed Overpass API runtime rejection caused by default HTTP client headers (HTTP 406 Not Acceptable). Added compliant headers (`User-Agent: DaantShaant/1.0`, `Accept: application/json`).
+  - Optimized Overpass queries to evaluate `node` and `way` elements, eliminating heavy `relation` evaluations that triggered HTTP 504 Gateway Timeouts on wide radiuses.
+  - Implemented resilient fallback endpoint sequencing across Overpass mirror endpoints (`overpass-api.de`, `lz4.overpass-api.de`, `z.overpass-api.de`).
+  - Resolved LangGraph execution crash (`AttributeError: module 'langchain' has no attribute 'debug'`) with an ambient safeguard across graph entrypoints.
+  - Added compound specialist string normalization (`normalize_specialist_candidates`) and expanded clinical keyword mapping to cleanly split strings like `"general dentist / restorative dentist"` into distinct specialist tags.
+  - Ensured registered platform database dentists are always preserved and returned as authoritative records if external discovery is unavailable, with zero technical provider names (`Overpass`, `OSM`, `HTTP 504`) exposed to the public UI.
+- **Product Marketplace Integrity Locked (Zero AI-Fabricated Listings):**
+  - Audited and eliminated hardcoded mock product objects (`mock-toothbrush`, `mock-toothpaste`) from `apps/web/components/DiagnosisReport.tsx`.
+  - Removed synthetic fallback card generation from `apps/web/components/ChatMessage.tsx`.
+  - Restricted product candidate retrieval to active database products listed by active registered dentists in PostgreSQL (`ProductRepository.list_active` joining `Dentist`).
+  - Enforced strict database hydration: the LLM may only rank candidates and provide patient-specific clinical rationale; catalog data (`name`, `price`, `images`, `seller/dentist_id`, `category`) is strictly authoritative from PostgreSQL. Hallucinated or unknown product IDs are rejected.
+  - Added bilingual empty state when no products exist in the catalog:
+    - EN: `"No recommended products are currently available from registered dental providers."`
+    - UR: `"رجسٹرڈ ڈینٹل فراہم کنندگان کی جانب سے فی الحال کوئی تجویز کردہ پروڈکٹس دستیاب نہیں ہیں۔"`
+  - Commercial business model discussions deferred until explicitly requested by Nathan.
+
+### Files Modified
+
+- `orchestrator/src/orchestrator/__init__.py`
+- `orchestrator/src/orchestrator/dentist_recommendation/osm_dentists.py`
+- `orchestrator/src/orchestrator/dentist_recommendation/condition_mapping.py`
+- `orchestrator/src/orchestrator/dentist_recommendation/ranking.py`
+- `orchestrator/src/orchestrator/dentist_recommendation/platform_query.py`
+- `orchestrator/src/orchestrator/dentist_recommendation/dentist_agent.py`
+- `orchestrator/src/orchestrator/repositories/marketplace.py`
+- `orchestrator/src/orchestrator/recommendation_ai_system/tools.py`
+- `orchestrator/src/orchestrator/recommendation_ai_system/recommendation_agent.py`
+- `apps/web/components/DiagnosisReport.tsx`
+- `apps/web/components/ChatMessage.tsx`
+- `apps/web/i18n/en.ts`
+- `apps/web/i18n/ur.ts`
+- `context.md`
+- `docs/phase-log.md`
+
+### Files Created
+
+- `orchestrator/tests/test_product_marketplace_integrity.py`
+
+### Validation
+
+- Dentist & Product Automated Test Suites (`test_dentist_discovery.py` & `test_product_marketplace_integrity.py`): 28 passed, 0 failed. Zero external AI calls.
+- Next.js Production Build (`npm run build`): Exit code 0, 26/26 static routes generated successfully.
+- Safe Real Overpass Manual Query: Verified endpoint behavior with safe metadata logging only.
+
+### Next
+
 Phase 11 — Deployment Fast Track.
+
 
 
 

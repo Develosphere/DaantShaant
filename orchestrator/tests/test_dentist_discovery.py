@@ -424,3 +424,184 @@ def test_dentist_recommendation_graph_execution():
         assert result["dentists"][0]["name"] == "Dr. Fatima (Platform)"
         assert result["dentists"][0]["is_best"] is True
         assert result["dentists"][1]["name"] == "City Dental Clinic (OSM)"
+
+
+# ---------------------------------------------------------------------------
+# Section 22: Phase 10.2 Dedicated Dentist Acceptance Tests
+# ---------------------------------------------------------------------------
+
+def test_req1_platform_dentist_only_returned():
+    platform_only = [
+        {
+            "tier": "platform",
+            "source": "platform",
+            "dentist_id": "11111111-1111-1111-1111-111111111111",
+            "name": "Dr. Sole Platform",
+            "lat": 24.86,
+            "lng": 67.00,
+            "distance_km": 1.0,
+            "specialties": ["general"],
+            "is_verified": True,
+            "is_partner": False,
+        }
+    ]
+    ranked = rank_dentists(platform_only, [], issue="general checkup")
+    assert len(ranked) == 1
+    assert ranked[0]["name"] == "Dr. Sole Platform"
+    assert ranked[0]["tier"] == "platform"
+
+
+def test_req2_osm_dentist_only_returned():
+    osm_only = [
+        {
+            "tier": "general",
+            "source": "osm",
+            "place_id": "osm:node:999",
+            "name": "Public Health Dental",
+            "lat": 24.86,
+            "lng": 67.00,
+            "distance_km": 2.0,
+            "specialties": ["general"],
+            "is_verified": False,
+            "is_partner": False,
+        }
+    ]
+    ranked = rank_dentists([], osm_only, issue="general checkup")
+    assert len(ranked) == 1
+    assert ranked[0]["name"] == "Public Health Dental"
+    assert ranked[0]["tier"] == "general"
+
+
+def test_req3_merged_results_deduplicated():
+    platform = [
+        {
+            "tier": "platform",
+            "source": "platform",
+            "dentist_id": "11111111-1111-1111-1111-111111111111",
+            "name": "Al-Kareem Dental",
+            "lat": 24.8601,
+            "lng": 67.0001,
+            "distance_km": 1.0,
+            "specialties": ["general"],
+            "is_verified": True,
+            "is_partner": False,
+        }
+    ]
+    osm_duplicate = [
+        {
+            "tier": "general",
+            "source": "osm",
+            "place_id": "osm:node:101",
+            "name": "Al-Kareem Dental Clinic",
+            "lat": 24.8601,
+            "lng": 67.0001,
+            "distance_km": 1.0,
+            "specialties": ["general"],
+            "is_verified": False,
+            "is_partner": False,
+        }
+    ]
+    ranked = rank_dentists(platform, osm_duplicate, issue="general")
+    # Coordinates match rounded to 4 decimals -> deduplicated
+    assert len(ranked) == 1
+    assert ranked[0]["tier"] == "platform"
+
+
+def test_req4_overpass_failure_db_dentists_returned():
+    def mock_500_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="Internal Server Error")
+
+    mock_client = httpx.AsyncClient(transport=httpx.MockTransport(mock_500_handler))
+    osm_res = _run(search_osm_dentists(24.86, 67.00, radius_km=10.0, client=mock_client))
+    assert osm_res == []
+
+    db_dentists = [
+        {
+            "tier": "platform",
+            "dentist_id": "22222222-2222-2222-2222-222222222222",
+            "name": "Dr. Resilience",
+            "lat": 24.86,
+            "lng": 67.00,
+            "distance_km": 0.5,
+            "specialties": ["general"],
+            "is_verified": True,
+            "is_partner": False,
+        }
+    ]
+    ranked = rank_dentists(db_dentists, osm_res, issue="checkup")
+    assert len(ranked) == 1
+    assert ranked[0]["name"] == "Dr. Resilience"
+
+
+def test_req5_overpass_failure_no_db_dentists_safe_empty():
+    def mock_504_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(504, text="Gateway Timeout")
+
+    mock_client = httpx.AsyncClient(transport=httpx.MockTransport(mock_504_handler))
+    osm_res = _run(search_osm_dentists(24.86, 67.00, radius_km=10.0, client=mock_client))
+    assert osm_res == []
+
+    ranked = rank_dentists([], osm_res, issue="checkup")
+    assert ranked == []
+
+
+def test_req6_combined_specialist_string_normalizes_correctly():
+    from orchestrator.dentist_recommendation.condition_mapping import (
+        normalize_specialist_candidates,
+        specialist_tags_for_issue,
+    )
+    compound_str = "general dentist / restorative dentist"
+    candidates = normalize_specialist_candidates(compound_str)
+    assert "general dentist" in candidates
+    assert "restorative dentist" in candidates
+
+    tags = specialist_tags_for_issue(compound_str)
+    assert "restorative" in tags
+    assert "general" in tags
+
+
+def test_req7_clinically_matching_specialist_ranks_above_mismatch():
+    issue = "general dentist / restorative dentist"
+    specialist_dentist = {
+        "tier": "general",
+        "name": "Restorative Specialist Clinic",
+        "lat": 24.90,
+        "lng": 67.04,
+        "distance_km": 5.0,
+        "specialties": ["restorative dentistry"],
+        "degree": "BDS, Restorative Fellow",
+        "is_partner": False,
+        "is_verified": False,
+    }
+    general_partner = {
+        "tier": "platform",
+        "name": "General Only Partner",
+        "lat": 24.86,
+        "lng": 67.00,
+        "distance_km": 1.0,
+        "specialties": ["general"],
+        "is_partner": True,
+        "is_verified": True,
+    }
+    ranked = rank_dentists([general_partner], [specialist_dentist], issue=issue)
+    # The clinic with restorative specialty must rank #1 despite the other being partner and closer
+    assert ranked[0]["name"] == "Restorative Specialist Clinic"
+
+
+def test_req8_public_response_contains_no_technical_provider_error():
+    candidate = {
+        "tier": "general",
+        "name": "Karachi Central Dental",
+        "lat": 24.86,
+        "lng": 67.00,
+        "distance_km": 1.2,
+        "specialties": ["general"],
+        "recommendation_reason": "Nearby dental clinic (1.2 km away)",
+        "is_best": True,
+        "rank": 1,
+    }
+    pin = DentistPin(**candidate)
+    payload_str = pin.model_dump_json().lower()
+    for forbidden in ["overpass", "osm", "qwen", "gemini", "langgraph", "504 gateway", "406 not acceptable"]:
+        assert forbidden not in payload_str
+

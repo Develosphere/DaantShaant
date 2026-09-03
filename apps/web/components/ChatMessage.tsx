@@ -89,13 +89,11 @@ function ChatProductCard({ name, parsedPrice, parsedWhy, parsedHelps, onBuy }: {
     void fetchProduct();
   }, [name]);
 
-  const displayProduct = product || {
-    name,
-    price: parseFloat(parsedPrice) || 0,
-    ai_description: parsedWhy,
-    problems_solved: parsedHelps,
-    images: []
-  };
+  if (!product || !product.product_id) {
+    return null;
+  }
+
+  const displayProduct = product;
 
   const imageSrc = displayProduct.images && displayProduct.images.length > 0 
     ? displayProduct.images[0] 

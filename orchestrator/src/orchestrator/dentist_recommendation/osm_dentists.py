@@ -13,8 +13,18 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-OVERPASS_ENDPOINT = "https://overpass-api.de/api/interpreter"
-OVERPASS_TIMEOUT_SECONDS = 15.0
+OVERPASS_ENDPOINTS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+]
+OVERPASS_ENDPOINT = OVERPASS_ENDPOINTS[0]
+OVERPASS_TIMEOUT_SECONDS = 12.0
+
+OVERPASS_HEADERS = {
+    "User-Agent": "DaantShaant/1.0 (https://daantshaant.pk; contact@daantshaant.pk)",
+    "Accept": "application/json",
+}
 
 # Simple short-lived in-memory cache to prevent duplicate external calls
 _CACHE_TTL_SECONDS = 300.0
@@ -32,14 +42,12 @@ def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
 
 
 def _build_overpass_query(lat: float, lng: float, radius_m: int) -> str:
-    return f"""[out:json][timeout:12];
+    return f"""[out:json][timeout:10];
 (
   node["amenity"="dentist"](around:{radius_m},{lat},{lng});
   node["healthcare"="dentist"](around:{radius_m},{lat},{lng});
   way["amenity"="dentist"](around:{radius_m},{lat},{lng});
   way["healthcare"="dentist"](around:{radius_m},{lat},{lng});
-  relation["amenity"="dentist"](around:{radius_m},{lat},{lng});
-  relation["healthcare"="dentist"](around:{radius_m},{lat},{lng});
 );
 out center tags;"""
 
@@ -151,25 +159,37 @@ async def search_osm_dentists(
     radius_m = int(radius_km * 1000)
     query = _build_overpass_query(lat, lng, radius_m)
 
-    try:
-        if client is not None:
+    data = None
+    if client is not None:
+        try:
             res = await client.post(
                 OVERPASS_ENDPOINT,
                 data={"data": query},
+                headers=OVERPASS_HEADERS,
                 timeout=OVERPASS_TIMEOUT_SECONDS,
             )
             res.raise_for_status()
             data = res.json()
-        else:
-            async with httpx.AsyncClient(timeout=OVERPASS_TIMEOUT_SECONDS) as local_client:
-                res = await local_client.post(
-                    OVERPASS_ENDPOINT,
-                    data={"data": query},
-                )
-                res.raise_for_status()
-                data = res.json()
-    except Exception as exc:
-        logger.warning("[OVERPASS] Dentist query failed: %s", exc)
+        except Exception as exc:
+            logger.warning("[OVERPASS] Dentist query failed: %s", exc)
+            return []
+    else:
+        async with httpx.AsyncClient(timeout=OVERPASS_TIMEOUT_SECONDS) as local_client:
+            for endpoint in OVERPASS_ENDPOINTS:
+                try:
+                    res = await local_client.post(
+                        endpoint,
+                        data={"data": query},
+                        headers=OVERPASS_HEADERS,
+                    )
+                    res.raise_for_status()
+                    data = res.json()
+                    break
+                except Exception as exc:
+                    logger.warning("[OVERPASS] Endpoint %s failed: %s", endpoint, exc)
+                    continue
+
+    if not data:
         return []
 
     elements = data.get("elements", [])

@@ -62,22 +62,65 @@ export function getCurrentPosition(): Promise<GeolocationPosition> {
   );
 }
 
+function formatReverseGeocodeLabel(data: any, locale: string = "en", fallback: string): string {
+  if (!data) return fallback;
+  const isUrdu = locale.toLowerCase().startsWith("ur");
+  const namedetails = data.namedetails || {};
+  const address = data.address || {};
+
+  const placeName = isUrdu
+    ? namedetails["name:ur"] || namedetails["official_name:ur"] || namedetails["short_name:ur"] || data.name || ""
+    : namedetails["name:en"] || namedetails["official_name:en"] || namedetails["short_name:en"] || data.name || "";
+
+  const suburb = address.suburb || address.neighbourhood || address.quarter || address.residential || address.city_district || "";
+  const city = address.city || address.town || address.municipality || address.village || address.county || "";
+  const state = address.state || address.province || address.state_district || address.region || "";
+  const country = address.country || "";
+
+  const placeAliases = new Set([
+    (data.name || "").toLowerCase(),
+    (namedetails["name"] || "").toLowerCase(),
+    (namedetails["name:en"] || "").toLowerCase(),
+    (namedetails["name:ur"] || "").toLowerCase(),
+    placeName.toLowerCase(),
+  ]);
+  placeAliases.delete("");
+
+  const components: string[] = [];
+  if (placeName) components.push(placeName);
+  if (suburb && !placeAliases.has(suburb.toLowerCase()) && !components.some((c) => c.toLowerCase() === suburb.toLowerCase())) components.push(suburb);
+  if (city && !placeAliases.has(city.toLowerCase()) && !components.some((c) => c.toLowerCase() === city.toLowerCase())) components.push(city);
+  if (state && !placeAliases.has(state.toLowerCase()) && !components.some((c) => c.toLowerCase() === state.toLowerCase())) components.push(state);
+  if (country && !components.some((c) => c.toLowerCase() === country.toLowerCase())) components.push(country);
+
+  if (components.length > 0) return components.join(", ");
+
+  const raw = data.display_name || "";
+  if (raw) {
+    const parts = raw.split(",").map((p: string) => p.trim()).filter(Boolean);
+    if (parts.length > 4) return [parts[0], parts[1], parts[parts.length - 2], parts[parts.length - 1]].join(", ");
+    return raw;
+  }
+  return fallback;
+}
+
 /** Reverse geocode lat/lng using OpenStreetMap Nominatim or coordinate string. */
 export async function reverseGeocode(lat: number, lng: number, locale: string = "en"): Promise<string> {
   const fallback = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
   try {
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&accept-language=${encodeURIComponent(locale)}`,
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1&namedetails=1&accept-language=${encodeURIComponent(locale)}`,
       {
         headers: {
           "Accept": "application/json",
           "Accept-Language": locale,
+          "User-Agent": "DaantShaant/1.0 (oral health screening platform; contact@daantshaant.app)",
         },
       }
     );
     if (!res.ok) return fallback;
-    const data = (await res.json()) as { display_name?: string };
-    return data.display_name || fallback;
+    const data = await res.json();
+    return formatReverseGeocodeLabel(data, locale, fallback);
   } catch {
     return fallback;
   }

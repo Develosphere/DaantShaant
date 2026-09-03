@@ -35,7 +35,11 @@ def calculate_dentist_score(
 
     haystack = " ".join(dentist_specialties + [degree_text, training_text, clinic_text])
 
-    target_specialists = [t.lower() for t in specialist_tags if t.lower() != "general"]
+    target_specialists = [
+        t.lower()
+        for t in specialist_tags
+        if t.lower() not in ("general", "general dentist", "dentist")
+    ]
     
     specialist_matched = False
     if target_specialists:
@@ -92,13 +96,13 @@ def rank_dentists(
 
     # 1. Add platform dentists
     for item in platform_dentists:
-        key = (
-            item.get("dentist_id")
-            or f"{round(item.get('lat', 0), 4)}_{round(item.get('lng', 0), 4)}"
-        )
-        if key in seen_keys:
+        dentist_id = str(item.get("dentist_id") or "")
+        coord_key = f"{round(item.get('lat', 0), 4)}_{round(item.get('lng', 0), 4)}"
+        if (dentist_id and dentist_id in seen_keys) or coord_key in seen_keys:
             continue
-        seen_keys.add(key)
+        if dentist_id:
+            seen_keys.add(dentist_id)
+        seen_keys.add(coord_key)
         item_copy = dict(item)
         item_copy["rank_score"] = calculate_dentist_score(item_copy, specialist_tags)
         merged.append(item_copy)

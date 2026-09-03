@@ -41,26 +41,47 @@ def function_tool(fn):
 
 @function_tool
 async def search_products_by_issue(issue: str) -> list[dict]:
-    issue_embedding = await embed_text(issue)
     async with async_session_factory() as session:
         products = await ProductRepository(session).list_active(limit=500)
 
+    if not products:
+        return []
+
+    try:
+        issue_embedding = await embed_text(issue)
+    except Exception as exc:
+        logger.warning("[PRODUCT_SEARCH] Embedding generation failed: %s", exc)
+        issue_embedding = None
+
     scored = []
+    issue_words = [w for w in issue.lower().replace("_", " ").split() if len(w) > 2]
     for product in products:
-        if product.embedding:
+        score = 0.0
+        if issue_embedding and product.embedding:
             score = cosine_similarity(issue_embedding, product.embedding)
-            scored.append(
-                {
-                    "product_id": str(product.id),
-                    "name": product.name,
-                    "category": product.category,
-                    "price": float(product.price or 0),
-                    "ai_description": product.ai_description or "",
-                    "problems_solved": product.problems_solved or [],
-                    "images": product.images or [],
-                    "similarity_score": round(score, 4),
-                }
-            )
+        else:
+            # Fallback keyword match against product catalog text
+            text_haystack = (
+                f"{product.name} {product.category or ''} "
+                f"{' '.join(product.problems_solved or [])} "
+                f"{product.ai_description or ''} {product.raw_description or ''}"
+            ).lower()
+            matches = sum(1 for w in issue_words if w in text_haystack)
+            score = round(matches / max(1, len(issue_words)), 2)
+
+        scored.append(
+            {
+                "product_id": str(product.id),
+                "dentist_id": str(product.dentist_id),
+                "name": product.name,
+                "category": product.category,
+                "price": float(product.price or 0),
+                "ai_description": product.ai_description or "",
+                "problems_solved": product.problems_solved or [],
+                "images": product.images or [],
+                "similarity_score": round(score, 4),
+            }
+        )
     scored.sort(key=lambda item: item["similarity_score"], reverse=True)
     return scored[:10]
 
@@ -97,6 +118,9 @@ async def rank_recommendations(
     *,
     gateway: "AIGateway | None" = None,
 ) -> list[dict]:
+    if not products:
+        return []
+
     from orchestrator.ai.exceptions import AllProvidersFailedError
     from orchestrator.ai.schemas import ChatMessage, TextRequest
 
@@ -116,7 +140,7 @@ async def rank_recommendations(
     )
     prompt = (
         f"Patient Issue: {patient_issue}\n\nCandidate Products:\n{product_summary}\n\n"
-        "Rank the top 5 most relevant products. For each, write a short "
+        "Rank the top 5 most relevant products from the candidate list. For each, write a short "
         "recommendation_reason. Return only a valid JSON array with product_id, "
         "rank, and recommendation_reason."
     )
@@ -126,7 +150,7 @@ async def rank_recommendations(
         messages=[
             ChatMessage(
                 role="system",
-                content="You are a dental product ranking expert. Return only JSON.",
+                content="You are a dental product ranking expert. Return only JSON array with product_id, rank, and recommendation_reason.",
             ),
             ChatMessage(role="user", content=prompt),
         ],
@@ -166,12 +190,34 @@ async def rank_recommendations(
         logger.warning("Product reranking failed: %s", exc)
         return _deterministic_ranking()
 
+    # Hydrate strictly from DB: Database is authoritative for name, price, seller, images
     product_map = {product["product_id"]: product for product in products}
-    return [
-        {**product_map[item["product_id"]], **item}
-        for item in ranked
-        if item.get("product_id") in product_map
-    ]
+    hydrated: list[dict] = []
+    seen_ids: set[str] = set()
+
+    for item in ranked:
+        if not isinstance(item, dict):
+            continue
+        pid = str(item.get("product_id") or "")
+        if not pid or pid not in product_map or pid in seen_ids:
+            # Hallucinated or duplicate product IDs are ignored
+            continue
+        seen_ids.add(pid)
+        db_prod = dict(product_map[pid])
+        db_prod["rank"] = item.get("rank", len(hydrated) + 1)
+        reason = item.get("recommendation_reason") or item.get("reason")
+        if reason:
+            db_prod["recommendation_reason"] = str(reason).strip()
+        else:
+            db_prod["recommendation_reason"] = (
+                f"Addresses {patient_issue} based on product specifications."
+            )
+        hydrated.append(db_prod)
+
+    if not hydrated and products:
+        return _deterministic_ranking()
+
+    return hydrated
 
 
 @function_tool

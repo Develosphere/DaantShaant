@@ -1,7 +1,7 @@
 # DaantShaant Context
 
 > Current implementation state. Read this first in every engineering chat.
-> Last updated: Phase 8-lite - Evaluation Harness + Demo Metrics, September 2026.
+> Last updated: Phase 10.1B — Localization, Copy, Address Language & Contrast Repair, September 2026.
 
 ## Product
 
@@ -297,10 +297,28 @@ Phase 10.1 implemented full bilingual capabilities, light/dark theme support, an
 | 8-lite | Evaluation Harness + Demo Metrics | COMPLETE |
 | 10 Fast Track | Final UI Integration + Demo UX Polish | COMPLETE |
 | 10.1 | Bilingual English/Urdu + Light/Dark Theme + Public Copy Hardening | COMPLETE |
+| 10.2 | Nearby Dentist Repair + Product Marketplace Integrity | COMPLETE |
 
 The former Phase 1C is obsolete because its domain migration scope was merged into Phase 1B.
+
+## Phase 10.2 Summary — Nearby Dentist Repair + Product Marketplace Integrity
+
+- **Nearby Dentist Discovery Repaired**:
+  - Overpass API integration updated with compliant `User-Agent` (`DaantShaant/1.0`) and `Accept` headers, eliminating `406 Not Acceptable` rejections.
+  - Query optimized to `node` and `way` elements, eliminating heavy `relation` evaluations that triggered `504 Gateway Timeout`.
+  - Configured resilient endpoint fallback sequence (`overpass-api.de`, `lz4.overpass-api.de`, `z.overpass-api.de`).
+  - Added `langchain.debug` attribute compatibility guard across LangGraph entrypoints.
+  - Added `normalize_specialist_candidates` and expanded condition mapping to handle compound triage strings (e.g. `"general dentist / restorative dentist"`).
+  - Preserved verified platform DB dentists as guaranteed fallback if external discovery is degraded or unavailable.
+- **Product Marketplace Integrity Locked**:
+  - All mock products (`mock-toothbrush`, `mock-toothpaste`) and simulated chat fallback cards removed completely.
+  - Patient recommendations come strictly from real active products listed by active registered dentists in PostgreSQL (`ProductRepository.list_active`).
+  - Database hydration is 100% authoritative for product catalog data (name, price, seller, images, category); LLM provides only rank and rationale. Hallucinated or unknown product IDs are discarded.
+  - Empty results return `[]` and render a professional bilingual empty-state message (`"report.no_products_available"`).
+  - Commercial business model discussions deferred until Nathan explicitly requests them.
 
 ## Next Phase
 
 **Phase 11 — Deployment Fast Track**.
+
 

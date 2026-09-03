@@ -56,6 +56,14 @@ async def search_platform_dentists(
                     + (20.0 if dentist.is_verified else 5.0)
                     + max(0, 50 - distance * 2)
                 )
+                dentist_specs = dentist.specialties or []
+                if isinstance(dentist_specs, dict):
+                    dentist_specs = list(dentist_specs.values())
+                elif isinstance(dentist_specs, str):
+                    dentist_specs = [dentist_specs]
+                if not dentist_specs:
+                    dentist_specs = ["general"]
+
                 results.append(
                     {
                         "tier": "platform",
@@ -68,7 +76,7 @@ async def search_platform_dentists(
                         "phone": dentist.phone,
                         "rating": dentist.rating,
                         "distance_km": round(distance, 2),
-                        "specialties": tags,
+                        "specialties": [str(s) for s in dentist_specs],
                         "is_partner": dentist.is_partner,
                         "is_verified": dentist.is_verified,
                         "clinic_name": dentist.clinic_name or f"{dentist.name} Dental Clinic",

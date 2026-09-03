@@ -306,7 +306,7 @@ export function DentistMapView() {
                     </span>
                   )}
                   {d.tier !== "platform" && (
-                    <span style={{ fontSize: "0.72rem", padding: "2px 7px", background: "rgba(100,116,139,0.25)", color: "#cbd5e1", borderRadius: 4, marginLeft: 4, fontWeight: 500 }}>
+                    <span style={{ fontSize: "0.72rem", padding: "2px 7px", background: "var(--bg-surface-raised)", border: "1px solid var(--border-default)", color: "var(--text-secondary)", borderRadius: 4, marginLeft: 4, fontWeight: 500 }}>
                       {t("dentists.external_clinic")}
                     </span>
                   )}

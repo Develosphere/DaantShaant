@@ -6,6 +6,13 @@ import logging
 from typing import Any, TypedDict
 from uuid import UUID, uuid4
 
+try:
+    import langchain  # type: ignore[import]
+    if not hasattr(langchain, "debug"):
+        langchain.debug = False
+except ImportError:
+    pass
+
 from langgraph.graph import END, START, StateGraph
 
 from orchestrator.db.models import DentistRecommendation

@@ -51,8 +51,8 @@ export function LocationPickerModal({
   const [error, setError] = useState("");
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const displayTitle = title || t("dentists.location_modal_title");
-  const displaySubtitle = subtitle || t("dentists.location_modal_desc");
+  const displayTitle = title || t("location.title");
+  const displaySubtitle = subtitle || t("location.subtitle");
 
   useEffect(() => {
     if (!open) {
@@ -148,13 +148,13 @@ export function LocationPickerModal({
         <h2 className={styles.title}>{displayTitle}</h2>
         <p className={styles.sub}>{displaySubtitle}</p>
 
-        <span className={styles.label}>{t("auth.location")}</span>
+        <span className={styles.label}>{t("location.label")}</span>
         <div className={styles.inputRow}>
           <div style={{ flex: 1, position: "relative" }}>
             <input
               type="text"
               className="input-field"
-              placeholder={t("dentists.search_placeholder")}
+              placeholder={t("location.placeholder")}
               value={query}
               onChange={handleQueryChange}
               style={{
@@ -218,7 +218,7 @@ export function LocationPickerModal({
         <p className={styles.hint}>
           {loadingSuggestions
             ? t("dentists.searching_locations")
-            : t("dentists.address_prompt")}
+            : t("location.helper")}
         </p>
 
         {picked && <p className={styles.selected}>{picked.label}</p>}
@@ -226,7 +226,7 @@ export function LocationPickerModal({
 
         <div className={styles.actions}>
           <button type="button" className={styles.btnGhost} onClick={onClose} disabled={gpsLoading}>
-            {t("common.cancel")}
+            {t("location.cancel")}
           </button>
           <button
             type="button"
@@ -234,7 +234,7 @@ export function LocationPickerModal({
             disabled={!picked || gpsLoading}
             onClick={() => picked && onConfirm(picked)}
           >
-            {t("nav.dentists")}
+            {t("location.find")}
           </button>
         </div>
       </div>

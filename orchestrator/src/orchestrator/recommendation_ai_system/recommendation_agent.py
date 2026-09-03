@@ -6,6 +6,14 @@ function using the LangGraph framework.
 
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, TypedDict
+
+try:
+    import langchain  # type: ignore[import]
+    if not hasattr(langchain, "debug"):
+        langchain.debug = False
+except ImportError:
+    pass
+
 from langgraph.graph import StateGraph, START, END
 
 from orchestrator.recommendation_ai_system.tools import (
@@ -99,12 +107,14 @@ async def generate_response_node(state: RecommendationState) -> Dict[str, Any]:
     """Format and generate the final recommended products message."""
     logger.info("[LANGGRAPH] Node: generate_response")
     ranked = state.get("ranked_candidates", [])
-    
+    if not ranked:
+        return {"final_output": "No recommended products are currently available from registered dental providers."}
+
     product_lines = "\n".join(
         f"- {r['name']} (${r['price']:.2f}): {r.get('recommendation_reason', r.get('ai_description', ''))}"
         for r in ranked[:5]
     )
-    
+
     prompt = (
         f"Patient dental issue: {state['issue']}\n\n"
         f"Top recommended products:\n{product_lines}\n\n"
@@ -120,7 +130,7 @@ async def generate_response_node(state: RecommendationState) -> Dict[str, Any]:
         "   Helps with: [problems_solved list]\n\n"
         "..."
     )
-    
+
     from orchestrator.ai.exceptions import AllProvidersFailedError
     from orchestrator.ai.schemas import ChatMessage, TextRequest
 
@@ -164,7 +174,7 @@ async def generate_response_node(state: RecommendationState) -> Dict[str, Any]:
 async def terminate_low_similarity_node(state: RecommendationState) -> Dict[str, Any]:
     """Node executed when no relevant products match the patient's issue."""
     logger.info("[LANGGRAPH] Node: terminate_low_similarity")
-    return {"final_output": "I couldn't find strong matches — please consult your dentist directly"}
+    return {"final_output": "No recommended products are currently available from registered dental providers."}
 
 
 # ---------------------------------------------------------------------------

@@ -67,7 +67,14 @@ class ProductRepository:
     async def list_active(
         self, *, category: str | None = None, search: str | None = None, limit: int = 50
     ) -> list[Product]:
-        query = select(Product).where(Product.status == "active")
+        query = (
+            select(Product)
+            .join(Dentist, Dentist.id == Product.dentist_id)
+            .where(
+                Product.status == "active",
+                Dentist.is_active.is_(True),
+            )
+        )
         if category:
             query = query.where(Product.category == category)
         if search:
