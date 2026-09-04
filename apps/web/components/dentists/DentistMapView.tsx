@@ -12,7 +12,7 @@ import {
   type DentistPin,
 } from "@/lib/dentist-recommend";
 import { type PickedLocation } from "@/lib/geo-location";
-import { ensureMapLibreCSS, maplibregl, OPENFREEMAP_LIBERTY_STYLE } from "@/lib/maplibre";
+import { ensureMapLibreCSS, maplibregl, OSM_RASTER_STYLE } from "@/lib/maplibre";
 import styles from "./dentist-map.module.css";
 
 function parseCoord(value: string | null): number | undefined {
@@ -79,6 +79,7 @@ export function DentistMapView() {
   const [sessionId, setSessionId] = useState<string>("");
   const [loading, setLoading] = useState(hasCoords);
   const [error, setError] = useState("");
+  const [mapError, setMapError] = useState(false);
   const [selected, setSelected] = useState<DentistPin | null>(null);
   const [booking, setBooking] = useState(false);
   const [bookMsg, setBookMsg] = useState("");
@@ -97,7 +98,7 @@ export function DentistMapView() {
         if (!mapInstance.current) {
           const map = new maplibregl.Map({
             container: mapContainerRef.current,
-            style: OPENFREEMAP_LIBERTY_STYLE,
+            style: OSM_RASTER_STYLE,
             center: [center.lng, center.lat],
             zoom: 12,
             attributionControl: false,
@@ -106,7 +107,7 @@ export function DentistMapView() {
           map.addControl(
             new maplibregl.AttributionControl({
               customAttribution:
-                '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors | Style: <a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a>',
+                '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
             }),
             "bottom-right"
           );
@@ -115,6 +116,10 @@ export function DentistMapView() {
 
           map.on("load", () => {
             map.resize();
+          });
+
+          map.on("error", (e) => {
+            console.warn("[MAPLIBRE_INTERNAL_EVENT]", e.error?.message || "map event");
           });
 
           mapInstance.current = map;
@@ -191,11 +196,11 @@ export function DentistMapView() {
 
         // 3. Dentist Pins
         // Registered dentists: Brand blue #00a2f0 with inner flair
-        // External clinics: Neutral slate #64748b
+        // Normal dentists: Neutral slate #64748b
         pins.forEach((d) => {
-          const isPlatform = d.tier === "platform";
-          const pinColor = isPlatform ? "#00a2f0" : "#64748b";
-          const dropShadow = isPlatform ? "rgba(0, 162, 240, 0.45)" : "rgba(0, 0, 0, 0.28)";
+          const isRegistered = d.tier === "platform" || Boolean(d.dentist_id);
+          const pinColor = isRegistered ? "#00a2f0" : "#64748b";
+          const dropShadow = isRegistered ? "rgba(0, 162, 240, 0.45)" : "rgba(0, 0, 0, 0.28)";
 
           const pinEl = document.createElement("div");
           pinEl.style.cursor = "pointer";
@@ -205,7 +210,7 @@ export function DentistMapView() {
             <svg width="30" height="40" viewBox="0 0 32 42" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 3px 6px ${dropShadow});">
               <path d="M16 0C7.2 0 0 7.2 0 16c0 12 16 26 16 26s16-14 16-26C32 7.2 24.8 0 16 0z" fill="${pinColor}" stroke="#ffffff" stroke-width="2"/>
               <circle cx="16" cy="16" r="6.5" fill="#ffffff"/>
-              ${isPlatform ? `<circle cx="16" cy="16" r="3.5" fill="#00a2f0"/>` : ""}
+              ${isRegistered ? `<circle cx="16" cy="16" r="3.5" fill="#00a2f0"/>` : ""}
             </svg>
           `;
 
@@ -234,6 +239,7 @@ export function DentistMapView() {
         }, 200);
       } catch (err) {
         console.error("Error initializing MapLibre map:", err);
+        setMapError(true);
       }
     },
     [t]
@@ -373,16 +379,13 @@ export function DentistMapView() {
           )}
           <div className={styles.legend}>
             <span className={styles.legendItem}>
-              <span className={styles.legendDotPatient} /> {t("location.title") || "Your Location"}
+              <span className={styles.legendDotPatient} /> {t("dentists.legend_patient")}
             </span>
             <span className={styles.legendItem}>
-              <span className={styles.legendDotRegistered} /> {t("dentists.verified_clinic")}
+              <span className={styles.legendDotRegistered} /> {t("dentists.recommended")}
             </span>
             <span className={styles.legendItem}>
-              <span className={styles.legendDotOther} /> {t("dentists.external_clinic")}
-            </span>
-            <span className={styles.legendItem}>
-              <span className={styles.legendTagBest}>{t("dentists.best_specialist_match")}</span>
+              <span className={styles.legendDotOther} /> {t("dentists.nearby_dentists")}
             </span>
           </div>
           {searchRadiusKm && dentists.length > 0 && (
@@ -414,6 +417,11 @@ export function DentistMapView() {
           <div className={styles.sidebar}>
             <div className={styles.mapWrap}>
               <div ref={mapContainerRef} className={styles.mapCanvas} />
+              {mapError && (
+                <div className={styles.mapErrorFallback}>
+                  <p>🗺️ {t("dentists.map_unavailable")}</p>
+                </div>
+              )}
               {loading && (
                 <div className={styles.mapPlaceholder}>
                   <div className={styles.mapSpinner} />
@@ -438,40 +446,37 @@ export function DentistMapView() {
                 </div>
               )}
 
-              {dentists.map((d) => (
-                <button
-                  key={`${d.tier}-${d.dentist_id ?? d.place_id}-${d.rank}`}
-                  type="button"
-                  className={`${styles.listItem} ${d.tier === "platform" ? styles.listItemPlatform : ""} ${
-                    selected?.rank === d.rank ? styles.listItemActive : ""
-                  }`}
-                  onClick={() => {
-                    setSelected(d);
-                    if (mapInstance.current) {
-                      mapInstance.current.flyTo({ center: [d.lng, d.lat], zoom: 14, essential: true });
-                    }
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.35rem", marginBottom: "0.35rem" }}>
-                    {d.is_best && <span className={styles.badgeBest}>{t("dentists.best_specialist_match")}</span>}
-                    {d.tier === "platform" && (
-                      <span className={styles.badgePartner}>
-                        {t("dentists.verified_clinic")}
-                      </span>
+              {dentists.map((d) => {
+                const isRegistered = d.tier === "platform" || Boolean(d.dentist_id);
+                return (
+                  <button
+                    key={`${d.tier}-${d.dentist_id ?? d.place_id}-${d.rank}`}
+                    type="button"
+                    className={`${styles.listItem} ${isRegistered ? styles.listItemPlatform : ""} ${
+                      selected?.rank === d.rank ? styles.listItemActive : ""
+                    }`}
+                    onClick={() => {
+                      setSelected(d);
+                      if (mapInstance.current) {
+                        mapInstance.current.flyTo({ center: [d.lng, d.lat], zoom: 14, essential: true });
+                      }
+                    }}
+                  >
+                    {isRegistered && (
+                      <div style={{ marginBottom: "0.35rem" }}>
+                        <span className={styles.badgeRecommended}>
+                          {t("dentists.recommended")}
+                        </span>
+                      </div>
                     )}
-                    {d.tier !== "platform" && (
-                      <span className={styles.badgeExternal}>
-                        {t("dentists.external_clinic")}
-                      </span>
-                    )}
-                  </div>
-                  <div className={styles.listName}>{d.name}</div>
-                  <div className={styles.listMeta}>
-                    {d.clinic_name || d.address} · {t("dentists.distance_km", { km: d.distance_km.toFixed(1) })}
-                    {d.rating != null ? ` · ★ ${d.rating}${d.review_count ? ` (${d.review_count})` : ""}` : ""}
-                  </div>
-                </button>
-              ))}
+                    <div className={styles.listName}>{d.name}</div>
+                    <div className={styles.listMeta}>
+                      {d.clinic_name || d.address} · {t("dentists.distance_km", { km: d.distance_km.toFixed(1) })}
+                      {d.rating != null ? ` · ★ ${d.rating}${d.review_count ? ` (${d.review_count})` : ""}` : ""}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -480,14 +485,11 @@ export function DentistMapView() {
         {mounted && selected && createPortal(
           <div className={styles.modalOverlay} onClick={() => setSelected(null)} role="dialog" aria-modal="true">
             <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-              <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.4rem", marginBottom: "0.5rem" }}>
-                {selected.is_best && <span className={styles.badgeBest}>{t("dentists.best_specialist_match")}</span>}
-                {selected.tier === "platform" ? (
-                  <span className={styles.badgePartner}>{t("dentists.verified_clinic")}</span>
-                ) : (
-                  <span className={styles.badgeExternal}>{t("dentists.external_clinic")}</span>
-                )}
-              </div>
+              {(selected.tier === "platform" || Boolean(selected.dentist_id)) && (
+                <div style={{ marginBottom: "0.5rem" }}>
+                  <span className={styles.badgeRecommended}>{t("dentists.recommended")}</span>
+                </div>
+              )}
 
               <h3>{selected.name}</h3>
               <p className={styles.modalClinic}>{selected.clinic_name || selected.address}</p>
@@ -611,7 +613,7 @@ export function DentistMapView() {
                   🗺️ {t("dentists.directions")}
                 </a>
 
-                {selected.tier === "platform" && selected.dentist_id ? (
+                {(selected.tier === "platform" || Boolean(selected.dentist_id)) && selected.dentist_id && (
                   <button
                     type="button"
                     className={styles.btnBookPlatform}
@@ -620,10 +622,6 @@ export function DentistMapView() {
                   >
                     {booking ? t("common.loading") : `📅 ${t("dentists.book_consultation")}`}
                   </button>
-                ) : (
-                  <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", width: "100%", textAlign: "center", margin: "0.25rem 0 0" }}>
-                    ℹ️ {t("dentists.external_clinic")}
-                  </p>
                 )}
               </div>
 

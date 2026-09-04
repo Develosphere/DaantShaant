@@ -1149,7 +1149,89 @@ Dentist discovery now treats `scan_id` strictly as optional linking context rath
 
 ### Next
 
+Phase 10.4.2 — Map Visibility, Brand Styling, Full-Viewport Modals & Contact Details.
+
+---
+
+## Phase 10.4.2 — Map Visibility, Brand Styling, Full-Viewport Modals & Contact Details
+
+**Date:** September 2026  
+**Status:** COMPLETE
+
+### Summary
+
+Fixed map tile visibility, aligned branding colors with DaantShaant identity, ensured full-viewport coverage for modals, and integrated optional contact/directions links:
+- **Map Tile Rendering & Canvas Sizing**: Bundled `maplibre-gl/dist/maplibre-gl.css` statically, eliminated container unmounting during search queries by maintaining the map DOM node and displaying an overlay loader, and added `ResizeObserver` plus post-render `map.resize()` invocations to guarantee WebGL tile layers always compute viewport dimensions correctly.
+- **Brand Colors & Registered Dentist Flair**: Standardized brand blue `#00A2F0` exclusively for registered dentists (blue pin with inner crest, blue left card highlight `.listItemPlatform`, `#00A2F0` badge `.badgePartner`, and booking CTA). External clinics use neutral slate styling (`#64748b` pin and subtle neutral badge). All incorrect green highlights (`#22c55e`, `#059669`) removed across cards, badges, and pins. The patient location marker is styled with a distinct warm amber pulsing pin (`#f59e0b`), avoiding brand confusion.
+- **Full-Viewport Modal Overlays**: Fixed dark backdrop clipping by rendering the dentist detail modal into `document.body` via React's `createPortal`, matching `LocationPickerModal` with fixed viewport dimensions (`inset: 0`, `width: 100vw`, `height: 100vh`, `z-index: 99999`).
+- **Optional Contact & Social Details**: Extended backend models (`DentistPin`) and candidate extraction in `platform_query.py`, `osm_dentists.py`, `external_providers.py`, and `ranking.py` to extract `phone`, `email`, `website`, `whatsapp`, and `linkedin`. The frontend renders only populated contact fields as safe clickable links (`tel:`, `mailto:`, `https://wa.me/...`, LinkedIn, website in new tabs) and omits unavailable fields without "N/A" placeholders.
+- **Google Maps Directions**: Replaced OSM directions link with Google Maps directions URL (`https://www.google.com/maps/dir/?api=1&origin={lat},{lng}&destination={lat},{lng}`) opening in a new tab.
+
+### Files Modified
+
+- `apps/web/lib/maplibre.ts`
+- `apps/web/components/dentists/DentistMapView.tsx`
+- `apps/web/components/dentists/dentist-map.module.css`
+- `apps/web/components/dentists/location-picker.module.css`
+- `apps/web/lib/dentist-recommend.ts`
+- `orchestrator/src/orchestrator/dentist_portal/models.py`
+- `orchestrator/src/orchestrator/dentist_recommendation/platform_query.py`
+- `orchestrator/src/orchestrator/dentist_recommendation/osm_dentists.py`
+- `orchestrator/src/orchestrator/dentist_recommendation/external_providers.py`
+- `orchestrator/src/orchestrator/dentist_recommendation/ranking.py`
+- `context.md`
+- `docs/phase-log.md`
+
+### Validation
+
+- Orchestrator Pytest Suite (`test_phase10_4_1_scan_id_resilience.py`, `test_phase10_4_dentist_discovery.py`): 26 passed, 0 failed.
+- Frontend TypeScript check (`npx tsc --noEmit`): Exit code 0, 0 errors.
+- Frontend Next.js Production Build (`npm run build`): Exit code 0, 26/26 routes successfully generated.
+- Strict adherence to rule: NO browser, localhost, or live automated testing performed by agent.
+
+### Next
+
+Phase 10.4.3 — Final Map Baselayer Repair + Dentist Listing UI Simplification.
+
+---
+
+## Phase 10.4.3 — Final Map Baselayer Repair + Dentist Listing UI Simplification
+
+**Date:** September 2026  
+**Status:** IMPLEMENTED — PENDING NATHAN MANUAL LIVE ACCEPTANCE
+
+### Summary
+
+Surgically repaired map background tile rendering by switching from external vector style loading to an explicit raster style specification with OpenStreetMap tiles, and simplified the patient-facing dentist discovery interface:
+- **Explicit OSM Raster Baselayer**: Replaced the external `OPENFREEMAP_LIBERTY_STYLE` JSON URL with an in-memory `OSM_RASTER_STYLE` object (`maplibregl.StyleSpecification`) referencing standard OpenStreetMap raster tiles (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`). Road networks, building footprints, and labels render immediately without CORS issues or vector style fetch delays.
+- **Truthful Attribution & Safe Fallback**: Streamlined attribution to `© OpenStreetMap contributors` with standard copyright link; eliminated outdated OpenFreeMap/OpenMapTiles strings. Added a friendly fallback message (`dentists.map_unavailable`) if MapLibre fails, preventing raw technical errors or silent beige canvases.
+- **Registered Dentist Brand Rules**: Reserved `#00A2F0` exclusively for registered platform dentists (`d.tier === 'platform' || d.dentist_id != null`). Cards feature `border-left: 4px solid #00A2F0`, markers are styled in `#00A2F0` with inner pin flair, and the listing displays a single authoritative badge: `DaantShaant Recommended` (`background: #00A2F0; color: #ffffff`).
+- **Normal Dentist UI Neutrality**: Non-registered nearby dentists appear cleanly with neutral card styling, slate markers (`#64748B`), and no algorithmic or source badges. Removed "External Clinic Listing", "Best Specialist Match", "Verified Dental Clinic", and "Nearby Dental Clinic" badges from public listing cards, modal, and legend.
+- **Simplified Minimal Legend**: Streamlined the map legend to three clear items: 🟠 Your Location, 🔵 DaantShaant Recommended, ⚫ Nearby Dentists.
+- **Detail Modal Cleanup**: Removed the "External Clinic Listing" footer note. Preserved direct contact links (Phone, Email, Website, WhatsApp, LinkedIn) and Google Maps directions for all dentists; registered dentists feature the "DaantShaant Recommended" badge and "Book Consultation" CTA.
+- **Parity & Themes**: Kept 100% bilingual translation key parity across `en.ts` and `ur.ts` with no missing keys or raw tokens; verified light and dark mode styling with zero green color remnants.
+
+### Files Modified
+
+- `apps/web/lib/maplibre.ts`
+- `apps/web/components/dentists/DentistMapView.tsx`
+- `apps/web/components/dentists/dentist-map.module.css`
+- `apps/web/i18n/en.ts`
+- `apps/web/i18n/ur.ts`
+- `context.md`
+- `docs/phase-log.md`
+
+### Validation
+
+- Frontend TypeScript check (`npx tsc --noEmit`): Exit code 0, 0 errors.
+- Frontend Next.js Production Build (`npm run build`): Exit code 0, 26/26 static routes generated successfully.
+- Orchestrator Pytest Suite (`test_phase10_4_1_scan_id_resilience.py`, `test_phase10_4_dentist_discovery.py`): 26 passed, 0 failed.
+- Strict compliance: NO browser, dev server, localhost, or live automated testing performed by agent.
+
+### Next
+
 Phase 11 — Deployment Fast Track.
+
 
 
 

@@ -301,6 +301,8 @@ Phase 10.1 implemented full bilingual capabilities, light/dark theme support, an
 | 10.3 | Live Nearby Dentist Discovery Integration (Current Location + Adaptive Radius + Multi-Source) | COMPLETE |
 | 10.4 | Production Live Dentist Discovery + Map Integration (Registered Dentists + Public Discovery + Adaptive Ranking) | IMPLEMENTED — PENDING NATHAN MANUAL LIVE ACCEPTANCE |
 | 10.4.1 | Optional Scan Context Resilience (Stale/Missing/Unowned scan_id Never Blocks Discovery) | COMPLETE |
+| 10.4.2 | Map Visibility, Brand Styling, Full-Viewport Modals & Contact Details | COMPLETE |
+| 10.4.3 | Final Map Baselayer Repair + Dentist Listing UI Simplification | IMPLEMENTED — PENDING NATHAN MANUAL LIVE ACCEPTANCE |
 
 The former Phase 1C is obsolete because its domain migration scope was merged into Phase 1B.
 
@@ -321,9 +323,8 @@ The former Phase 1C is obsolete because its domain migration scope was merged in
   - General dental clinics lacking specific specialty tags are retained and ranked by proximity.
 - **MapLibre Interactive Map & UI Polish**:
   - MapLibre GL JS + OpenFreeMap with local auto-fit bounds (no city-wide over-zoom).
-  - Clear marker categories: pulsing user position, verified platform clinics (#3b82f6), best specialist matches (#22c55e), external clinics (#64748b).
   - Interactive two-way card <-> marker focus and flyTo.
-  - Distinct CTAs: "Book Consultation" exclusively for registered platform dentists; external listings show Call, Directions (OSM routing), and Website.
+  - Distinct CTAs: "Book Consultation" exclusively for registered platform dentists; external listings show Call, Directions, and Website.
   - Clean bilingual support (English/Urdu) and theme styling (Light/Dark).
 
 ## Phase 10.4.1 Summary — Optional Scan Context Resilience (Stale/Missing/Unowned scan_id)
@@ -332,8 +333,27 @@ The former Phase 1C is obsolete because its domain migration scope was merged in
 - **Resilience**: Invalid, stale, missing, or unowned scan IDs no longer block clinic discovery with 404 or 400 errors.
 - **Security & Ownership**: Unowned or nonexistent scan IDs are safely dropped (`scan_id=None`), never attached to the recommendation session, and never exposed to unauthorized users. Valid owned scans continue to be linked to recommendation records.
 
+## Phase 10.4.2 Summary — Map Visibility, Brand Styling, Full-Viewport Modals & Contact Details
+
+- **Map Rendering Fix**: Bundled `maplibre-gl.css` statically, preserved map container mounting during queries with an overlay loader, and connected `ResizeObserver` + post-load `.resize()` so tiles render immediately without blank canvas.
+- **Brand Colors & Identity**: Reserved `#00A2F0` exclusively for registered dentists (pin flair, card border, badge, and booking button). External listings use neutral slate `#64748b` styling. Removed all incorrect green (`#22c55e`, `#059669`). Patient location marker uses an amber pulsing circle (`#f59e0b`).
+- **Full-Viewport Modal Coverage**: Rendered the dentist detail modal via `createPortal(..., document.body)` with fixed full-viewport backdrop (`100vw`/`100vh`, `z-index: 99999`) matching `LocationPickerModal`.
+- **Optional Contact Details**: Extended models to extract and render `phone`, `email`, `website`, `whatsapp`, and `linkedin` as direct links (`tel:`, `mailto:`, `https://wa.me/...`, new-tab URLs). Unavailable fields are cleanly omitted with no "N/A" placeholders.
+- **Google Maps Directions**: "Get Directions" CTA opens Google Maps directions (`https://www.google.com/maps/dir/?api=1&origin=...&destination=...`) in a new tab.
+
+## Phase 10.4.3 Summary — Final Map Baselayer Repair + Dentist Listing UI Simplification
+
+- **Explicit OSM Raster Basemap**: Replaced OpenFreeMap external vector style JSON dependency with an explicit MapLibre raster style object (`OSM_RASTER_STYLE`) targeting OpenStreetMap standard raster tiles (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`). Roads, labels, and land features render immediately with zero CORS/style network failures.
+- **Attribution & Fallback**: Retained clean truthful legal attribution (`© OpenStreetMap contributors`) and removed obsolete OpenFreeMap/OpenMapTiles tags. Added safe internal map error fallback overlay (`dentists.map_unavailable`) without technical stack trace exposure.
+- **Registered Dentist Brand Treatment**: Reserved `#00A2F0` exclusively for registered dentists (`tier === 'platform' || dentist_id != null`). Registered cards display `border-left: 4px solid #00A2F0`, `#00A2F0` map marker with inner crest, single badge `DaantShaant Recommended` (`background: #00A2F0; color: #ffffff`), and consultation booking CTA.
+- **Normal Dentist UI Simplification**: Publicly discovered dentists appear as clean, neutral cards with slate markers (`#64748B`), no left flair, and no badges. Removed "External Clinic Listing", "Best Specialist Match", "Verified Dental Clinic", and "Nearby Dental Clinic" badges from patient cards, modal, and legend.
+- **Minimal Legend**: Simplified legend to three clean items: 🟠 Your Location, 🔵 DaantShaant Recommended, ⚫ Nearby Dentists.
+- **Modal Cleanup**: Dentist detail modal eliminates external clinic notices and footers, preserving direct contact links (Call, WhatsApp, Email, Website, LinkedIn) and Google Maps directions.
+- **Color Consistency**: Zero green styling remains; verified 100% theme compatibility (Light/Dark mode) and bilingual parity (EN/UR).
+
 ## Next Phase
 
 **Phase 11 — Deployment Fast Track**.
+
 
 

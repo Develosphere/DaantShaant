@@ -166,17 +166,20 @@
   background: #64748b;
 }
 
-.legendTagBest {
-  display: inline-block;
-  padding: 2px 7px;
-  border-radius: 4px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  background: rgba(100, 116, 139, 0.16);
-  border: 1px solid rgba(100, 116, 139, 0.35);
+.mapErrorFallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+  background: var(--bg-surface);
   color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: 0.92rem;
+  font-weight: 500;
+  z-index: 5;
 }
 
 .sidebar {
@@ -261,42 +264,17 @@
   line-height: 1.4;
 }
 
-.badgeBest {
+.badgeRecommended {
   display: inline-block;
-  font-size: 0.65rem;
+  font-size: 0.68rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 0.25rem 0.5rem;
-  border-radius: 6px;
-  color: var(--text-primary);
-  background: rgba(100, 116, 139, 0.16);
-  border: 1px solid rgba(100, 116, 139, 0.35);
-  margin-bottom: 0.35rem;
-}
-
-.badgePartner {
-  display: inline-block;
-  font-size: 0.65rem;
-  font-weight: 700;
-  padding: 0.25rem 0.5rem;
+  padding: 0.25rem 0.6rem;
   border-radius: 6px;
   color: #ffffff;
   background: #00a2f0;
-  margin-left: 0.4rem;
   box-shadow: 0 2px 8px rgba(0, 162, 240, 0.35);
-}
-
-.badgeExternal {
-  display: inline-block;
-  font-size: 0.65rem;
-  font-weight: 600;
-  padding: 0.25rem 0.5rem;
-  border-radius: 6px;
-  color: var(--text-secondary);
-  background: var(--bg-surface-raised);
-  border: 1px solid var(--border-default);
-  margin-left: 0.4rem;
+  margin-bottom: 0.35rem;
+  letter-spacing: 0.02em;
 }
 
 .modalOverlay {
