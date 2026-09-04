@@ -12,6 +12,7 @@ import {
   type ProductUpload,
 } from "@/lib/product-api";
 import { ModalPortal } from "@/components/common/ModalPortal";
+import { useLanguage } from "@/i18n";
 import styles from "./products-manager.module.css";
 
 const CATEGORIES: { value: ProductCategory; label: string }[] = [
@@ -24,6 +25,7 @@ const CATEGORIES: { value: ProductCategory; label: string }[] = [
 ];
 
 export function ProductsManager() {
+  const { t } = useLanguage();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -90,7 +92,7 @@ export function ProductsManager() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Are you sure you want to delete this product?")) return;
+    if (!confirm(t("products_mgmt.confirm_delete"))) return;
     try {
       await deleteProduct(id);
       loadProducts();
@@ -115,9 +117,9 @@ export function ProductsManager() {
       <div className={styles.container}>
         <div className={styles.header}>
           <div>
-            <h1 className={styles.title}>Product Catalog</h1>
+            <h1 className={styles.title}>{t("products_mgmt.title")}</h1>
             <p className={styles.subtitle}>
-              Manage your dental products and recommendations
+              {t("products_mgmt.subtitle")}
             </p>
           </div>
           <button
@@ -129,7 +131,7 @@ export function ProductsManager() {
               setFormData({ name: "", category: "toothpaste", price: 0, raw_description: "" });
             }}
           >
-            ➕ Add Product
+            ➕ {t("products_mgmt.add_btn")}
           </button>
         </div>
 
@@ -145,24 +147,24 @@ export function ProductsManager() {
             <div className={styles.modalOverlay} onClick={() => setShowForm(false)}>
               <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
                 <h2 className={styles.modalTitle}>
-                  {editingId ? "Edit Product" : "Add New Product"}
+                  {editingId ? t("products_mgmt.edit") : t("products_mgmt.add_btn")}
                 </h2>
                 
                 <form onSubmit={handleSubmit} className={styles.form}>
                   <div className={styles.formGroup}>
-                    <label>Product Name</label>
+                    <label>{t("products_mgmt.name")}</label>
                     <input
                       type="text"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="e.g., Advanced Whitening Toothpaste"
+                      placeholder="e.g., Advanced Fluoride Shield Toothpaste"
                       required
                     />
                   </div>
 
                   <div className={styles.formRow}>
                     <div className={styles.formGroup}>
-                      <label>Category</label>
+                      <label>{t("products_mgmt.category")}</label>
                       <select
                         value={formData.category}
                         onChange={(e) =>
@@ -179,7 +181,7 @@ export function ProductsManager() {
                     </div>
 
                     <div className={styles.formGroup}>
-                      <label>Price ($)</label>
+                      <label>{t("products_mgmt.price")}</label>
                       <input
                         type="number"
                         step="0.01"
@@ -195,16 +197,16 @@ export function ProductsManager() {
                   </div>
 
                   <div className={styles.formGroup}>
-                    <label>Description</label>
+                    <label>{t("products_mgmt.description")}</label>
                     <textarea
                       value={formData.raw_description}
                       onChange={(e) => setFormData({ ...formData, raw_description: e.target.value })}
-                      placeholder="Brief description of the product and its benefits..."
+                      placeholder="Clinical description of the product and its oral hygiene benefits..."
                       rows={4}
                       required
                     />
                     <span className={styles.hint}>
-                      AI will enhance this description for patients
+                      AI will enhance this description for patients based on screening findings
                     </span>
                   </div>
 
@@ -218,10 +220,10 @@ export function ProductsManager() {
                       }}
                       disabled={submitting}
                     >
-                      Cancel
+                      {t("products_mgmt.cancel")}
                     </button>
                     <button type="submit" className={styles.btnPrimary} disabled={submitting}>
-                      {submitting ? "Saving..." : editingId ? "Update" : "Add Product"}
+                      {submitting ? t("common.loading") : editingId ? t("products_mgmt.save") : t("products_mgmt.add_btn")}
                     </button>
                   </div>
                 </form>
@@ -233,13 +235,13 @@ export function ProductsManager() {
         {loading ? (
           <div className={styles.loading}>
             <div className={styles.spinner} />
-            <p>Loading products...</p>
+            <p>{t("common.loading")}</p>
           </div>
         ) : products.length === 0 ? (
           <div className={styles.empty}>
             <div className={styles.emptyIcon}>📦</div>
-            <h3>No products yet</h3>
-            <p>Start building your catalog by adding your first product</p>
+            <h3>{t("products_mgmt.empty")}</h3>
+            <p>{t("products_mgmt.subtitle")}</p>
             <button
               type="button"
               className={styles.btnPrimary}
@@ -248,7 +250,7 @@ export function ProductsManager() {
                 setEditingId(null);
               }}
             >
-              Add Your First Product
+              {t("products_mgmt.add_btn")}
             </button>
           </div>
         ) : (
@@ -264,7 +266,7 @@ export function ProductsManager() {
                         product.status === "active" ? styles.statusActive : styles.statusInactive
                       }`}
                       onClick={() => handleToggleStatus(product)}
-                      title="Click to toggle status"
+                      title="Toggle status"
                     >
                       {product.status}
                     </button>
@@ -274,7 +276,7 @@ export function ProductsManager() {
                       type="button"
                       className={styles.iconBtn}
                       onClick={() => handleEdit(product)}
-                      title="Edit"
+                      title={t("products_mgmt.edit")}
                     >
                       ✏️
                     </button>
@@ -282,7 +284,7 @@ export function ProductsManager() {
                       type="button"
                       className={styles.iconBtn}
                       onClick={() => handleDelete(product.product_id)}
-                      title="Delete"
+                      title={t("products_mgmt.delete")}
                     >
                       🗑️
                     </button>

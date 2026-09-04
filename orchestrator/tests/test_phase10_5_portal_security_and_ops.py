@@ -16,7 +16,10 @@ from orchestrator.dentist_portal.auth import (
 )
 from orchestrator.dentist_portal.models import LoginRequest, UserRole
 from orchestrator.dentist_portal.user_service import login_user
-from orchestrator.dentist_portal.routes_products import list_dentist_orders
+from orchestrator.dentist_portal.routes_products import (
+    list_dentist_orders,
+    list_patient_orders,
+)
 from orchestrator.dentist_recommendation.routes import (
     list_appointments,
     update_appointment_status,
@@ -337,3 +340,67 @@ async def test_update_appointment_status_success_and_cross_dentist_denial():
             )
         assert exc_info.value.status_code == 404
         assert "not yours" in exc_info.value.detail.lower()
+
+
+# =========================================================================
+# 5. PATIENT ORDERS ISOLATION & SIMPLE STATUS
+# =========================================================================
+
+@pytest.mark.asyncio
+async def test_patient_orders_returns_patient_purchases_only():
+    patient_user_id = uuid4()
+    order_id = uuid4()
+    dentist_id = uuid4()
+
+    order = MagicMock(spec=Order)
+    order.id = order_id
+    order.dentist_id = dentist_id
+    order.patient_user_id = patient_user_id
+    order.items = {
+        "product_id": str(uuid4()),
+        "product_name": "Fluoride Toothpaste Pro",
+        "dentist_name": "Al-Shifa Dental Clinic",
+        "quantity": 2,
+    }
+    order.total = 24.50
+    order.status = "placed"
+    order.created_at = datetime.now(timezone.utc)
+
+    dentist = MagicMock(spec=Dentist)
+    dentist.clinic_name = "Al-Shifa Dental Clinic"
+    dentist.doctor_name = "Dr. Tariq"
+
+    session = AsyncMock()
+    with patch("orchestrator.dentist_portal.routes_products.OrderRepository") as MockOrderRepo:
+        MockOrderRepo.return_value.list_for_patient = AsyncMock(return_value=[(order, dentist)])
+
+        result = await list_patient_orders(
+            patient={"user_id": patient_user_id, "role": "patient"},
+            session=session,
+        )
+
+        MockOrderRepo.return_value.list_for_patient.assert_called_once_with(patient_user_id)
+        assert len(result) == 1
+        assert result[0]["order_id"] == str(order_id)
+        assert result[0]["product_name"] == "Fluoride Toothpaste Pro"
+        assert result[0]["seller_name"] == "Al-Shifa Dental Clinic"
+        assert result[0]["quantity"] == 2
+        assert result[0]["price"] == 24.50
+        assert result[0]["status"] == "placed"
+
+
+@pytest.mark.asyncio
+async def test_patient_orders_empty_returns_safe_list():
+    patient_user_id = uuid4()
+    session = AsyncMock()
+    with patch("orchestrator.dentist_portal.routes_products.OrderRepository") as MockOrderRepo:
+        MockOrderRepo.return_value.list_for_patient = AsyncMock(return_value=[])
+
+        result = await list_patient_orders(
+            patient={"user_id": patient_user_id, "role": "patient"},
+            session=session,
+        )
+
+        MockOrderRepo.return_value.list_for_patient.assert_called_once_with(patient_user_id)
+        assert result == []
+

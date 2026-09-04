@@ -22,9 +22,10 @@
   --border-default: rgba(0, 50, 100, 0.12);
   --border-strong: rgba(0, 50, 100, 0.25);
 
-  --accent: #0284c7;
-  --accent-dim: #0369a1;
-  --accent-glow: rgba(2, 132, 199, 0.2);
+  --primary-brand: #00A2F0;
+  --accent: #00A2F0;
+  --accent-dim: #0088cc;
+  --accent-glow: rgba(0, 162, 240, 0.2);
   --violet: #6366f1;
   --violet-glow: rgba(99, 102, 241, 0.2);
 
@@ -67,8 +68,9 @@
   --border-default: rgba(255, 255, 255, 0.1);
   --border-strong: rgba(255, 255, 255, 0.22);
 
+  --primary-brand: #00A2F0;
   --accent: #38BDF8;
-  --accent-dim: #0284C7;
+  --accent-dim: #00A2F0;
   --accent-glow: rgba(56, 189, 248, 0.3);
   --violet: #7c6cf0;
   --violet-glow: rgba(124, 108, 240, 0.25);

@@ -1293,7 +1293,84 @@ Addressed security, brand consistency, session resilience, and dentist operation
 
 ### Next
 
+Phase 10.6 — Patient Order History, Dashboard Redesign, Navigation UX, and Full Urdu Localization.
+
+---
+
+## Phase 10.6 — Patient Order History, Dashboard Redesign, Navigation UX & Full Urdu Localization
+
+**Date:** September 2026  
+**Status:** IMPLEMENTED — PENDING NATHAN MANUAL ACCEPTANCE
+
+### Summary
+
+Delivered comprehensive UX polish, patient order tracking, dashboard usefulness, clean logo branding, full Urdu localization, and consistent `#00A2F0` styling across DaantShaant:
+- **Phase A — Patient Order History**:
+  - Implemented `OrderRepository.list_for_patient(patient_user_id)` querying PostgreSQL orders joined with seller dentist details.
+  - Added `GET /portal/products/patient/orders` in `routes_products.py` returning seller clinic name, product details, quantity, price, simple status (`placed`, `confirmed`, `processing`, `completed`), and ISO timestamps.
+  - Enhanced `buy_product` to accept optional payload with patient details and quantity, defaulting to `status="placed"`.
+  - Built `PatientOrdersView` (`apps/web/components/patient/PatientOrdersView.tsx`) with orders KPI summary, order table, status badges, responsive card layouts, and synchronized client cache for immediate reflection.
+  - Created `/patient/orders` page and added "Orders" item to patient navigation header.
+- **Phase B — Dashboard Redesign (Patient + Dentist)**:
+  - Redesigned Patient Dashboard (`PatientDashboardView.tsx`) in modern healthcare SaaS style with: welcome hero, wellness status badge, 4 quick action cards (`New Scan`, `Chat with AI`, `Find Dentists`, `Orders`), recent scan summary card, recommended oral hygiene products preview with 1-click checkout, and daily prevention guidance banner.
+  - Redesigned Dentist Dashboard (`DentistDashboardHome.tsx`) with: verified partner greeting hero, 4 KPI stats cards (`Listed Products`, `Consultations`, `Pending Orders`, `Total Sales`), 3 quick action cards (`Add Product`, `View Orders`, `Appointments`), recent orders preview table, upcoming appointments preview, and clinical intake banner.
+  - Removed extra header subtitles like "Oral Health Screening" and "Dentist Management Portal" from `PortalHeader` and `Header`, keeping only the well-proportioned `DaantShaantLogo`.
+  - Normalized icon accents and interactive styling to DaantShaant brand blue `#00A2F0`.
+- **Phase C — Onboarding / Nav UX Fixes**:
+  - Fixed role cards hover interaction on `/get-started` (`RoleSelection`): set `pointer-events: none` on `.card::before` pseudo-element and `z-index: 5` on `.cardActions` / buttons so cards and buttons are effortlessly clickable.
+  - Added visible "Back" link on patient onboarding/login/register pages in `PortalAuthShell` routing to `/get-started`.
+  - Added language toggle (`EN | اردو`) and theme toggle (`☀️ | 🌙`) to `/get-started` navbar.
+- **Phase D — Full Urdu Localization Coverage**:
+  - Added 50+ new translation keys to `apps/web/i18n/en.ts` and `apps/web/i18n/ur.ts` with 100% key parity (364 keys each).
+  - Wired `useLanguage()` across `RoleSelection`, `PortalAuthShell`, `CheckoutModal`, `ProductsManager`, `OrdersManager`, `AppointmentsManager`, `PatientOrdersView`, `PatientDashboardView`, and `DentistDashboardHome`.
+  - Maintained RTL-friendly layouts and English fallback.
+- **Phase E — Design / Brand Consistency**:
+  - Set `--primary-brand: #00A2F0` and standardized `--accent: #00A2F0` in light and dark mode in `globals.css`.
+  - Preserved full-viewport modal overlays (`ModalPortal` with `100vw`/`100vh`).
+
+### Files Created
+
+- `apps/web/components/patient/patient-orders.module.css`
+- `apps/web/components/patient/PatientOrdersView.tsx`
+- `apps/web/app/patient/orders/page.tsx`
+- `apps/web/components/patient/patient-dashboard.module.css`
+- `apps/web/components/patient/PatientDashboardView.tsx`
+- `apps/web/components/dentist/dentist-dashboard.module.css`
+- `apps/web/components/dentist/DentistDashboardHome.tsx`
+
+### Files Modified
+
+- `orchestrator/src/orchestrator/repositories/marketplace.py`
+- `orchestrator/src/orchestrator/dentist_portal/routes_products.py`
+- `orchestrator/tests/test_phase10_5_portal_security_and_ops.py`
+- `apps/web/components/portal/PortalHeader.tsx`
+- `apps/web/components/portal/PortalAuthShell.tsx`
+- `apps/web/components/portal/portal-auth.module.css`
+- `apps/web/components/Header.tsx`
+- `apps/web/components/CheckoutModal.tsx`
+- `apps/web/components/get-started/RoleSelection.tsx`
+- `apps/web/components/get-started/role-selection.module.css`
+- `apps/web/components/dentist/ProductsManager.tsx`
+- `apps/web/components/dentist/OrdersManager.tsx`
+- `apps/web/components/dentist/AppointmentsManager.tsx`
+- `apps/web/app/patient/dashboard/page.tsx`
+- `apps/web/app/dentist/dashboard/page.tsx`
+- `apps/web/app/globals.css`
+- `apps/web/i18n/en.ts`
+- `apps/web/i18n/ur.ts`
+- `context.md`
+- `docs/phase-log.md`
+
+### Validation
+
+- Orchestrator Pytest Suite (`test_phase10_5_portal_security_and_ops.py`): 14 passed, 0 failed.
+- Frontend Next.js Production Build (`npm run build`): Exit code 0, 28/28 static routes generated successfully with 0 errors.
+- Strict compliance: NO browser, dev server, localhost, or live automated testing performed by agent.
+
+### Next
+
 Phase 11 — Deployment Fast Track.
+
 
 
 

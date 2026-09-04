@@ -130,6 +130,18 @@ class OrderRepository:
         )
         return list(result.scalars())
 
+    async def list_for_patient(
+        self, patient_user_id: UUID, limit: int = 100
+    ) -> list[tuple[Order, Dentist | None]]:
+        result = await self.session.execute(
+            select(Order, Dentist)
+            .outerjoin(Dentist, Dentist.id == Order.dentist_id)
+            .where(Order.patient_user_id == patient_user_id)
+            .order_by(Order.created_at.desc())
+            .limit(limit)
+        )
+        return list(result.all())
+
 
 class RecommendationRepository:
     def __init__(self, session: AsyncSession):

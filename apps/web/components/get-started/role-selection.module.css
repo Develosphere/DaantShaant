@@ -148,6 +148,7 @@
   height: 6px;
   background: var(--primary);
   transition: height 0.3s ease;
+  pointer-events: none;
 }
 
 .card:hover {
@@ -158,6 +159,7 @@
 .card:hover::before {
   height: 100%;
   opacity: 0.03;
+  pointer-events: none;
 }
 
 /* Card Color Variants */
@@ -258,6 +260,8 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  position: relative;
+  z-index: 5;
 }
 
 .btnPrimary,
@@ -276,6 +280,9 @@
   transition: all 0.25s ease;
   cursor: pointer;
   border: 3px solid transparent;
+  position: relative;
+  z-index: 6;
+  pointer-events: auto;
 }
 
 .btnPrimary {

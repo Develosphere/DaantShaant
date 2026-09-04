@@ -74,7 +74,7 @@ export function OrdersManager() {
         {loading ? (
           <div className={styles.loading}>
             <div className={styles.spinner} />
-            <p>Loading orders…</p>
+            <p>{t("common.loading")}</p>
           </div>
         ) : orders.length === 0 ? (
           <div className={styles.empty}>

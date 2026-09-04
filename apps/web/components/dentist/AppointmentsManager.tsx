@@ -106,7 +106,7 @@ export function AppointmentsManager() {
         {loading ? (
           <div className={styles.loading}>
             <div className={styles.spinner} />
-            <p>Loading appointments…</p>
+            <p>{t("common.loading")}</p>
           </div>
         ) : appointments.length === 0 ? (
           <div className={styles.empty}>

@@ -1,61 +1,47 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { useLanguage } from "@/i18n";
+import { useTheme } from "@/theme";
+import { DaantShaantLogo } from "@/components/common/DaantShaantLogo";
 import styles from "./role-selection.module.css";
-
-const ROLES = [
-  {
-    id: "patient",
-    title: "PATIENT",
-    description: "Get AI-powered dental insights and connect with trusted dentists",
-    icon: (
-      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-        <circle cx="12" cy="7" r="4" />
-      </svg>
-    ),
-    registerPath: "/patient/register",
-    loginPath: "/patient/login",
-    color: "blue",
-    hidden: false,
-  },
-  {
-    id: "dentist",
-    title: "DENTIST",
-    description: "Manage your practice, recommend products, and reach more patients",
-    icon: (
-      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M12 2C9.24 2 7 4.24 7 7C7 8.72 7.88 10.23 9.2 11.1C7.28 11.88 6 13.8 6 16C6 16.55 6.45 17 7 17H17C17.55 17 18 16.55 18 16C18 13.8 16.72 11.88 14.8 11.1C16.12 10.23 17 8.72 17 7C17 4.24 14.76 2 12 2Z" />
-        <path d="M9 17V20C9 21.1 9.9 22 11 22H13C14.1 22 15 21.1 15 20V17H9Z" />
-      </svg>
-    ),
-    registerPath: "/dentist/register",
-    loginPath: "/dentist/login",
-    color: "navy",
-    hidden: false,
-  },
-  {
-    id: "admin",
-    title: "ADMIN",
-    description: "Oversee platform operations, user management, and system analytics",
-    icon: (
-      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M12 2L2 7l10 5 10-5-10-5z" />
-        <path d="M2 17l10 5 10-5" />
-        <path d="M2 12l10 5 10-5" />
-      </svg>
-    ),
-    registerPath: "/admin/login",
-    loginPath: "/admin/login",
-    color: "primary",
-    hidden: true, // Hidden from UI but route still accessible
-  },
-];
 
 export function RoleSelection() {
   const router = useRouter();
+  const { t, locale, toggleLanguage } = useLanguage();
+  const { theme, toggleTheme } = useTheme();
+
+  const roles = [
+    {
+      id: "patient",
+      title: t("get_started.role_patient"),
+      description: t("get_started.patient_desc"),
+      icon: (
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#00A2F0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </svg>
+      ),
+      registerPath: "/patient/register",
+      loginPath: "/patient/login",
+      color: "blue",
+    },
+    {
+      id: "dentist",
+      title: t("get_started.role_dentist"),
+      description: t("get_started.dentist_desc"),
+      icon: (
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#00A2F0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 2C9.24 2 7 4.24 7 7C7 8.72 7.88 10.23 9.2 11.1C7.28 11.88 6 13.8 6 16C6 16.55 6.45 17 7 17H17C17.55 17 18 16.55 18 16C18 13.8 16.72 11.88 14.8 11.1C16.12 10.23 17 8.72 17 7C17 4.24 14.76 2 12 2Z" />
+          <path d="M9 17V20C9 21.1 9.9 22 11 22H13C14.1 22 15 21.1 15 20V17H9Z" />
+        </svg>
+      ),
+      registerPath: "/dentist/register",
+      loginPath: "/dentist/login",
+      color: "navy",
+    },
+  ];
 
   return (
     <div className={styles.page}>
@@ -65,24 +51,55 @@ export function RoleSelection() {
           <Link
             href="/"
             className={styles.navBackLink}
-            aria-label="Back to landing page"
+            aria-label={t("common.back")}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <line x1="19" y1="12" x2="5" y2="12" />
               <polyline points="12 19 5 12 12 5" />
             </svg>
-            <span>Back</span>
+            <span>{t("common.back")}</span>
           </Link>
-          <Link href="/" className={styles.logoLink} aria-label="DaantShaant home">
-            <Image
-              src="/landing/logo.png"
-              alt="DaantShant"
-              width={167}
-              height={78}
-              className={styles.logoImg}
-              priority
-            />
-          </Link>
+
+          <DaantShaantLogo href="/" priority />
+
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <button
+              type="button"
+              onClick={toggleLanguage}
+              title={locale === "en" ? "اردو میں دیکھیں" : "Switch to English"}
+              aria-label="Toggle language"
+              style={{
+                padding: "0.4rem 0.75rem",
+                fontSize: "0.82rem",
+                fontWeight: 700,
+                fontFamily: "inherit",
+                color: "var(--text-primary, #0f172a)",
+                background: "var(--bg-surface-raised, rgba(0, 162, 240, 0.05))",
+                border: "1px solid var(--border-default, rgba(0, 162, 240, 0.2))",
+                borderRadius: "8px",
+                cursor: "pointer",
+              }}
+            >
+              {locale === "en" ? "اردو" : "EN"}
+            </button>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+              aria-label="Toggle theme"
+              style={{
+                padding: "0.4rem 0.65rem",
+                fontSize: "0.82rem",
+                color: "var(--text-primary, #0f172a)",
+                background: "var(--bg-surface-raised, rgba(0, 162, 240, 0.05))",
+                border: "1px solid var(--border-default, rgba(0, 162, 240, 0.2))",
+                borderRadius: "8px",
+                cursor: "pointer",
+              }}
+            >
+              {theme === "light" ? "🌙" : "☀️"}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -91,30 +108,31 @@ export function RoleSelection() {
         <div className={styles.content}>
           {/* Heading */}
           <div className={styles.header}>
-            <h1 className={styles.title}>WHO ARE YOU?</h1>
+            <h1 className={styles.title}>{t("get_started.title")}</h1>
             <p className={styles.subtitle}>
-              Choose your role to get started with DaantShant
+              {t("get_started.subtitle")}
             </p>
           </div>
 
           {/* Role Cards */}
-          <div className={styles.cardsGrid}>
-            {ROLES.filter(role => !role.hidden).map((role, index) => (
+          <div className={styles.cardsGrid} style={{ gridTemplateColumns: "repeat(2, minmax(280px, 440px))", justifyContent: "center" }}>
+            {roles.map((role, index) => (
               <div
                 key={role.id}
                 className={`${styles.card} ${styles[`card${role.color.charAt(0).toUpperCase() + role.color.slice(1)}`]} ${styles.animateIn}`}
-                style={{ transitionDelay: `${index * 0.1}s` }}
+                style={{ transitionDelay: `${index * 0.1}s`, cursor: "pointer" }}
+                onClick={() => router.push(role.registerPath)}
               >
                 <div className={styles.cardIcon}>{role.icon}</div>
                 <h2 className={styles.cardTitle}>{role.title}</h2>
                 <p className={styles.cardDescription}>{role.description}</p>
                 
-                <div className={styles.cardActions}>
+                <div className={styles.cardActions} onClick={(e) => e.stopPropagation()}>
                   <Link href={role.registerPath} className={styles.btnPrimary}>
-                    SIGN UP
+                    {t("get_started.sign_up")}
                   </Link>
                   <Link href={role.loginPath} className={styles.btnSecondary}>
-                    LOG IN
+                    {t("get_started.log_in")}
                   </Link>
                 </div>
               </div>
@@ -127,7 +145,7 @@ export function RoleSelection() {
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M19 12H5M12 19l-7-7 7-7" />
               </svg>
-              Back
+              {t("common.back")}
             </Link>
           </div>
         </div>

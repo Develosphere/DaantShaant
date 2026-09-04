@@ -18,6 +18,7 @@ const PORTAL_NAV: Record<PortalRole, NavItem[]> = {
     { href: "/patient/scan", key: "scan", defaultLabel: "Oral scan", authOnly: true },
     { href: "/patient/chat", key: "chat", defaultLabel: "Chat assistant", authOnly: true },
     { href: "/patient/dentists", key: "dentists", defaultLabel: "Find dentists", authOnly: true },
+    { href: "/patient/orders", key: "orders", defaultLabel: "Orders", authOnly: true },
   ],
   dentist: [
     { href: "/dentist/dashboard", key: "dashboard", defaultLabel: "Dashboard", authOnly: true },
@@ -77,9 +78,6 @@ export function PortalHeader({ role, user, onLogout }: Props) {
       <div>
         <Link href={user ? `/${role}/dashboard` : "/"} className={styles.brand}>
           <DaantShaantLogo href="" priority />
-          <div className={styles.brandText}>
-            <span className={styles.brandTag}>{role === "patient" ? t("common.tagline") : meta.eyebrow}</span>
-          </div>
         </Link>
 
         <nav className={styles.nav}>

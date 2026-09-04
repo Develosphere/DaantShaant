@@ -41,11 +41,8 @@ export function Header() {
   return (
     <header className="site-header">
       <div className="brand">
-        <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.85rem", textDecoration: "none", color: "inherit" }}>
+        <Link href="/" style={{ display: "flex", alignItems: "center", textDecoration: "none", color: "inherit" }}>
           <DaantShaantLogo href="" priority />
-          <div>
-            <span className="brand-tag">{t("common.tagline")}</span>
-          </div>
         </Link>
       </div>
 

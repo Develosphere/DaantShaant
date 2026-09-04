@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from orchestrator.db.models import Order, Product
@@ -205,7 +205,7 @@ async def update_order_status(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found or not yours")
     new_status = str(payload.get("status", "shipped"))
-    if new_status not in {"pending", "confirmed", "shipped", "completed", "cancelled"}:
+    if new_status not in {"pending", "placed", "confirmed", "processing", "shipped", "completed", "cancelled"}:
         raise HTTPException(status_code=400, detail="Invalid order status")
     order.status = new_status
     order.updated_at = datetime.now(timezone.utc)
@@ -213,9 +213,40 @@ async def update_order_status(
     return {"updated": True, "status": new_status}
 
 
+@router.get("/patient/orders", response_model=list)
+async def list_patient_orders(
+    patient: dict = Depends(get_current_patient),
+    session: AsyncSession = Depends(get_db_session),
+):
+    rows = await OrderRepository(session).list_for_patient(patient["user_id"])
+    orders_list = []
+    for order, dentist in rows:
+        items = order.items or {}
+        seller_name = (
+            items.get("dentist_name")
+            or items.get("seller_name")
+            or (dentist.clinic_name if dentist else None)
+            or (dentist.doctor_name if dentist else None)
+            or "Partner Dental Clinic"
+        )
+        orders_list.append({
+            "order_id": str(order.id),
+            "product_id": str(items.get("product_id", "")),
+            "product_name": items.get("product_name", "Product"),
+            "dentist_name": seller_name,
+            "seller_name": seller_name,
+            "quantity": int(items.get("quantity", 1)),
+            "price": float(order.total),
+            "status": order.status,
+            "created_at": order.created_at.isoformat() if order.created_at else "",
+        })
+    return orders_list
+
+
 @router.post("/{product_id}/buy", response_model=dict)
 async def buy_product(
     product_id: UUID,
+    payload: dict = Body(default={}),
     patient: dict = Depends(get_current_patient),
     session: AsyncSession = Depends(get_db_session),
 ):
@@ -223,7 +254,14 @@ async def buy_product(
     if not product or product.status != "active":
         raise HTTPException(status_code=404, detail="Product not found")
     patient_user = await UserRepository(session).get(patient["user_id"])
-    patient_name = f"{patient_user.first_name or ''} {patient_user.last_name or ''}".strip()
+    patient_name = (payload.get("patient_name") or f"{patient_user.first_name or ''} {patient_user.last_name or ''}".strip()) or "Anonymous"
+    patient_email = payload.get("patient_email") or patient_user.email
+    dentist = await DentistRepository(session).get(product.dentist_id)
+    seller_name = dentist.clinic_name or dentist.doctor_name if dentist else "Partner Dental Clinic"
+    quantity = int(payload.get("quantity", 1)) if payload else 1
+    unit_price = Decimal(str(product.price or 0))
+    total = unit_price * Decimal(str(quantity))
+
     order = await OrderRepository(session).add(
         Order(
             dentist_id=product.dentist_id,
@@ -231,19 +269,25 @@ async def buy_product(
             items={
                 "product_id": str(product.id),
                 "product_name": product.name,
-                "patient_email": patient_user.email,
+                "dentist_name": seller_name,
+                "seller_name": seller_name,
+                "patient_email": patient_email,
                 "patient_name": patient_name,
-                "quantity": 1,
+                "quantity": quantity,
+                "unit_price": float(unit_price),
             },
-            total=product.price or Decimal("0"),
-            status="pending",
+            total=total,
+            status="placed",
         )
     )
     return {
         "order_id": str(order.id),
         "product_name": product.name,
+        "seller_name": seller_name,
+        "quantity": quantity,
         "price": float(order.total),
         "status": order.status,
+        "created_at": order.created_at.isoformat() if order.created_at else datetime.now(timezone.utc).isoformat(),
     }
 
 

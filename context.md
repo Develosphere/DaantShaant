@@ -301,50 +301,43 @@ Phase 10.1 implemented full bilingual capabilities, light/dark theme support, an
 | 10.3 | Live Nearby Dentist Discovery Integration (Current Location + Adaptive Radius + Multi-Source) | COMPLETE |
 | 10.4 | Production Live Dentist Discovery + Map Integration (Registered Dentists + Public Discovery + Adaptive Ranking) | IMPLEMENTED — PENDING NATHAN MANUAL LIVE ACCEPTANCE |
 | 10.4.1 | Optional Scan Context Resilience (Stale/Missing/Unowned scan_id Never Blocks Discovery) | COMPLETE |
-| 10.4.2 | Map Visibility, Brand Styling, Full-Viewport Modals & Contact Details | COMPLETE |
-| 10.4.3 | Final Map Baselayer Repair + Dentist Listing UI Simplification | IMPLEMENTED — PENDING NATHAN MANUAL LIVE ACCEPTANCE |
-| 10.5 | Portal Security + Brand Consistency + Dentist Operations | IMPLEMENTED — PENDING NATHAN MANUAL ACCEPTANCE |
+| 10.4.3 | Final Map Baselayer Repair + Dentist Listing UI Simplification | COMPLETE |
+| 10.5 | Portal Security + Brand Consistency + Dentist Operations | COMPLETE |
+| 10.6 | Patient Order History, Dashboard Redesign, Navigation UX & Full Urdu Localization | IMPLEMENTED — PENDING NATHAN MANUAL ACCEPTANCE |
 
 The former Phase 1C is obsolete because its domain migration scope was merged into Phase 1B.
 
-## Phase 10.5 Summary — Portal Security + Brand Consistency + Dentist Operations
+## Phase 10.6 Summary — Patient Order History, Dashboard Redesign, Navigation UX & Full Urdu Localization
 
 - **Implementation Status**:
-  - PHASE 10.5 IMPLEMENTED — PENDING NATHAN MANUAL ACCEPTANCE
-- **Generic Role-Safe Login Authentication**:
-  - Eliminated account-role enumeration / information disclosure vulnerability.
-  - Login endpoints (patient & dentist) return generic 401 `"Invalid email or password"` for unknown email, incorrect password, inactive status, and cross-portal role mismatch.
-  - Frontend auth UI displays generic `auth.invalid_credentials` translated in EN/UR without disclosing role mismatch.
-- **Session Lifetimes & Refresh Token Rotation**:
-  - Access token expiry updated to 30 minutes (`ACCESS_TOKEN_EXPIRE_MINUTES=30` in config and env).
-  - Refresh session retained at 7 days with secure rotating tokens in HttpOnly cookies.
-  - Frontend concurrent silent refresh race conditions resolved using `refreshPromise` deduplication in `lib/portal-auth.ts`.
-- **Global Modal Portal / Backdrop Primitive**:
-  - Created reusable `ModalPortal` (`createPortal(..., document.body)`).
-  - Backdrops across patient checkout and dentist product modals normalized to fixed full-viewport (`100vw`/`100vh`, `z-index: 99999`) preventing layout container clipping.
-- **Canonical DaantShaant Logo**:
-  - Created `<DaantShaantLogo />` reusing existing canonical `/landing/logo.png`.
-  - Applied across public header, patient header, dentist auth shell, and dentist portal header.
-  - Public & dentist auth logo clicks route to landing page `/`; authenticated portal logo clicks route to respective dashboard.
-- **Dentist Auth & Onboarding Navigation**:
-  - Added accessible top-left "Back" arrow on dentist login/registration navigating to `/get-started`.
-  - Added top-left "Back" arrow on dentist onboarding `/get-started` navigating to `/`.
-- **Dentist Brand Color Normalization**:
-  - Replaced arbitrary purple, navy (`#073564`), and dark accents across dentist auth, onboarding, and portal headers/buttons with canonical DaantShaant brand blue `#00A2F0`.
-  - Patient recommended product CTAs normalized to `#00A2F0` while preserving clinical recommendation integrity.
-- **Dentist Real Seller-Scoped Orders**:
-  - Implemented `GET /portal/products/orders` in `routes_products.py` resolving authenticated dentist ID from session token.
-  - Strict seller isolation: dentists see only order items for products they uploaded (`product.dentist_id == dentist_id`). Multi-seller orders expose only the owning dentist's items and revenues.
-  - Replaced placeholder on `/dentist/orders` with `OrdersManager` featuring order table, customer info, quantities, amounts, statuses, and bilingual empty states.
-- **Dentist Appointment Management**:
-  - Added "Appointments" nav item to dentist portal header (`/dentist/appointments`).
-  - Added `POST /recommend/dentists/appointments/{id}/status` allowing status mutations (`confirmed`, `completed`, `cancelled`) with strict dentist ownership verification (cross-dentist 404 denial).
-  - Built `AppointmentsManager` displaying booked appointments, patient contact details, issues, notes, statuses, and quick status mutation action buttons.
+  - PHASE 10.6 IMPLEMENTED — PENDING NATHAN MANUAL ACCEPTANCE
+- **Phase A — Patient Order History**:
+  - Implemented `OrderRepository.list_for_patient(patient_user_id)` querying PostgreSQL orders joined with seller dentist details.
+  - Added `GET /portal/products/patient/orders` in `routes_products.py` returning seller clinic name, product details, quantity, price, simple status (`placed`, `confirmed`, `processing`, `completed`), and ISO timestamps.
+  - Enhanced `buy_product` to accept optional payload with patient details and quantity, defaulting to `status="placed"`.
+  - Built `PatientOrdersView` (`apps/web/components/patient/PatientOrdersView.tsx`) with orders KPI summary, order table, status badges, responsive card layouts, and synchronized client cache for immediate reflection.
+  - Created `/patient/orders` page and added "Orders" item to patient navigation header.
+- **Phase B — Dashboard Redesign (Patient + Dentist)**:
+  - Redesigned Patient Dashboard (`PatientDashboardView.tsx`) in modern healthcare SaaS style with: welcome hero, wellness status badge, 4 quick action cards (`New Scan`, `Chat with AI`, `Find Dentists`, `Orders`), recent scan summary card, recommended oral hygiene products preview with 1-click checkout, and daily prevention guidance banner.
+  - Redesigned Dentist Dashboard (`DentistDashboardHome.tsx`) with: verified partner greeting hero, 4 KPI stats cards (`Listed Products`, `Consultations`, `Pending Orders`, `Total Sales`), 3 quick action cards (`Add Product`, `View Orders`, `Appointments`), recent orders preview table, upcoming appointments preview, and clinical intake banner.
+  - Removed extra header subtitles like "Oral Health Screening" and "Dentist Management Portal" from `PortalHeader` and `Header`, keeping only the well-proportioned `DaantShaantLogo`.
+  - Normalized icon accents and interactive styling to DaantShaant brand blue `#00A2F0`.
+- **Phase C — Onboarding / Nav UX Fixes**:
+  - Fixed role cards hover interaction on `/get-started` (`RoleSelection`): set `pointer-events: none` on `.card::before` pseudo-element and `z-index: 5` on `.cardActions` / buttons so cards and buttons are effortlessly clickable.
+  - Added visible "Back" link on patient onboarding/login/register pages in `PortalAuthShell` routing to `/get-started`.
+  - Added language toggle (`EN | اردو`) and theme toggle (`☀️ | 🌙`) to `/get-started` navbar.
+- **Phase D — Full Urdu Localization Coverage**:
+  - Added 50+ new translation keys to `apps/web/i18n/en.ts` and `apps/web/i18n/ur.ts` with 100% key parity (364 keys each).
+  - Wired `useLanguage()` across `RoleSelection`, `PortalAuthShell`, `CheckoutModal`, `ProductsManager`, `OrdersManager`, `AppointmentsManager`, `PatientOrdersView`, `PatientDashboardView`, and `DentistDashboardHome`.
+  - Maintained RTL-friendly layouts and English fallback.
+- **Phase E — Design / Brand Consistency**:
+  - Set `--primary-brand: #00A2F0` and standardized `--accent: #00A2F0` in light and dark mode in `globals.css`.
+  - Preserved full-viewport modal overlays (`ModalPortal` with `100vw`/`100vh`).
 - **Automated Validation**:
-  - Next.js production build (`npm run build`) succeeded with 27/27 static routes generated.
-  - Backend pytest suite `test_phase10_5_portal_security_and_ops.py` passed (12/12 tests passing) verifying auth enumeration safety, session expiry, seller order isolation, and appointment status authorization.
-  - STRICT AGENT TESTING COMPLIANCE: 0 browser, dev server, localhost, or live automated testing performed.
+  - Orchestrator Pytest Suite (`test_phase10_5_portal_security_and_ops.py`): 14 passed, 0 failed.
+  - Frontend Next.js Production Build (`npm run build`): Exit code 0, 28/28 static routes generated successfully with 0 errors.
+  - Strict compliance: NO browser, dev server, localhost, or live automated testing performed by agent.
 
 ## Next Phase
 
-
+Phase 11 — Deployment Fast Track.

@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { PortalRole } from "@/lib/portal-types";
 import { PORTAL_META } from "@/lib/portal-types";
 import { PortalHeader } from "./PortalHeader";
+import { useLanguage } from "@/i18n";
 import styles from "./portal-auth.module.css";
 
 type Props = {
@@ -15,6 +16,9 @@ type Props = {
 export function PortalAuthShell({ role, mode, children }: Props) {
   const meta = PORTAL_META[role];
   const isLogin = mode === "login";
+  const { t } = useLanguage();
+
+  const roleName = role === "patient" ? t("get_started.role_patient") : role === "dentist" ? t("get_started.role_dentist") : "Admin";
 
   return (
     <div className={styles.shell} data-role={role}>
@@ -41,19 +45,17 @@ export function PortalAuthShell({ role, mode, children }: Props) {
         </section>
 
         <section className={styles.panel}>
-          {role === "dentist" && (
-            <Link
-              href="/get-started"
-              className={styles.backLink}
-              aria-label="Back to Get Started"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <line x1="19" y1="12" x2="5" y2="12" />
-                <polyline points="12 19 5 12 12 5" />
-              </svg>
-              <span>Back</span>
-            </Link>
-          )}
+          <Link
+            href="/get-started"
+            className={styles.backLink}
+            aria-label={t("common.back")}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+            <span>{t("common.back")}</span>
+          </Link>
 
           <div className={styles.panelHead}>
             <div className={styles.panelIcon} aria-hidden>
@@ -62,11 +64,11 @@ export function PortalAuthShell({ role, mode, children }: Props) {
               {role === "admin" && "🛡️"}
             </div>
             <div>
-              <h2>{isLogin ? "Welcome back" : "Create account"}</h2>
+              <h2>{isLogin ? t("auth.welcome_back") : t("auth.create_account")}</h2>
               <p>
                 {isLogin
-                  ? `Sign in to your ${role} dashboard`
-                  : `Register as a ${role} on DantShaant`}
+                  ? `${t("auth.welcome_back")} — ${roleName}`
+                  : `${t("auth.create_account")} — ${roleName}`}
               </p>
             </div>
           </div>
@@ -76,13 +78,13 @@ export function PortalAuthShell({ role, mode, children }: Props) {
               href={`/${role}/login`}
               className={`${styles.tab} ${isLogin ? styles.tabActive : ""}`}
             >
-              Sign in
+              {t("nav.login")}
             </Link>
             <Link
               href={`/${role}/register`}
               className={`${styles.tab} ${!isLogin ? styles.tabActive : ""}`}
             >
-              Register
+              {t("nav.register")}
             </Link>
           </div>
 
@@ -91,9 +93,9 @@ export function PortalAuthShell({ role, mode, children }: Props) {
       </main>
 
       <footer className={styles.footer}>
-        <span>DantShaant © 2026</span>
+        <span>DaantShaant © 2026</span>
         <span className={styles.footerDot} />
-        <Link href="/">Public website</Link>
+        <Link href="/">{t("common.public_site")}</Link>
       </footer>
     </div>
   );

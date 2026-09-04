@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { PatientDashboardHome } from "@/components/portal/PatientFeatureViews";
+import { PatientDashboardView } from "@/components/patient/PatientDashboardView";
 
 export const metadata: Metadata = {
   title: "Dashboard — Patient Portal",
 };
 
 export default function PatientDashboardPage() {
-  return <PatientDashboardHome />;
+  return <PatientDashboardView />;
 }
