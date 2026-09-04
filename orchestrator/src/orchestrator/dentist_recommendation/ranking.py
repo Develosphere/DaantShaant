@@ -4,7 +4,9 @@ Priority rules:
 1. Specialist match (recommended specialist from triage / scan issue)
 2. Verified registered dentist (registered on platform with is_verified=True)
 3. Distance (closer clinics rank higher)
-4. Partner status (small tiebreaker ONLY — never overrides specialist mismatch)
+4. Bayesian weighted rating & review confidence (where reviews exist)
+5. Multi-source consensus & profile completeness
+6. Partner status (small tiebreaker ONLY — never overrides specialist mismatch)
 """
 
 from __future__ import annotations
@@ -20,16 +22,42 @@ logger = logging.getLogger(__name__)
 
 BEST_MATCH_COUNT = 3
 
+# Bayesian rating parameters
+BAYESIAN_MIN_REVIEWS = 10.0
+DEFAULT_PRIOR_RATING = 4.0
+
+
+def calculate_bayesian_rating(
+    rating: float | None,
+    review_count: int | None,
+    mean_rating: float = DEFAULT_PRIOR_RATING,
+    min_reviews: float = BAYESIAN_MIN_REVIEWS,
+) -> float | None:
+    """Calculate Bayesian / weighted rating:
+
+    weighted_rating = (v / (v + m)) * R + (m / (v + m)) * C
+    where:
+    - R = raw rating
+    - v = review count
+    - C = mean/prior rating
+    - m = confidence threshold
+    """
+    if rating is None or rating <= 0:
+        return None
+    v = float(review_count) if review_count is not None and review_count > 0 else 1.0
+    m = min_reviews
+    return (v / (v + m)) * float(rating) + (m / (v + m)) * mean_rating
+
 
 def calculate_dentist_score(
     dentist: dict[str, Any],
     specialist_tags: list[str],
+    mean_rating: float = DEFAULT_PRIOR_RATING,
 ) -> float:
     """Calculate deterministic ranking score for a dentist candidate."""
     score = 0.0
 
     # 1. Specialist Match (Priority 1: Highest Weight)
-    # Check if dentist specialties/training/degree match the required specialist tags
     dentist_specialties = [str(s).lower() for s in dentist.get("specialties") or []]
     degree_text = str(dentist.get("degree") or "").lower()
     training_text = str(dentist.get("specialized_training") or "").lower()
@@ -42,12 +70,10 @@ def calculate_dentist_score(
         for t in specialist_tags
         if t.lower() not in ("general", "general dentist", "dentist")
     ]
-    
-    specialist_matched = False
+
     if target_specialists:
         for tag in target_specialists:
             if tag in haystack:
-                specialist_matched = True
                 score += 1000.0  # Massive priority for specialist match
                 break
     else:
@@ -65,20 +91,34 @@ def calculate_dentist_score(
             score += 150.0
 
     # 3. Distance (Priority 3)
-    # Proximity adds up to 100 points (100 - 2 * distance_km)
     dist_km = float(dentist.get("distance_km", 0.0))
     proximity_score = max(0.0, 100.0 - dist_km * 2.5)
     score += proximity_score
 
-    # 4. Partner Status (Tiebreaker only: +15 points)
-    # Never enough to beat specialist match (+1000) or massive distance delta
+    # 4. Bayesian Weighted Rating & Review Quality
+    raw_rating = dentist.get("rating")
+    rev_count = dentist.get("review_count")
+    if raw_rating is not None and raw_rating > 0:
+        weighted = calculate_bayesian_rating(raw_rating, rev_count, mean_rating)
+        if weighted is not None:
+            score += weighted * 4.0
+
+    # 5. Multi-Source Consensus & Profile Completeness
+    source_count = dentist.get("source_count") or (len(dentist.get("sources", [])) if dentist.get("sources") else 1)
+    if source_count > 1:
+        score += min((source_count - 1) * 8.0, 24.0)
+
+    # Profile completeness bonus (phone, address, website)
+    if dentist.get("phone"):
+        score += 5.0
+    if dentist.get("website"):
+        score += 5.0
+    if dentist.get("address"):
+        score += 5.0
+
+    # 6. Partner Status (Tiebreaker only: +15 points)
     if is_partner:
         score += 15.0
-
-    # 5. Rating bonus if verified/available
-    rating = dentist.get("rating")
-    if rating is not None and rating > 0:
-        score += float(rating) * 2.0
 
     return score
 
@@ -150,6 +190,14 @@ def _merge_candidate(existing: dict[str, Any], new_cand: dict[str, Any]) -> dict
     target = existing if e_is_plat or not n_is_plat else new_cand
     source = new_cand if target is existing else existing
 
+    # Maintain multi-source list and count
+    sources = list(target.get("sources") or ([target["source"]] if target.get("source") else []))
+    new_source = source.get("source")
+    if new_source and new_source not in sources:
+        sources.append(new_source)
+    target["sources"] = sources
+    target["source_count"] = len(sources)
+
     if not target.get("phone") and source.get("phone"):
         target["phone"] = source["phone"]
     if not target.get("website") and source.get("website"):
@@ -158,6 +206,8 @@ def _merge_candidate(existing: dict[str, Any], new_cand: dict[str, Any]) -> dict
         target["address"] = source["address"]
     if target.get("rating") is None and source.get("rating") is not None:
         target["rating"] = source["rating"]
+    if target.get("review_count") is None and source.get("review_count") is not None:
+        target["review_count"] = source["review_count"]
 
     return target
 
@@ -179,7 +229,9 @@ def rank_dentists(
     # 1. Add platform dentists (authoritative)
     for item in platform_dentists:
         item_copy = dict(item)
-        item_copy["rank_score"] = calculate_dentist_score(item_copy, specialist_tags)
+        if "sources" not in item_copy:
+            item_copy["sources"] = [item_copy.get("source") or "platform"]
+            item_copy["source_count"] = len(item_copy["sources"])
 
         # Check against already added platform items
         dup_idx = next((i for i, m in enumerate(merged) if _is_duplicate(item_copy, m)), None)
@@ -192,13 +244,27 @@ def rank_dentists(
     ext_list = external_dentists if external_dentists is not None else (osm_dentists or [])
     for item in ext_list:
         item_copy = dict(item)
-        item_copy["rank_score"] = calculate_dentist_score(item_copy, specialist_tags)
+        if "sources" not in item_copy:
+            item_copy["sources"] = [item_copy.get("source") or "osm"]
+            item_copy["source_count"] = len(item_copy["sources"])
 
         dup_idx = next((i for i, m in enumerate(merged) if _is_duplicate(item_copy, m)), None)
         if dup_idx is not None:
             merged[dup_idx] = _merge_candidate(merged[dup_idx], item_copy)
         else:
             merged.append(item_copy)
+
+    # Compute mean rating among candidates with ratings for local Bayesian prior
+    ratings_available = [
+        float(d["rating"]) for d in merged if d.get("rating") is not None and float(d["rating"]) > 0
+    ]
+    mean_candidate_rating = (
+        sum(ratings_available) / len(ratings_available) if ratings_available else DEFAULT_PRIOR_RATING
+    )
+
+    # Calculate deterministic score for each merged candidate
+    for cand in merged:
+        cand["rank_score"] = calculate_dentist_score(cand, specialist_tags, mean_candidate_rating)
 
     # Sort primarily by rank_score (descending), then distance (ascending)
     merged.sort(key=lambda d: (-d.get("rank_score", 0.0), d.get("distance_km", 0.0)))

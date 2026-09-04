@@ -47,7 +47,11 @@ export function DentistMapView() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const issue = searchParams.get("issue") ?? "dental checkup";
-  const scanId = searchParams.get("scan_id") ?? undefined;
+  const rawScanId = searchParams.get("scan_id");
+  const scanId =
+    rawScanId && rawScanId.trim() && rawScanId !== "undefined" && rawScanId !== "null"
+      ? rawScanId.trim()
+      : undefined;
   const severity = searchParams.get("severity") ?? "moderate";
   const locationLabel = searchParams.get("location") ?? "";
   const urlLat = parseCoord(searchParams.get("lat"));
@@ -222,6 +226,7 @@ export function DentistMapView() {
           lng,
           severity,
           scan_id: scanId,
+          location_label: effectiveLabel || undefined,
         });
         console.log(`[DENTIST_UI] response received count=${data.dentists?.length ?? 0} radius=${data.search_radius_km ?? 10}km`);
         setDentists(data.dentists);
@@ -406,7 +411,7 @@ export function DentistMapView() {
                   <div className={styles.listName}>{d.name}</div>
                   <div className={styles.listMeta}>
                     {d.clinic_name || d.address} · {t("dentists.distance_km", { km: d.distance_km.toFixed(1) })}
-                    {d.rating ? ` · ★ ${d.rating}` : ""}
+                    {d.rating != null ? ` · ★ ${d.rating}${d.review_count ? ` (${d.review_count})` : ""}` : ""}
                   </div>
                 </button>
               ))}
@@ -432,7 +437,7 @@ export function DentistMapView() {
               
               <p className={styles.modalRow}>
                 📍 <strong>{t("dentists.distance_km", { km: selected.distance_km.toFixed(1) })}</strong>
-                {selected.rating ? ` · ★ ${selected.rating}` : ""}
+                {selected.rating != null ? ` · ★ ${selected.rating}${selected.review_count ? ` (${selected.review_count})` : ""}` : ""}
               </p>
               {selected.address && <p className={styles.modalRow}>{selected.address}</p>}
               {selected.phone && <p className={styles.modalRow}>📞 {selected.phone}</p>}

@@ -24,12 +24,14 @@ export function FindDentistsButton({ issue, scanId, severity, className, style }
   function buildUrl(loc: PickedLocation) {
     const params = new URLSearchParams({
       issue,
-      scan_id: scanId,
       severity,
       lat: String(loc.lat),
       lng: String(loc.lng),
       location: loc.label,
     });
+    if (scanId && scanId.trim() && scanId !== "undefined" && scanId !== "null") {
+      params.set("scan_id", scanId.trim());
+    }
     return `/patient/dentists?${params.toString()}`;
   }
 

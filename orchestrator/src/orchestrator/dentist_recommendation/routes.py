@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -26,6 +27,8 @@ from orchestrator.repositories import (
     UserRepository,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/portal/recommend/dentists", tags=["dentist-recommendation"])
 
 
@@ -47,20 +50,35 @@ async def recommend_dentists(
             status_code=400,
             detail="Location required - enable browser location or set profile location",
         )
+    resolved_scan_id: str | None = None
     if req.scan_id:
         try:
-            scan_id = UUID(req.scan_id)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail="Invalid scan id") from exc
-        if not await ScanRepository(session).get_owned(scan_id, user["user_id"]):
-            raise HTTPException(status_code=404, detail="Scan not found")
+            parsed_scan_id = UUID(req.scan_id)
+            owned_scan = await ScanRepository(session).get_owned(
+                parsed_scan_id,
+                user["user_id"],
+            )
+            if owned_scan:
+                resolved_scan_id = req.scan_id
+            else:
+                logger.warning(
+                    "[DENTIST_RECOMMEND] Scan ID '%s' not found or unowned for user %s. Continuing without scan context.",
+                    req.scan_id,
+                    user["user_id"],
+                )
+        except ValueError:
+            logger.warning(
+                "[DENTIST_RECOMMEND] Malformed scan ID '%s' provided by user %s. Continuing without scan context.",
+                req.scan_id,
+                user["user_id"],
+            )
     result = await run_dentist_recommendation(
         patient_id=str(user["user_id"]),
         issue=req.issue,
         lat=lat,
         lng=lng,
         severity=req.severity or "moderate",
-        scan_id=req.scan_id,
+        scan_id=resolved_scan_id,
         session_id=req.session_id,
         radius_km=req.radius_km or 25.0,
     )

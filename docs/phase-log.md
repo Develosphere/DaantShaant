@@ -1060,6 +1060,98 @@ Integrated live nearby-dentist discovery into the real DaantShaant patient flow 
 
 Phase 11 — Deployment Fast Track.
 
+---
+
+## Phase 10.4 — Production Live Dentist Discovery + Map Integration
+
+**Date:** September 2026  
+**Status:** IMPLEMENTED — PENDING NATHAN MANUAL LIVE ACCEPTANCE
+
+### Summary
+
+Engineered the complete production live dentist discovery and MapLibre integration experience for DaantShaant:
+- **Unified Location Flows**:
+  - Preserved Nathan's decoupled LocationPickerModal where selecting an autocomplete suggestion stores `{label, lat, lng}` and enables the "Find Dentists" button without premature discovery.
+  - "Use Current Location (GPS)" directly passes browser coordinates (`navigator.geolocation`) without redundant roundtrip geocoding.
+- **Adaptive Locality Radius (`[3, 5, 8, 10]` km)**:
+  - Searches 3 km first, expanding to 5, 8, or 10 km only when results are below target (`MIN_RESULT_TARGET = 5`), finding the nearest sufficient set rather than entire-city results.
+- **Multi-Source Discovery & Platform Authority**:
+  - Combines registered platform dentists (PostgreSQL) with OpenStreetMap Overpass live listings, plus optional Foursquare and Geoapify providers if configured.
+  - Platform database records remain 100% authoritative.
+  - Failures in any external provider are strictly isolated: registered dentists and working sources continue without returning 500/504 errors to the UI.
+- **Statistical & Bayesian Ranking Engine**:
+  - Deterministic multi-factor scoring: Clinical specialist match > Platform verification > Proximity > Bayesian rating > Multi-source consensus & profile completeness > Partner tiebreaker.
+  - Bayesian weighted rating: `(v / (v + m)) * R + (m / (v + m)) * C` prevents low-review 5.0 clinics from dominating well-established 4.8 clinics. Missing ratings are preserved as `None` (never 0 stars).
+  - Clinics without specific specialty tags are retained as "Nearby Dental Clinic" rather than filtered out.
+- **MapLibre OpenFreeMap Integration & Card Interaction**:
+  - Professional healthcare markers: Pulsing user location, verified platform clinics (#3b82f6), best specialist matches (#22c55e), external clinics (#64748b).
+  - Interactive two-way card <-> marker focus and flyTo.
+  - Strict CTA distinction: "Book Consultation" displayed only for registered platform dentists; external clinics provide direct Call, Directions (OSM routing), and Website links.
+  - Preserved full English/Urdu bilingual localization and Light/Dark contrast themes.
+
+### Files Modified
+
+- `orchestrator/src/orchestrator/dentist_portal/models.py`
+- `orchestrator/src/orchestrator/dentist_recommendation/ranking.py`
+- `apps/web/components/dentists/DentistMapView.tsx`
+- `apps/web/lib/dentist-recommend.ts`
+- `context.md`
+- `docs/phase-log.md`
+
+### Files Created
+
+- `orchestrator/tests/test_phase10_4_dentist_discovery.py`
+
+### Validation
+
+- Dedicated Phase 10.4 19-Scenario Test Suite (`test_phase10_4_dentist_discovery.py`): 19 passed, 0 failed.
+- Combined Dentist Test Suite (`test_phase10_3_dentist_discovery.py`, `test_phase10_4_dentist_discovery.py`, `test_dentist_discovery.py`): 50 passed, 0 failed. Zero external live calls.
+- Frontend Next.js Production Build (`npm run build`): Exit code 0, 26/26 static routes generated successfully.
+- NO browser, live API keys, or manual localhost testing performed by agent.
+
+### Next
+
+Phase 10.4.1 — Stale / Missing / Unowned Scan ID Resilience.
+
+---
+
+## Phase 10.4.1 — Stale / Missing / Unowned Scan ID Resilience in Dentist Discovery
+
+**Date:** September 2026  
+**Status:** COMPLETE
+
+### Summary
+
+Dentist discovery now treats `scan_id` strictly as optional linking context rather than a blocking precondition:
+- **Resilient Route Execution**: `POST /portal/recommend/dentists/` checks scan ownership in `ScanRepository` if `scan_id` is supplied. If the scan ID is missing from DB, unowned by the requesting patient, or malformed, the route logs a safe development warning, drops the scan context (`resolved_scan_id = None`), and continues dentist discovery without returning a 404 or 400.
+- **Security Guarantee**: Unowned scan IDs are never treated as valid and never attached to recommendation session records in Supabase PostgreSQL (`DentistRecommendation`), preventing any leakage or unauthorized association of another user's clinical scan.
+- **Frontend Hygiene**: `fetchDentistRecommendations` and `DentistMapView.tsx` sanitize `scan_id` to ensure empty strings, `"undefined"`, or `"null"` query param artifacts are omitted prior to making API calls.
+
+### Files Modified
+
+- `orchestrator/src/orchestrator/dentist_recommendation/routes.py`
+- `apps/web/lib/dentist-recommend.ts`
+- `apps/web/components/dentists/DentistMapView.tsx`
+- `apps/web/components/dentists/FindDentistsButton.tsx`
+- `context.md`
+- `docs/phase-log.md`
+
+### Files Created
+
+- `orchestrator/tests/test_phase10_4_1_scan_id_resilience.py`
+
+### Validation
+
+- Dedicated Phase 10.4.1 Test Suite (`test_phase10_4_1_scan_id_resilience.py`): 7 passed, 0 failed.
+- Combined Dentist Test Suites (`test_phase10_4_1_scan_id_resilience.py`, `test_phase10_4_dentist_discovery.py`): 26 passed, 0 failed. Zero external live calls.
+- Frontend TypeScript check (`npx tsc --noEmit`): Exit code 0, 0 errors.
+- NO browser, live API keys, or manual localhost testing performed by agent.
+
+### Next
+
+Phase 11 — Deployment Fast Track.
+
+
 
 
 

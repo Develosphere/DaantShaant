@@ -12,6 +12,7 @@ export type DentistPin = {
   phone: string | null;
   website?: string | null;
   rating: number | null;
+  review_count?: number | null;
   distance_km: number;
   specialties: string[];
   is_partner: boolean;
@@ -22,6 +23,8 @@ export type DentistPin = {
   degree?: string | null;
   profile_image?: string | null;
   recommendation_reason: string;
+  sources?: string[];
+  source_count?: number;
 };
 
 export type DentistRecommendResponse = {
@@ -40,11 +43,25 @@ export async function fetchDentistRecommendations(params: {
   severity?: string;
   scan_id?: string;
   session_id?: string;
+  location_label?: string;
 }): Promise<DentistRecommendResponse> {
+  const cleanParams: Record<string, unknown> = { ...params };
+  const rawScanId = cleanParams.scan_id;
+  if (
+    !rawScanId ||
+    typeof rawScanId !== "string" ||
+    !rawScanId.trim() ||
+    rawScanId === "undefined" ||
+    rawScanId === "null"
+  ) {
+    delete cleanParams.scan_id;
+  } else {
+    cleanParams.scan_id = rawScanId.trim();
+  }
   const res = await authorizedFetch("patient", `${API_BASE}/portal/recommend/dentists/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(params),
+    body: JSON.stringify(cleanParams),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

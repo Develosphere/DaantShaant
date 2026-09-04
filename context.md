@@ -299,33 +299,38 @@ Phase 10.1 implemented full bilingual capabilities, light/dark theme support, an
 | 10.1 | Bilingual English/Urdu + Light/Dark Theme + Public Copy Hardening | COMPLETE |
 | 10.2 | Nearby Dentist Repair + Product Marketplace Integrity | COMPLETE |
 | 10.3 | Live Nearby Dentist Discovery Integration (Current Location + Adaptive Radius + Multi-Source) | COMPLETE |
+| 10.4 | Production Live Dentist Discovery + Map Integration (Registered Dentists + Public Discovery + Adaptive Ranking) | IMPLEMENTED — PENDING NATHAN MANUAL LIVE ACCEPTANCE |
+| 10.4.1 | Optional Scan Context Resilience (Stale/Missing/Unowned scan_id Never Blocks Discovery) | COMPLETE |
 
 The former Phase 1C is obsolete because its domain migration scope was merged into Phase 1B.
 
-## Phase 10.3 Summary — Live Nearby Dentist Discovery Integration
+## Phase 10.4 Summary — Production Live Dentist Discovery + Map Integration
 
-- **Direct Current-Location Discovery**:
-  - Browser coordinates from `navigator.geolocation` are sent directly to the dentist recommendation endpoint without intervening geocoding or reverse geocoding roundtrips. Reverse geocoding is used purely for friendly display labeling.
-  - Friendly permission denial and timeout error handling prevents raw browser error leaks.
-- **Adaptive Locality Radius (`[3, 5, 8, 10]` km)**:
-  - Locality search starts at 3 km and expands only when results are below target (`MIN_RESULT_TARGET = 5`), stopping as soon as sufficient clinics are available.
-  - Maximum fallback radius is bounded at 10 km.
-  - Safe developer diagnostics log center coordinates, attempts, provider counts, merged counts, target status, final radius, and execution duration.
-- **Multi-Source External Discovery & Failure Isolation**:
-  - OpenStreetMap / Overpass API remains primary open geodata source with 30-minute in-memory cache.
-  - Optional Foursquare (`FOURSQUARE_API_KEY`) and Geoapify (`GEOAPIFY_API_KEY`) provider adapters query places APIs only when keys are configured, skipping safely when unconfigured.
-  - External provider failures are isolated: registered PostgreSQL platform dentists and working external providers continue without throwing 500/504 errors to the UI.
-- **Multi-Source Deduplication & Deterministic Ranking**:
-  - Deduplication merges overlapping clinics across platform and external providers using proximity (<80m), name token overlap, phone numbers, and website domains.
-  - Platform database records remain 100% authoritative for registered DaantShaant dentists.
-  - Missing ratings are preserved as `None` (never converted to 0 stars).
-  - General dental clinics lacking specific specialist tags are preserved and ranked by distance.
-- **MapLibre Map UX & Search Radius Circle**:
-  - Interactive map displays patient marker, verified platform dentists, best specialist matches, and external clinics.
-  - Visualizes adaptive search radius with a subtle GeoJSON circle and summary text (`"X dental clinics found within Y km"`).
-  - Local auto-fit bounds prevents city-wide over-zoom.
-- **Product Section Microfix**:
-  - In `DiagnosisReport.tsx`, when `recommendedProducts.length === 0`, the entire product recommendation block is hidden, continuing cleanly to the clinical safety disclaimer.
+- **Implementation Status**:
+  - PHASE 10.4 IMPLEMENTED — PENDING NATHAN MANUAL LIVE ACCEPTANCE
+- **Unified Discovery & Adaptive Search**:
+  - Direct exact coordinates sent from both manual address autocomplete and GPS flows.
+  - Adaptive search radii `[3, 5, 8, 10]` km with `MIN_RESULT_TARGET = 5` finds the nearest sufficient set without unnecessary city-wide expansion.
+- **Resilient Multi-Source Integration & Platform Authority**:
+  - PostgreSQL registered dentists remain authoritative platform records.
+  - OpenStreetMap / Overpass live external discovery with 30-minute successful-response cache and endpoint mirror fallback.
+  - Optional Foursquare and Geoapify providers query when configured, failing or skipping safely without affecting core discovery.
+- **Statistical Clinical Ranking & Bayesian Ratings**:
+  - Deterministic ranking: Specialist match > Platform verified > Distance > Bayesian rating > Multi-source consensus & profile completeness > Partner tiebreaker.
+  - Bayesian weighted rating formula: `(v / (v + m)) * R + (m / (v + m)) * C` prevents low-sample high-star domination. Missing ratings are preserved as `None` (never 0 stars).
+  - General dental clinics lacking specific specialty tags are retained and ranked by proximity.
+- **MapLibre Interactive Map & UI Polish**:
+  - MapLibre GL JS + OpenFreeMap with local auto-fit bounds (no city-wide over-zoom).
+  - Clear marker categories: pulsing user position, verified platform clinics (#3b82f6), best specialist matches (#22c55e), external clinics (#64748b).
+  - Interactive two-way card <-> marker focus and flyTo.
+  - Distinct CTAs: "Book Consultation" exclusively for registered platform dentists; external listings show Call, Directions (OSM routing), and Website.
+  - Clean bilingual support (English/Urdu) and theme styling (Light/Dark).
+
+## Phase 10.4.1 Summary — Optional Scan Context Resilience (Stale/Missing/Unowned scan_id)
+
+- **Optional Scan Linking**: Dentist discovery (`POST /portal/recommend/dentists/`) now treats `scan_id` strictly as optional linking context rather than a mandatory precondition.
+- **Resilience**: Invalid, stale, missing, or unowned scan IDs no longer block clinic discovery with 404 or 400 errors.
+- **Security & Ownership**: Unowned or nonexistent scan IDs are safely dropped (`scan_id=None`), never attached to the recommendation session, and never exposed to unauthorized users. Valid owned scans continue to be linked to recommendation records.
 
 ## Next Phase
 

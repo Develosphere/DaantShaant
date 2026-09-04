@@ -182,11 +182,12 @@ class DentistRecommendRequest(BaseModel):
     scan_id: Optional[str] = None
     session_id: Optional[str] = None
     radius_km: Optional[float] = Field(default=25.0, ge=1.0, le=100.0)
+    location_label: Optional[str] = None
 
 
 class DentistPin(BaseModel):
     tier: str  # "platform" | "general"
-    source: Optional[str] = "platform"  # "platform" | "osm" | "curated"
+    source: Optional[str] = "platform"  # "platform" | "osm" | "curated" | "foursquare" | "geoapify"
     dentist_id: Optional[str] = None
     place_id: Optional[str] = None
     name: str
@@ -196,6 +197,7 @@ class DentistPin(BaseModel):
     phone: Optional[str] = None
     website: Optional[str] = None
     rating: Optional[float] = None
+    review_count: Optional[int] = None
     distance_km: float = 0.0
     specialties: list[str] = []
     is_partner: bool = False
@@ -207,6 +209,8 @@ class DentistPin(BaseModel):
     degree: Optional[str] = None
     profile_image: Optional[str] = None
     recommendation_reason: str = ""
+    sources: list[str] = []
+    source_count: int = 1
 
 
 class DentistRecommendResponse(BaseModel):
