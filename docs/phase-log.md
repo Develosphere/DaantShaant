@@ -1369,7 +1369,74 @@ Delivered comprehensive UX polish, patient order tracking, dashboard usefulness,
 
 ### Next
 
+Phase 10.6 — Final Design Cleanup + Cross-Tab Session Hardening.
+
+---
+
+## Phase 10.6 — Final Design Cleanup + Cross-Tab Session Hardening
+
+**Date:** September 2026  
+**Status:** IMPLEMENTED — PENDING NATHAN MANUAL ACCEPTANCE
+
+### Summary
+
+Hardened auth refresh coordination across browser tabs to eliminate race conditions with rotating refresh tokens, locked header chrome LTR for Urdu localization, improved dark mode logo readability, polished `/get-started`, standardized `#00A2F0` monotone vector icons, and completed Urdu localization:
+- **Cross-Tab Refresh Coordination & Mutex Lock**:
+  - Created `apps/web/lib/cross-tab-auth.ts` introducing `withCrossTabLock` using `navigator.locks` with an atomic, timestamped `localStorage` fallback and 8-second stale lock expiration.
+  - Solved single-use refresh token rotation race across tabs: when concurrent requests receive 401, only ONE tab acquires the mutex and calls `POST /portal/auth/refresh`. Other tabs wait on the mutex and send the rotated cookie sequentially, preventing token collisions and premature logout.
+  - Integrated BroadcastChannel (`"daantshaant-auth"`) broadcasting `REFRESH_STARTED`, `REFRESH_SUCCEEDED`, `REFRESH_FAILED`, and `LOGGED_OUT` events without leaking sensitive access/refresh tokens.
+  - Differentiated error types in `portal-auth.ts`: 401 clears session and broadcasts failure; 5xx and network errors preserve session state.
+  - Tab-safe logout: explicit logout in any tab notifies all active portal tabs via `LOGGED_OUT` to clear their local in-memory session and redirect to login.
+- **Header Structure & RTL Locking**:
+  - Locked all header chrome (`PortalHeader`, public `Header`, `RoleSelection`) to `direction: ltr !important;` so switching to Urdu (`dir="rtl"`) never mirrors header layout. Logo stays left, nav stays center/left, language/theme/user controls stay right.
+- **Logo Dark Mode Visibility**:
+  - Enhanced `DaantShaantLogo` with `.ds-logo-chip` in `globals.css`: renders a subtle light surface chip in dark mode (`rgba(255, 255, 255, 0.94)`) with smooth border-radius and shadow, ensuring canonical `logo.png` text is crisp and legible without inverting colors or modifying the source asset.
+- **Get-Started UI Polish**:
+  - Removed highlighted top-left `← Back` link from `/get-started` header while preserving clickable home logo.
+  - Polished dark mode surfaces in `role-selection.module.css` with dark slate surfaces and high contrast.
+- **Dashboard Icon Consistency (#00A2F0)**:
+  - Replaced visual emojis (`📸`, `💬`, `🗺️`, `📦`, `⚡`, `🛍️`, `📅`, `💳`, `➕`, `📋`, `✨`) used as UI action icons in Patient Dashboard (`PatientDashboardView.tsx`) and Dentist Dashboard (`DentistDashboardHome.tsx`) with monotone vector SVGs colored `#00A2F0`.
+  - Added full dark mode token styling across patient and dentist dashboards and orders views.
+- **Urdu Localization Final Pass**:
+  - Added new translation keys for verified partner status, updated scan actions, and screening disclaimers with 100% key parity across `en.ts` and `ur.ts`.
+
+### Files Created
+
+- `apps/web/lib/cross-tab-auth.ts`
+- `apps/web/lib/__tests__/cross-tab-auth.test.ts`
+
+### Files Modified
+
+- `apps/web/lib/portal-auth.ts`
+- `apps/web/components/portal/PortalDashboard.tsx`
+- `apps/web/components/portal/portal-header.module.css`
+- `apps/web/components/common/DaantShaantLogo.tsx`
+- `apps/web/components/get-started/RoleSelection.tsx`
+- `apps/web/components/get-started/role-selection.module.css`
+- `apps/web/components/patient/PatientDashboardView.tsx`
+- `apps/web/components/patient/patient-dashboard.module.css`
+- `apps/web/components/patient/patient-orders.module.css`
+- `apps/web/components/dentist/DentistDashboardHome.tsx`
+- `apps/web/components/dentist/dentist-dashboard.module.css`
+- `apps/web/components/CheckoutModal.tsx`
+- `apps/web/app/globals.css`
+- `apps/web/i18n/en.ts`
+- `apps/web/i18n/ur.ts`
+- `context.md`
+- `docs/phase-log.md`
+
+### Validation
+
+- Unit Test Suite (`cross-tab-auth.test.ts`): 7 passed, 0 failed across all cross-tab concurrency, broadcast, and fallback scenarios.
+- Backend Pytest Suite: 20 passed, 0 failed.
+- TypeScript Type Check (`npx tsc --noEmit`): Exit code 0, 0 errors.
+- Next.js Production Build (`npm run build`): Exit code 0, 28/28 static routes generated successfully.
+- Strict compliance: NO browser, dev server, localhost, or live testing performed by agent.
+
+### Next
+
 Phase 11 — Deployment Fast Track.
+
 
 
 

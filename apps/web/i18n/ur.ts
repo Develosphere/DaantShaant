@@ -411,5 +411,12 @@ export const ur = {
   "products_mgmt.cancel": "منسوخ",
   "products_mgmt.edit": "ترمیم",
   "products_mgmt.delete": "حذف کریں",
-  "products_mgmt.confirm_delete": "کیا آپ واقعی اس پروڈکٹ کو حذف کرنا چاہتے ہیں؟"
+  "products_mgmt.confirm_delete": "کیا آپ واقعی اس پروڈکٹ کو حذف کرنا چاہتے ہیں؟",
+
+  // Phase 10.6 Refinements
+  "dashboard.scan_verified": "مصنوعی ذہانت کی اسکریننگ رپورٹ فعال اور تصدیق شدہ ہے",
+  "dashboard.screening_disclaimer_hint": "اسکریننگ دانتوں پر پلاک، ٹارٹر اور مسوڑھوں کی سوزش کا جائزہ لیتی ہے۔ حتمی تشخیص کے لیے مستند دندان ساز سے رجوع کریں۔",
+  "dashboard.action_update_scan": "نئی اسکریننگ کریں",
+  "dentist_dashboard.verified_partner": "تصدیق شدہ ڈینٹل پارٹنر",
+  "dentist_dashboard.clinical_advice": "کلینکل مشورہ"
 };

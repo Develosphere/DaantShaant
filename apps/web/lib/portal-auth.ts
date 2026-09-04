@@ -1,8 +1,26 @@
 import type { PortalRole, PortalUser, RegisterPayload } from "./portal-types";
+import {
+  withCrossTabLock,
+  broadcastAuthEvent,
+  subscribeToAuthEvents,
+} from "./cross-tab-auth";
 
 const API_BASE = process.env.NEXT_PUBLIC_ORCHESTRATOR_URL ?? "http://127.0.0.1:8000";
 
 let activeUser: PortalUser | null = null;
+
+// Listen for cross-tab auth events (e.g. logout in another tab)
+if (typeof window !== "undefined") {
+  subscribeToAuthEvents((msg) => {
+    if (msg.type === "LOGGED_OUT") {
+      if (!msg.role || activeUser?.role === msg.role) {
+        activeUser = null;
+      }
+    } else if (msg.type === "REFRESH_FAILED") {
+      activeUser = null;
+    }
+  });
+}
 
 export function getStoredUser(role: PortalRole): PortalUser | null {
   return activeUser?.role === role ? activeUser : null;
@@ -41,6 +59,7 @@ let refreshPromise: Promise<PortalUser | null> | null = null;
 export async function refreshPortalSession(
   expectedRole?: PortalRole
 ): Promise<PortalUser | null> {
+  // Deduplicate concurrent refresh calls within the same tab
   if (refreshPromise) {
     const user = await refreshPromise;
     if (expectedRole && user && user.role !== expectedRole) {
@@ -51,19 +70,42 @@ export async function refreshPortalSession(
 
   refreshPromise = (async () => {
     try {
-      const res = await fetch(`${API_BASE}/portal/auth/refresh`, {
-        method: "POST",
-        credentials: "include",
+      // Coordinate across tabs using the cross-tab mutex
+      return await withCrossTabLock(async () => {
+        broadcastAuthEvent("REFRESH_STARTED", { role: expectedRole });
+
+        try {
+          const res = await fetch(`${API_BASE}/portal/auth/refresh`, {
+            method: "POST",
+            credentials: "include",
+          });
+
+          if (res.ok) {
+            const user = (await res.json()) as PortalUser;
+            activeUser = user;
+            broadcastAuthEvent("REFRESH_SUCCEEDED", { role: user.role });
+            return user;
+          }
+
+          if (res.status === 401) {
+            // Genuine session revocation or missing refresh cookie
+            activeUser = null;
+            broadcastAuthEvent("REFRESH_FAILED", {
+              role: expectedRole,
+              reason: "revoked_or_expired",
+            });
+            return null;
+          }
+
+          // Temporary backend failure (5xx) - do not destroy session prematurely
+          console.warn(`Auth refresh received HTTP ${res.status}; preserving session`);
+          return null;
+        } catch (netErr) {
+          // Temporary network failure - do not destroy session
+          console.warn("Network error during auth refresh; preserving session:", netErr);
+          return null;
+        }
       });
-      if (!res.ok) {
-        activeUser = null;
-        return null;
-      }
-      const user = (await res.json()) as PortalUser;
-      activeUser = user;
-      return user;
-    } catch {
-      return null;
     } finally {
       refreshPromise = null;
     }
@@ -111,6 +153,7 @@ export async function loginPortal(
   });
   const user = await readUserResponse(res);
   savePortalUser(role, user);
+  broadcastAuthEvent("SESSION_UPDATED", { role });
   return user;
 }
 
@@ -127,6 +170,7 @@ export async function registerPortal(
   });
   const user = await readUserResponse(res);
   savePortalUser(role, user);
+  broadcastAuthEvent("SESSION_UPDATED", { role });
   return user;
 }
 
@@ -156,8 +200,11 @@ export async function logoutPortal(role: PortalRole): Promise<void> {
       method: "POST",
       credentials: "include",
     });
+  } catch (err) {
+    console.warn("Logout API call failed:", err);
   } finally {
     clearPortalUser(role);
+    broadcastAuthEvent("LOGGED_OUT", { role });
   }
 }
 

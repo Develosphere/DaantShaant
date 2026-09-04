@@ -45,40 +45,18 @@ export function RoleSelection() {
 
   return (
     <div className={styles.page}>
-      {/* Navbar */}
+      {/* Navbar — Header chrome locked LTR so logo is left and controls are right */}
       <header className={styles.nav}>
         <div className={styles.navInner}>
-          <Link
-            href="/"
-            className={styles.navBackLink}
-            aria-label={t("common.back")}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <line x1="19" y1="12" x2="5" y2="12" />
-              <polyline points="12 19 5 12 12 5" />
-            </svg>
-            <span>{t("common.back")}</span>
-          </Link>
-
           <DaantShaantLogo href="/" priority />
 
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <div className={styles.navControls}>
             <button
               type="button"
               onClick={toggleLanguage}
               title={locale === "en" ? "اردو میں دیکھیں" : "Switch to English"}
               aria-label="Toggle language"
-              style={{
-                padding: "0.4rem 0.75rem",
-                fontSize: "0.82rem",
-                fontWeight: 700,
-                fontFamily: "inherit",
-                color: "var(--text-primary, #0f172a)",
-                background: "var(--bg-surface-raised, rgba(0, 162, 240, 0.05))",
-                border: "1px solid var(--border-default, rgba(0, 162, 240, 0.2))",
-                borderRadius: "8px",
-                cursor: "pointer",
-              }}
+              className={styles.controlBtn}
             >
               {locale === "en" ? "اردو" : "EN"}
             </button>
@@ -87,15 +65,7 @@ export function RoleSelection() {
               onClick={toggleTheme}
               title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
               aria-label="Toggle theme"
-              style={{
-                padding: "0.4rem 0.65rem",
-                fontSize: "0.82rem",
-                color: "var(--text-primary, #0f172a)",
-                background: "var(--bg-surface-raised, rgba(0, 162, 240, 0.05))",
-                border: "1px solid var(--border-default, rgba(0, 162, 240, 0.2))",
-                borderRadius: "8px",
-                cursor: "pointer",
-              }}
+              className={styles.controlBtn}
             >
               {theme === "light" ? "🌙" : "☀️"}
             </button>

@@ -409,5 +409,12 @@ export const en = {
   "products_mgmt.cancel": "Cancel",
   "products_mgmt.edit": "Edit",
   "products_mgmt.delete": "Delete",
-  "products_mgmt.confirm_delete": "Are you sure you want to delete this product?"
+  "products_mgmt.confirm_delete": "Are you sure you want to delete this product?",
+
+  // Phase 10.6 Refinements
+  "dashboard.scan_verified": "AI screening report active and verified",
+  "dashboard.screening_disclaimer_hint": "Screening evaluates visible enamel plaque, tartar deposits, and gum inflammation. Confirm concerns with a licensed dentist.",
+  "dashboard.action_update_scan": "Run Updated Screening",
+  "dentist_dashboard.verified_partner": "Verified Dental Partner",
+  "dentist_dashboard.clinical_advice": "Clinical Intake Advice"
 };

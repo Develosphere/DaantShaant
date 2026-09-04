@@ -19,19 +19,30 @@ export function DaantShaantLogo({
   priority = false,
 }: DaantShaantLogoProps) {
   const content = (
-    <Image
-      src="/landing/logo.png"
-      alt="DaantShaant"
-      width={width}
-      height={height}
-      priority={priority}
+    <span
+      className="ds-logo-chip"
       style={{
-        objectFit: "contain",
-        width: "auto",
-        height: "38px",
-        display: "block",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: "8px",
+        transition: "all 0.2s ease",
       }}
-    />
+    >
+      <Image
+        src="/landing/logo.png"
+        alt="DaantShaant"
+        width={width}
+        height={height}
+        priority={priority}
+        style={{
+          objectFit: "contain",
+          width: "auto",
+          height: "38px",
+          display: "block",
+        }}
+      />
+    </span>
   );
 
   if (href) {

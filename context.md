@@ -303,40 +303,38 @@ Phase 10.1 implemented full bilingual capabilities, light/dark theme support, an
 | 10.4.1 | Optional Scan Context Resilience (Stale/Missing/Unowned scan_id Never Blocks Discovery) | COMPLETE |
 | 10.4.3 | Final Map Baselayer Repair + Dentist Listing UI Simplification | COMPLETE |
 | 10.5 | Portal Security + Brand Consistency + Dentist Operations | COMPLETE |
-| 10.6 | Patient Order History, Dashboard Redesign, Navigation UX & Full Urdu Localization | IMPLEMENTED — PENDING NATHAN MANUAL ACCEPTANCE |
+| 10.6 | Final Design Cleanup + Cross-Tab Session Hardening | IMPLEMENTED — PENDING NATHAN MANUAL ACCEPTANCE |
 
 The former Phase 1C is obsolete because its domain migration scope was merged into Phase 1B.
 
-## Phase 10.6 Summary — Patient Order History, Dashboard Redesign, Navigation UX & Full Urdu Localization
+## Phase 10.6 Summary — Final Design Cleanup + Cross-Tab Session Hardening
 
 - **Implementation Status**:
   - PHASE 10.6 IMPLEMENTED — PENDING NATHAN MANUAL ACCEPTANCE
-- **Phase A — Patient Order History**:
-  - Implemented `OrderRepository.list_for_patient(patient_user_id)` querying PostgreSQL orders joined with seller dentist details.
-  - Added `GET /portal/products/patient/orders` in `routes_products.py` returning seller clinic name, product details, quantity, price, simple status (`placed`, `confirmed`, `processing`, `completed`), and ISO timestamps.
-  - Enhanced `buy_product` to accept optional payload with patient details and quantity, defaulting to `status="placed"`.
-  - Built `PatientOrdersView` (`apps/web/components/patient/PatientOrdersView.tsx`) with orders KPI summary, order table, status badges, responsive card layouts, and synchronized client cache for immediate reflection.
-  - Created `/patient/orders` page and added "Orders" item to patient navigation header.
-- **Phase B — Dashboard Redesign (Patient + Dentist)**:
-  - Redesigned Patient Dashboard (`PatientDashboardView.tsx`) in modern healthcare SaaS style with: welcome hero, wellness status badge, 4 quick action cards (`New Scan`, `Chat with AI`, `Find Dentists`, `Orders`), recent scan summary card, recommended oral hygiene products preview with 1-click checkout, and daily prevention guidance banner.
-  - Redesigned Dentist Dashboard (`DentistDashboardHome.tsx`) with: verified partner greeting hero, 4 KPI stats cards (`Listed Products`, `Consultations`, `Pending Orders`, `Total Sales`), 3 quick action cards (`Add Product`, `View Orders`, `Appointments`), recent orders preview table, upcoming appointments preview, and clinical intake banner.
-  - Removed extra header subtitles like "Oral Health Screening" and "Dentist Management Portal" from `PortalHeader` and `Header`, keeping only the well-proportioned `DaantShaantLogo`.
-  - Normalized icon accents and interactive styling to DaantShaant brand blue `#00A2F0`.
-- **Phase C — Onboarding / Nav UX Fixes**:
-  - Fixed role cards hover interaction on `/get-started` (`RoleSelection`): set `pointer-events: none` on `.card::before` pseudo-element and `z-index: 5` on `.cardActions` / buttons so cards and buttons are effortlessly clickable.
-  - Added visible "Back" link on patient onboarding/login/register pages in `PortalAuthShell` routing to `/get-started`.
-  - Added language toggle (`EN | اردو`) and theme toggle (`☀️ | 🌙`) to `/get-started` navbar.
-- **Phase D — Full Urdu Localization Coverage**:
-  - Added 50+ new translation keys to `apps/web/i18n/en.ts` and `apps/web/i18n/ur.ts` with 100% key parity (364 keys each).
-  - Wired `useLanguage()` across `RoleSelection`, `PortalAuthShell`, `CheckoutModal`, `ProductsManager`, `OrdersManager`, `AppointmentsManager`, `PatientOrdersView`, `PatientDashboardView`, and `DentistDashboardHome`.
-  - Maintained RTL-friendly layouts and English fallback.
-- **Phase E — Design / Brand Consistency**:
-  - Set `--primary-brand: #00A2F0` and standardized `--accent: #00A2F0` in light and dark mode in `globals.css`.
-  - Preserved full-viewport modal overlays (`ModalPortal` with `100vw`/`100vh`).
+- **Cross-Tab Refresh Coordination & Mutex Lock**:
+  - Created `apps/web/lib/cross-tab-auth.ts` introducing `withCrossTabLock` utilizing the `navigator.locks` API with an atomic, timestamped `localStorage` fallback and 8-second stale lock expiration.
+  - Resolved the rotating refresh token race condition across multiple browser tabs: when concurrent requests receive 401, only ONE tab acquires the mutex and sends `POST /portal/auth/refresh`. Other tabs wait on the mutex and receive the rotated HttpOnly cookie sequentially, preventing token collisions and unwanted session destruction.
+  - Configured BroadcastChannel (`"daantshaant-auth"`) broadcasting `REFRESH_STARTED`, `REFRESH_SUCCEEDED`, `REFRESH_FAILED`, and `LOGGED_OUT` events across tabs without ever broadcasting or leaking sensitive access/refresh tokens.
+  - Hardened error handling in `portal-auth.ts`: differentiates genuine revoked sessions (401 -> clears session and broadcasts failure) from temporary backend failures (5xx) and network disconnects (TypeError -> preserves existing session without false logout).
+  - Integrated tab-safe logout: explicit logout in any tab notifies all active portal tabs via `LOGGED_OUT` to clear their local in-memory session and redirect to login.
+- **Header Structure & RTL Locking**:
+  - Locked all header chrome (`PortalHeader`, public `Header`, `RoleSelection`) to `direction: ltr !important;` so switching to Urdu (`dir="rtl"`) never mirrors or reorders header navigation, keeping the logo on the left and language/theme/user controls on the right.
+- **Logo Dark Mode Visibility**:
+  - Enhanced `DaantShaantLogo` with `.ds-logo-chip` in `globals.css`: renders a subtle light surface chip in dark mode (`rgba(255, 255, 255, 0.94)`) with smooth border-radius and shadow, ensuring the canonical `logo.png` text is crisp and legible without inverting colors or modifying the source asset.
+- **Get-Started UI Polish**:
+  - Removed the highlighted top-left `← Back` link from `/get-started` header while preserving the clickable home logo link.
+  - Polished dark mode surfaces in `role-selection.module.css` with dark slate surfaces, subtle radial glow, and high-contrast card titles and action buttons.
+- **Dashboard Icon Consistency (#00A2F0)**:
+  - Replaced all visual emojis (`📸`, `💬`, `🗺️`, `📦`, `⚡`, `🛍️`, `📅`, `💳`, `➕`, `📋`, `✨`) used as UI action icons in both Patient Dashboard (`PatientDashboardView.tsx`) and Dentist Dashboard (`DentistDashboardHome.tsx`) with monotone vector SVGs colored `#00A2F0`.
+  - Added full dark mode token styling across patient and dentist dashboards and orders views.
+- **Urdu Localization Final Pass**:
+  - Added new translation keys for verified partner status, updated scan actions, and screening disclaimers with 100% key parity across `en.ts` and `ur.ts`.
 - **Automated Validation**:
-  - Orchestrator Pytest Suite (`test_phase10_5_portal_security_and_ops.py`): 14 passed, 0 failed.
-  - Frontend Next.js Production Build (`npm run build`): Exit code 0, 28/28 static routes generated successfully with 0 errors.
-  - Strict compliance: NO browser, dev server, localhost, or live automated testing performed by agent.
+  - Unit Test Suite (`cross-tab-auth.test.ts`): 7 passed, 0 failed across all cross-tab concurrency, broadcast, and fallback scenarios.
+  - Backend Pytest Suite: 20 passed, 0 failed.
+  - TypeScript Type Check (`npx tsc --noEmit`): Exit code 0, 0 errors.
+  - Next.js Production Build (`npm run build`): Exit code 0, 28/28 static routes generated successfully.
+  - Strict compliance: NO browser, dev server, localhost, or live testing performed by agent.
 
 ## Next Phase
 

@@ -7,6 +7,7 @@
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--border-default);
   padding: 0;
+  direction: ltr !important;
 }
 
 .header > div {
@@ -19,6 +20,7 @@
   width: 100%;
   margin: 0 auto;
   padding: 1rem 2.5rem;
+  direction: ltr !important;
 }
 
 .brand {
@@ -27,6 +29,7 @@
   gap: 1rem;
   text-decoration: none;
   color: inherit;
+  direction: ltr !important;
 }
 
 .mark {
@@ -85,6 +88,7 @@
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+  direction: ltr !important;
 }
 
 .navLink {
@@ -125,11 +129,7 @@
   align-items: center;
   gap: 0.4rem;
   margin-left: 0.5rem;
-}
-
-[dir="rtl"] .controlGroup {
-  margin-left: 0;
-  margin-right: 0.5rem;
+  direction: ltr !important;
 }
 
 .langToggle,
@@ -163,15 +163,7 @@
   margin-left: 0.75rem;
   padding-left: 1rem;
   border-left: 2px solid var(--border-default);
-}
-
-[dir="rtl"] .userBlock {
-  margin-left: 0;
-  padding-left: 0;
-  margin-right: 0.75rem;
-  padding-right: 1rem;
-  border-left: none;
-  border-right: 2px solid var(--border-default);
+  direction: ltr !important;
 }
 
 .avatar {
@@ -193,6 +185,7 @@
 
 .userMeta {
   display: none;
+  direction: ltr !important;
 }
 
 .logoutBtn {
@@ -233,4 +226,3 @@
     color: var(--text-muted);
   }
 }
-

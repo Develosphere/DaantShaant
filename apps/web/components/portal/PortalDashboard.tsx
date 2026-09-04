@@ -9,6 +9,7 @@ import {
   getStoredUser,
   logoutPortal,
 } from "@/lib/portal-auth";
+import { subscribeToAuthEvents } from "@/lib/cross-tab-auth";
 import { PortalHeader } from "./PortalHeader";
 import styles from "./portal-auth.module.css";
 
@@ -31,6 +32,20 @@ export function PortalDashboard({ role, children, maxWidth = 960 }: Props) {
         router.replace(`/${role}/login`);
       })
       .finally(() => setLoading(false));
+
+    // Listen for cross-tab logout or session updates
+    const unsubscribe = subscribeToAuthEvents((msg) => {
+      if (msg.type === "LOGGED_OUT") {
+        if (!msg.role || msg.role === role) {
+          setUser(null);
+          router.replace(`/${role}/login`);
+        }
+      } else if (msg.type === "SESSION_UPDATED" && (!msg.role || msg.role === role)) {
+        fetchPortalProfile(role).then(setUser).catch(() => {});
+      }
+    });
+
+    return () => unsubscribe();
   }, [role, router]);
 
   async function logout() {

@@ -389,3 +389,59 @@
     align-items: flex-start;
   }
 }
+
+/* ═══════════════════════ DARK MODE POLISH ═══════════════════════ */
+:global([data-theme="dark"]) .hero {
+  background: linear-gradient(135deg, rgba(0, 162, 240, 0.12) 0%, rgba(15, 23, 42, 0.6) 100%);
+  border-color: rgba(0, 162, 240, 0.25);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+:global([data-theme="dark"]) .metricItem,
+:global([data-theme="dark"]) .actionCard,
+:global([data-theme="dark"]) .cardBlock {
+  background: var(--bg-surface-raised, #111c30);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:global([data-theme="dark"]) .actionCardPrimary {
+  background: linear-gradient(135deg, rgba(0, 162, 240, 0.15) 0%, #111c30 100%);
+  border-color: rgba(0, 162, 240, 0.4);
+}
+
+:global([data-theme="dark"]) .heroTitle,
+:global([data-theme="dark"]) .sectionTitle,
+:global([data-theme="dark"]) .actionTitle,
+:global([data-theme="dark"]) .cardHead h3,
+:global([data-theme="dark"]) .scanFinding,
+:global([data-theme="dark"]) .productName {
+  color: #f8fafc;
+}
+
+:global([data-theme="dark"]) .heroDesc,
+:global([data-theme="dark"]) .metricLabel,
+:global([data-theme="dark"]) .actionDesc,
+:global([data-theme="dark"]) .scanHint,
+:global([data-theme="dark"]) .productSeller {
+  color: #94a3b8;
+}
+
+:global([data-theme="dark"]) .cardHead {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+:global([data-theme="dark"]) .scanCard {
+  background: rgba(0, 162, 240, 0.06);
+  border-color: rgba(0, 162, 240, 0.25);
+}
+
+:global([data-theme="dark"]) .productItem {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:global([data-theme="dark"]) .productItem:hover {
+  border-color: rgba(0, 162, 240, 0.4);
+  background: rgba(0, 162, 240, 0.05);
+}
+

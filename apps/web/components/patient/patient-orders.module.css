@@ -255,3 +255,41 @@
     display: none;
   }
 }
+
+/* ═══════════════════════ DARK MODE POLISH ═══════════════════════ */
+:global([data-theme="dark"]) .statCard,
+:global([data-theme="dark"]) .tableCard,
+:global([data-theme="dark"]) .emptyCard {
+  background: var(--bg-surface-raised, #111c30);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:global([data-theme="dark"]) .title,
+:global([data-theme="dark"]) .statValue,
+:global([data-theme="dark"]) .productName,
+:global([data-theme="dark"]) .emptyTitle {
+  color: #f8fafc;
+}
+
+:global([data-theme="dark"]) .subtitle,
+:global([data-theme="dark"]) .statLabel,
+:global([data-theme="dark"]) .sellerName,
+:global([data-theme="dark"]) .emptyDesc {
+  color: #94a3b8;
+}
+
+:global([data-theme="dark"]) .table th {
+  background: rgba(255, 255, 255, 0.04);
+  color: #94a3b8;
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+:global([data-theme="dark"]) .table td {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+  color: #f8fafc;
+}
+
+:global([data-theme="dark"]) .table tr:hover td {
+  background: rgba(0, 162, 240, 0.04);
+}
+

@@ -14,9 +14,10 @@ interface CheckoutModalProps {
   } | null;
   isOpen: boolean;
   onClose: () => void;
+  onSuccess?: () => void;
 }
 
-export function CheckoutModal({ product, isOpen, onClose }: CheckoutModalProps) {
+export function CheckoutModal({ product, isOpen, onClose, onSuccess }: CheckoutModalProps) {
   const { t } = useLanguage();
   const [step, setStep] = useState<"form" | "submitting" | "success">("form");
   const [email, setEmail] = useState("");
@@ -98,6 +99,7 @@ export function CheckoutModal({ product, isOpen, onClose }: CheckoutModalProps) 
         setOrderId(data.order_id);
         saveToLocalOrders(data.order_id, data.seller_name || product.dentist_name || "Partner Dental Clinic");
         setStep("success");
+        onSuccess?.();
       } else {
         const err = await res.json().catch(() => ({}));
         setErrorMsg(err.detail || t("common.error"));
@@ -111,6 +113,7 @@ export function CheckoutModal({ product, isOpen, onClose }: CheckoutModalProps) 
         setOrderId(fallbackId);
         saveToLocalOrders(fallbackId, product.dentist_name || "Partner Dental Clinic");
         setStep("success");
+        onSuccess?.();
       }, 1200);
     }
   };
