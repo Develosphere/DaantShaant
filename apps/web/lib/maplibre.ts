@@ -6,10 +6,11 @@
 // Purpose: vector map tiles and Liberty style source for MapLibre rendering.
 
 import * as maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
 
 export const OPENFREEMAP_LIBERTY_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 
-/** Load MapLibre stylesheet dynamically if not already injected */
+/** Ensure MapLibre stylesheet is present (bundled import is primary, fallback verifies element) */
 export function ensureMapLibreCSS(): void {
   if (typeof document === "undefined") return;
   if (document.querySelector('link[data-maplibre-css="1"]')) return;

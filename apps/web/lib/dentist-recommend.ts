@@ -10,7 +10,10 @@ export type DentistPin = {
   lng: number;
   address: string;
   phone: string | null;
+  email?: string | null;
   website?: string | null;
+  whatsapp?: string | null;
+  linkedin?: string | null;
   rating: number | null;
   review_count?: number | null;
   distance_km: number;

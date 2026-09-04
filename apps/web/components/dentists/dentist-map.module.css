@@ -18,6 +18,29 @@
   position: relative;
 }
 
+.mapCanvas :global(.maplibregl-map) {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.mapCanvas :global(.maplibregl-canvas-container) {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.mapCanvas :global(.maplibregl-canvas) {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  display: block !important;
+}
+
 .mapPlaceholder {
   position: absolute;
   inset: 0;
@@ -25,15 +48,20 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(4px);
   z-index: 10;
+}
+
+:global([data-theme="dark"]) .mapPlaceholder {
+  background: rgba(15, 23, 42, 0.85);
 }
 
 .mapPlaceholder p {
   margin: 1rem 0 0;
-  color: #5a5a5a;
-  font-size: 0.9rem;
-  font-weight: 500;
+  color: var(--text-primary);
+  font-size: 0.92rem;
+  font-weight: 600;
 }
 
 .mapSpinner {
@@ -85,7 +113,7 @@
   font-family: inherit;
   font-size: 0.82rem;
   font-weight: 600;
-  color: var(--accent);
+  color: #00a2f0;
   background: none;
   border: none;
   cursor: pointer;
@@ -93,12 +121,13 @@
 }
 
 .changeLocation:hover {
-  color: var(--accent-dim);
+  color: #0284c7;
 }
 
 .legend {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 1.25rem;
   margin: 0;
   padding-top: 0.75rem;
@@ -114,19 +143,40 @@
   gap: 0.4rem;
 }
 
-.legendDotBest {
+.legendDotRegistered {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #22c55e;
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25);
+  background: #00a2f0;
+  box-shadow: 0 0 0 3px rgba(0, 162, 240, 0.28);
+}
+
+.legendDotPatient {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.28);
 }
 
 .legendDotOther {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: var(--text-dim);
+  background: #64748b;
+}
+
+.legendTagBest {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: rgba(100, 116, 139, 0.16);
+  border: 1px solid rgba(100, 116, 139, 0.35);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .sidebar {
@@ -178,24 +228,24 @@
 }
 
 .listItem:hover {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-glow);
+  border-color: #00a2f0;
+  box-shadow: 0 4px 16px rgba(0, 162, 240, 0.15);
   transform: translateY(-2px);
 }
 
 .listItemActive {
-  border-color: var(--accent);
+  border-color: #00a2f0;
   background: var(--bg-surface);
-  box-shadow: 0 4px 16px var(--accent-glow);
+  box-shadow: 0 4px 16px rgba(0, 162, 240, 0.25);
 }
 
-.listItemBest {
-  border-left: 4px solid #22c55e;
+.listItemPlatform {
+  border-left: 4px solid #00a2f0;
 }
 
-.listItemBest:hover {
-  border-color: #22c55e;
-  box-shadow: 0 4px 16px rgba(34, 197, 94, 0.2);
+.listItemPlatform:hover {
+  border-color: #00a2f0;
+  box-shadow: 0 4px 16px rgba(0, 162, 240, 0.25);
 }
 
 .listName {
@@ -216,13 +266,13 @@
   font-size: 0.65rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   padding: 0.25rem 0.5rem;
   border-radius: 6px;
-  color: #ffffff;
-  background: #22c55e;
+  color: var(--text-primary);
+  background: rgba(100, 116, 139, 0.16);
+  border: 1px solid rgba(100, 116, 139, 0.35);
   margin-bottom: 0.35rem;
-  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.25);
 }
 
 .badgePartner {
@@ -232,32 +282,59 @@
   padding: 0.25rem 0.5rem;
   border-radius: 6px;
   color: #ffffff;
-  background: var(--accent);
-  margin-left: 0.5rem;
-  box-shadow: 0 2px 8px var(--accent-glow);
+  background: #00a2f0;
+  margin-left: 0.4rem;
+  box-shadow: 0 2px 8px rgba(0, 162, 240, 0.35);
+}
+
+.badgeExternal {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-default);
+  margin-left: 0.4rem;
 }
 
 .modalOverlay {
   position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
-  z-index: 100;
+  width: 100vw;
+  height: 100vh;
+  max-width: 100vw;
+  max-height: 100vh;
+  margin: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 99999;
   display: grid;
   place-items: center;
-  padding: 1rem;
+  padding: 1.5rem;
+  box-sizing: border-box;
 }
 
 .modal {
   width: 100%;
-  max-width: 480px;
+  max-width: 520px;
+  max-height: min(90vh, 760px);
+  overflow-y: auto;
   background: var(--bg-surface);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   border: 1px solid var(--border-default);
   border-radius: 20px;
   padding: 2rem;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-lg), 0 24px 70px rgba(0, 0, 0, 0.5);
   color: var(--text-primary);
+  box-sizing: border-box;
 }
 
 .modal h3 {
@@ -283,16 +360,51 @@
   line-height: 1.6;
   padding: 1rem;
   background: var(--bg-surface-raised);
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid #00a2f0;
   border-radius: 8px;
   font-weight: 500;
 }
 
+.contactSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin: 1rem 0;
+  padding: 0.9rem 1rem;
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+}
+
 .modalRow {
+  display: flex;
+  align-items: center;
   font-size: 0.88rem;
   color: var(--text-secondary);
-  margin-bottom: 0.5rem;
+  margin: 0;
   line-height: 1.4;
+  word-break: break-word;
+}
+
+.rowIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  flex-shrink: 0;
+  margin-right: 0.5rem;
+}
+
+.contactLink {
+  color: #00a2f0;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.2s ease;
+}
+
+.contactLink:hover {
+  text-decoration: underline;
+  color: #38bdf8;
 }
 
 .modalActions {
@@ -311,15 +423,15 @@
   border: none;
   border-radius: 10px;
   cursor: pointer;
-  background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+  background: linear-gradient(135deg, #00a2f0, #0081c2);
   color: #fff;
-  box-shadow: 0 4px 16px var(--accent-glow);
+  box-shadow: 0 4px 16px rgba(0, 162, 240, 0.35);
   transition: all 0.25s ease;
 }
 
 .btnPrimary:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px var(--accent-glow);
+  box-shadow: 0 6px 20px rgba(0, 162, 240, 0.45);
 }
 
 .btnPrimary:disabled {
@@ -328,8 +440,8 @@
 }
 
 .btnSecondary {
-  flex: 1;
-  padding: 0.75rem 1.25rem;
+  flex: 1 1 auto;
+  padding: 0.75rem 1.15rem;
   font-weight: 700;
   font-family: inherit;
   border-radius: 10px;
@@ -339,12 +451,46 @@
   color: var(--text-primary);
   text-decoration: none;
   text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
   transition: all 0.25s ease;
 }
 
 .btnSecondary:hover {
   background: var(--bg-surface);
-  border-color: var(--accent);
+  border-color: #00a2f0;
+  color: #00a2f0;
+}
+
+.btnBookPlatform {
+  flex: 1 1 100%;
+  padding: 0.85rem 1.25rem;
+  font-weight: 700;
+  font-family: inherit;
+  letter-spacing: normal;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  background: linear-gradient(135deg, #00a2f0, #0077b6);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(0, 162, 240, 0.35);
+  transition: all 0.25s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.btnBookPlatform:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 22px rgba(0, 162, 240, 0.5);
+}
+
+.btnBookPlatform:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .btnClose {

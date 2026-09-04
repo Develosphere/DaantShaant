@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useLanguage } from "@/i18n";
 import { PortalDashboard } from "@/components/portal/PortalDashboard";
@@ -62,6 +63,7 @@ export function DentistMapView() {
   const mapInstance = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
 
+  const [mounted, setMounted] = useState(false);
   const [dentists, setDentists] = useState<DentistPin[]>([]);
   const [pickedLocation, setPickedLocation] = useState<PickedLocation | null>(
     hasCoords && urlLat !== undefined && urlLng !== undefined
@@ -82,6 +84,10 @@ export function DentistMapView() {
   const [bookMsg, setBookMsg] = useState("");
   const [locationModalOpen, setLocationModalOpen] = useState(!hasCoords);
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const renderMap = useCallback(
     (center: { lat: number; lng: number }, pins: DentistPin[], radiusKm?: number) => {
       if (!mapContainerRef.current) return;
@@ -89,7 +95,7 @@ export function DentistMapView() {
 
       try {
         if (!mapInstance.current) {
-          mapInstance.current = new maplibregl.Map({
+          const map = new maplibregl.Map({
             container: mapContainerRef.current,
             style: OPENFREEMAP_LIBERTY_STYLE,
             center: [center.lng, center.lat],
@@ -97,7 +103,7 @@ export function DentistMapView() {
             attributionControl: false,
           });
 
-          mapInstance.current.addControl(
+          map.addControl(
             new maplibregl.AttributionControl({
               customAttribution:
                 '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors | Style: <a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a>',
@@ -105,7 +111,13 @@ export function DentistMapView() {
             "bottom-right"
           );
 
-          mapInstance.current.addControl(new maplibregl.NavigationControl(), "top-right");
+          map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+          map.on("load", () => {
+            map.resize();
+          });
+
+          mapInstance.current = map;
         } else {
           mapInstance.current.flyTo({ center: [center.lng, center.lat], zoom: 12 });
         }
@@ -114,16 +126,16 @@ export function DentistMapView() {
         markersRef.current.forEach((m) => m.remove());
         markersRef.current = [];
 
-        // 1. User / Patient Marker
+        // 1. User / Patient Marker (Warm Amber, visually distinct from blue registered dentists)
         const userEl = document.createElement("div");
         userEl.className = "user-pulse-marker";
         userEl.style.width = "18px";
         userEl.style.height = "18px";
         userEl.style.borderRadius = "50%";
-        userEl.style.backgroundColor = "#00a2f0";
+        userEl.style.backgroundColor = "#f59e0b";
         userEl.style.border = "3px solid #ffffff";
-        userEl.style.boxShadow = "0 0 10px rgba(0, 162, 240, 0.8)";
-        userEl.title = "Your location";
+        userEl.style.boxShadow = "0 0 12px rgba(245, 158, 11, 0.85)";
+        userEl.title = t("location.title") || "Your Location";
 
         const patientMarker = new maplibregl.Marker({ element: userEl })
           .setLngLat([center.lng, center.lat])
@@ -150,7 +162,7 @@ export function DentistMapView() {
                   source: "search-radius",
                   paint: {
                     "fill-color": "#00a2f0",
-                    "fill-opacity": 0.08,
+                    "fill-opacity": 0.06,
                   },
                 });
                 mapInstance.current.addLayer({
@@ -161,10 +173,10 @@ export function DentistMapView() {
                     "line-color": "#00a2f0",
                     "line-width": 1.5,
                     "line-dasharray": [2, 2],
-                    "line-opacity": 0.5,
+                    "line-opacity": 0.45,
                   },
                 });
-              } catch (e) {
+              } catch {
                 // Ignore layer addition collision
               }
             }
@@ -178,16 +190,22 @@ export function DentistMapView() {
         }
 
         // 3. Dentist Pins
+        // Registered dentists: Brand blue #00a2f0 with inner flair
+        // External clinics: Neutral slate #64748b
         pins.forEach((d) => {
+          const isPlatform = d.tier === "platform";
+          const pinColor = isPlatform ? "#00a2f0" : "#64748b";
+          const dropShadow = isPlatform ? "rgba(0, 162, 240, 0.45)" : "rgba(0, 0, 0, 0.28)";
+
           const pinEl = document.createElement("div");
           pinEl.style.cursor = "pointer";
           pinEl.style.transform = "translate(-50%, -100%)";
 
-          const color = d.is_best ? "#22c55e" : d.tier === "platform" ? "#3b82f6" : "#64748b";
           pinEl.innerHTML = `
-            <svg width="28" height="36" viewBox="0 0 32 42" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M16 0C7.2 0 0 7.2 0 16c0 12 16 26 16 26s16-14 16-26C32 7.2 24.8 0 16 0z" fill="${color}" stroke="#ffffff" stroke-width="2"/>
-              <circle cx="16" cy="16" r="6" fill="#ffffff"/>
+            <svg width="30" height="40" viewBox="0 0 32 42" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 3px 6px ${dropShadow});">
+              <path d="M16 0C7.2 0 0 7.2 0 16c0 12 16 26 16 26s16-14 16-26C32 7.2 24.8 0 16 0z" fill="${pinColor}" stroke="#ffffff" stroke-width="2"/>
+              <circle cx="16" cy="16" r="6.5" fill="#ffffff"/>
+              ${isPlatform ? `<circle cx="16" cy="16" r="3.5" fill="#00a2f0"/>` : ""}
             </svg>
           `;
 
@@ -204,14 +222,42 @@ export function DentistMapView() {
           const bounds = new maplibregl.LngLatBounds();
           bounds.extend([center.lng, center.lat]);
           pins.forEach((d) => bounds.extend([d.lng, d.lat]));
-          mapInstance.current.fitBounds(bounds, { padding: 48, maxZoom: 14 });
+          mapInstance.current.fitBounds(bounds, { padding: 50, maxZoom: 14 });
         }
+
+        // 5. Invalidate & resize map container layout
+        requestAnimationFrame(() => {
+          mapInstance.current?.resize();
+        });
+        setTimeout(() => {
+          mapInstance.current?.resize();
+        }, 200);
       } catch (err) {
         console.error("Error initializing MapLibre map:", err);
       }
     },
-    []
+    [t]
   );
+
+  // Keep map container resized automatically on layout changes
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+    const ro = new ResizeObserver(() => {
+      mapInstance.current?.resize();
+    });
+    ro.observe(mapContainerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  // Cleanup map instance on unmount
+  useEffect(() => {
+    return () => {
+      markersRef.current.forEach((m) => m.remove());
+      markersRef.current = [];
+      mapInstance.current?.remove();
+      mapInstance.current = null;
+    };
+  }, []);
 
   const loadRecommendations = useCallback(
     async (lat: number, lng: number, currentLabel?: string) => {
@@ -288,9 +334,9 @@ export function DentistMapView() {
 
   function getDirectionsUrl(d: DentistPin): string {
     if (patientCoords) {
-      return `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${patientCoords.lat}%2C${patientCoords.lng}%3B${d.lat}%2C${d.lng}`;
+      return `https://www.google.com/maps/dir/?api=1&origin=${patientCoords.lat},${patientCoords.lng}&destination=${d.lat},${d.lng}`;
     }
-    return `https://www.openstreetmap.org/?mlat=${d.lat}&mlon=${d.lng}#map=16/${d.lat}/${d.lng}`;
+    return `https://www.google.com/maps/dir/?api=1&destination=${d.lat},${d.lng}`;
   }
 
   return (
@@ -327,13 +373,16 @@ export function DentistMapView() {
           )}
           <div className={styles.legend}>
             <span className={styles.legendItem}>
-              <span className={styles.legendDotBest} /> {t("dentists.best_specialist_match")}
+              <span className={styles.legendDotPatient} /> {t("location.title") || "Your Location"}
             </span>
             <span className={styles.legendItem}>
-              <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: "#3b82f6", marginRight: 6 }} /> {t("dentists.verified_clinic")}
+              <span className={styles.legendDotRegistered} /> {t("dentists.verified_clinic")}
             </span>
             <span className={styles.legendItem}>
               <span className={styles.legendDotOther} /> {t("dentists.external_clinic")}
+            </span>
+            <span className={styles.legendItem}>
+              <span className={styles.legendTagBest}>{t("dentists.best_specialist_match")}</span>
             </span>
           </div>
           {searchRadiusKm && dentists.length > 0 && (
@@ -348,13 +397,6 @@ export function DentistMapView() {
           )}
         </div>
 
-        {loading && (
-          <div className={styles.loadingContainer}>
-            <div className={styles.spinner} />
-            <p className={styles.loading}>{t("dentists.searching_nearby")}</p>
-          </div>
-        )}
-
         {error && (
           <div className={styles.errorContainer}>
             <p className={styles.error}>⚠️ {error}</p>
@@ -368,26 +410,39 @@ export function DentistMapView() {
           </div>
         )}
 
-        {!loading && !error && hasCoords && dentists.length === 0 && (
-          <div className={styles.emptyContainer}>
-            <p className={styles.empty}>
-              {t("dentists.no_results")}
-            </p>
-          </div>
-        )}
-
-        {!loading && !error && hasCoords && dentists.length > 0 && (
+        {!error && hasCoords && (
           <div className={styles.sidebar}>
             <div className={styles.mapWrap}>
-              <div ref={mapContainerRef} className={styles.mapCanvas} style={{ width: "100%", height: "100%", minHeight: "380px" }} />
+              <div ref={mapContainerRef} className={styles.mapCanvas} />
+              {loading && (
+                <div className={styles.mapPlaceholder}>
+                  <div className={styles.mapSpinner} />
+                  <p>{t("dentists.searching_nearby")}</p>
+                </div>
+              )}
             </div>
 
             <div className={styles.list}>
+              {loading && dentists.length === 0 && (
+                <div style={{ padding: "3rem 1rem", textAlign: "center", color: "var(--text-muted)" }}>
+                  <div className={styles.mapSpinner} style={{ margin: "0 auto 1rem" }} />
+                  <p>{t("dentists.searching_nearby")}</p>
+                </div>
+              )}
+
+              {!loading && dentists.length === 0 && (
+                <div className={styles.emptyContainer} style={{ background: "transparent", border: "none", boxShadow: "none", padding: "3rem 1rem" }}>
+                  <p className={styles.empty}>
+                    {t("dentists.no_results")}
+                  </p>
+                </div>
+              )}
+
               {dentists.map((d) => (
                 <button
                   key={`${d.tier}-${d.dentist_id ?? d.place_id}-${d.rank}`}
                   type="button"
-                  className={`${styles.listItem} ${d.is_best ? styles.listItemBest : ""} ${
+                  className={`${styles.listItem} ${d.tier === "platform" ? styles.listItemPlatform : ""} ${
                     selected?.rank === d.rank ? styles.listItemActive : ""
                   }`}
                   onClick={() => {
@@ -397,17 +452,19 @@ export function DentistMapView() {
                     }
                   }}
                 >
-                  {d.is_best && <span className={styles.badgeBest}>{t("dentists.best_specialist_match")}</span>}
-                  {d.tier === "platform" && (
-                    <span className={styles.badgePartner}>
-                      {d.is_partner ? t("dentists.verified_clinic") : t("dentists.verified_clinic")}
-                    </span>
-                  )}
-                  {d.tier !== "platform" && (
-                    <span style={{ fontSize: "0.72rem", padding: "2px 7px", background: "var(--bg-surface-raised)", border: "1px solid var(--border-default)", color: "var(--text-secondary)", borderRadius: 4, marginLeft: 4, fontWeight: 500 }}>
-                      {t("dentists.external_clinic")}
-                    </span>
-                  )}
+                  <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.35rem", marginBottom: "0.35rem" }}>
+                    {d.is_best && <span className={styles.badgeBest}>{t("dentists.best_specialist_match")}</span>}
+                    {d.tier === "platform" && (
+                      <span className={styles.badgePartner}>
+                        {t("dentists.verified_clinic")}
+                      </span>
+                    )}
+                    {d.tier !== "platform" && (
+                      <span className={styles.badgeExternal}>
+                        {t("dentists.external_clinic")}
+                      </span>
+                    )}
+                  </div>
                   <div className={styles.listName}>{d.name}</div>
                   <div className={styles.listMeta}>
                     {d.clinic_name || d.address} · {t("dentists.distance_km", { km: d.distance_km.toFixed(1) })}
@@ -419,47 +476,137 @@ export function DentistMapView() {
           </div>
         )}
 
-        {selected && (
-          <div className={styles.modalOverlay} onClick={() => setSelected(null)}>
+        {/* Full-viewport Portal Modal for Dentist Detail & Contact Links */}
+        {mounted && selected && createPortal(
+          <div className={styles.modalOverlay} onClick={() => setSelected(null)} role="dialog" aria-modal="true">
             <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-              {selected.is_best && <span className={styles.badgeBest}>{t("dentists.best_specialist_match")}</span>}
-              {selected.tier === "platform" ? (
-                <span className={styles.badgePartner} style={{ marginLeft: 6 }}>{t("dentists.verified_clinic")}</span>
-              ) : (
-                <span style={{ fontSize: "0.75rem", padding: "3px 8px", background: "rgba(100,116,139,0.25)", color: "#cbd5e1", borderRadius: 4, marginLeft: 6 }}>
-                  {t("dentists.external_clinic")}
-                </span>
-              )}
+              <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.4rem", marginBottom: "0.5rem" }}>
+                {selected.is_best && <span className={styles.badgeBest}>{t("dentists.best_specialist_match")}</span>}
+                {selected.tier === "platform" ? (
+                  <span className={styles.badgePartner}>{t("dentists.verified_clinic")}</span>
+                ) : (
+                  <span className={styles.badgeExternal}>{t("dentists.external_clinic")}</span>
+                )}
+              </div>
 
-              <h3 style={{ marginTop: "0.75rem" }}>{selected.name}</h3>
+              <h3>{selected.name}</h3>
               <p className={styles.modalClinic}>{selected.clinic_name || selected.address}</p>
-              <p className={styles.modalReason}>{selected.recommendation_reason}</p>
-              
-              <p className={styles.modalRow}>
-                📍 <strong>{t("dentists.distance_km", { km: selected.distance_km.toFixed(1) })}</strong>
-                {selected.rating != null ? ` · ★ ${selected.rating}${selected.review_count ? ` (${selected.review_count})` : ""}` : ""}
-              </p>
-              {selected.address && <p className={styles.modalRow}>{selected.address}</p>}
-              {selected.phone && <p className={styles.modalRow}>📞 {selected.phone}</p>}
-              {selected.website && (
-                <p className={styles.modalRow}>
-                  🌐 <a href={selected.website} target="_blank" rel="noreferrer" style={{ color: "#38bdf8" }}>{selected.website}</a>
-                </p>
+              {selected.recommendation_reason && (
+                <p className={styles.modalReason}>{selected.recommendation_reason}</p>
               )}
 
-              <div className={styles.modalActions} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "1rem" }}>
+              <p className={styles.modalRow} style={{ marginBottom: "0.75rem" }}>
+                <span className={styles.rowIcon}>🎯</span>
+                <span>
+                  <strong>{t("dentists.distance_km", { km: selected.distance_km.toFixed(1) })}</strong>
+                  {selected.rating != null ? ` · ★ ${selected.rating}${selected.review_count ? ` (${selected.review_count})` : ""}` : ""}
+                </span>
+              </p>
+
+              {/* Optional Contact & Social Details */}
+              {(selected.address || selected.phone || selected.email || selected.website || selected.whatsapp || selected.linkedin) && (
+                <div className={styles.contactSection}>
+                  {selected.address && (
+                    <p className={styles.modalRow}>
+                      <span className={styles.rowIcon}>📍</span>
+                      <span>{selected.address}</span>
+                    </p>
+                  )}
+                  {selected.phone && (
+                    <p className={styles.modalRow}>
+                      <span className={styles.rowIcon}>📞</span>
+                      <a href={`tel:${selected.phone}`} className={styles.contactLink}>
+                        {selected.phone}
+                      </a>
+                    </p>
+                  )}
+                  {selected.email && (
+                    <p className={styles.modalRow}>
+                      <span className={styles.rowIcon}>✉️</span>
+                      <a href={`mailto:${selected.email}`} className={styles.contactLink}>
+                        {selected.email}
+                      </a>
+                    </p>
+                  )}
+                  {selected.website && (
+                    <p className={styles.modalRow}>
+                      <span className={styles.rowIcon}>🌐</span>
+                      <a
+                        href={selected.website.startsWith("http") ? selected.website : `https://${selected.website}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={styles.contactLink}
+                      >
+                        {selected.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                      </a>
+                    </p>
+                  )}
+                  {selected.whatsapp && (
+                    <p className={styles.modalRow}>
+                      <span className={styles.rowIcon}>💬</span>
+                      <a
+                        href={
+                          selected.whatsapp.startsWith("http")
+                            ? selected.whatsapp
+                            : `https://wa.me/${selected.whatsapp.replace(/\D/g, "")}`
+                        }
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={styles.contactLink}
+                      >
+                        WhatsApp
+                      </a>
+                    </p>
+                  )}
+                  {selected.linkedin && (
+                    <p className={styles.modalRow}>
+                      <span className={styles.rowIcon}>💼</span>
+                      <a
+                        href={
+                          selected.linkedin.startsWith("http")
+                            ? selected.linkedin
+                            : selected.linkedin.startsWith("in/")
+                            ? `https://www.linkedin.com/${selected.linkedin}`
+                            : `https://www.linkedin.com/in/${selected.linkedin}`
+                        }
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={styles.contactLink}
+                      >
+                        LinkedIn Profile
+                      </a>
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className={styles.modalActions}>
                 {selected.phone && (
-                  <a href={`tel:${selected.phone}`} className={styles.btnPrimary} style={{ textDecoration: "none", textAlign: "center", flex: "1 1 auto" }}>
+                  <a href={`tel:${selected.phone}`} className={styles.btnSecondary}>
                     📞 {t("dentists.call")}
                   </a>
                 )}
-                
+
+                {selected.whatsapp && (
+                  <a
+                    href={
+                      selected.whatsapp.startsWith("http")
+                        ? selected.whatsapp
+                        : `https://wa.me/${selected.whatsapp.replace(/\D/g, "")}`
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={styles.btnSecondary}
+                  >
+                    💬 WhatsApp
+                  </a>
+                )}
+
                 <a
                   href={getDirectionsUrl(selected)}
                   target="_blank"
-                  rel="noreferrer"
-                  className={styles.btnPrimary}
-                  style={{ textDecoration: "none", textAlign: "center", background: "#334155", color: "#fff", flex: "1 1 auto" }}
+                  rel="noopener noreferrer"
+                  className={styles.btnSecondary}
                 >
                   🗺️ {t("dentists.directions")}
                 </a>
@@ -467,30 +614,29 @@ export function DentistMapView() {
                 {selected.tier === "platform" && selected.dentist_id ? (
                   <button
                     type="button"
-                    className={styles.btnPrimary}
-                    style={{ background: "#059669", flex: "1 1 100%" }}
+                    className={styles.btnBookPlatform}
                     disabled={booking}
                     onClick={handleBook}
                   >
                     {booking ? t("common.loading") : `📅 ${t("dentists.book_consultation")}`}
                   </button>
                 ) : (
-                  <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", width: "100%", textAlign: "center", marginTop: "0.25rem" }}>
+                  <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", width: "100%", textAlign: "center", margin: "0.25rem 0 0" }}>
                     ℹ️ {t("dentists.external_clinic")}
                   </p>
                 )}
               </div>
 
               {bookMsg && <p className={styles.bookMessage}>{bookMsg}</p>}
-              
+
               <button type="button" className={styles.btnClose} onClick={() => setSelected(null)}>
                 {t("common.close")}
               </button>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     </PortalDashboard>
   );
 }
-
