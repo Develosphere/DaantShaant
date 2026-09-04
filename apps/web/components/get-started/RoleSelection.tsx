@@ -62,7 +62,18 @@ export function RoleSelection() {
       {/* Navbar */}
       <header className={styles.nav}>
         <div className={styles.navInner}>
-          <Link href="/" className={styles.logoLink} aria-label="DaantShant home">
+          <Link
+            href="/"
+            className={styles.navBackLink}
+            aria-label="Back to landing page"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+            <span>Back</span>
+          </Link>
+          <Link href="/" className={styles.logoLink} aria-label="DaantShaant home">
             <Image
               src="/landing/logo.png"
               alt="DaantShant"
@@ -116,7 +127,7 @@ export function RoleSelection() {
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M19 12H5M12 19l-7-7 7-7" />
               </svg>
-              Back to Home
+              Back
             </Link>
           </div>
         </div>

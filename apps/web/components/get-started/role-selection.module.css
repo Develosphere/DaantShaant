@@ -48,6 +48,23 @@
   align-items: center;
 }
 
+.navBackLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #00A2F0;
+  text-decoration: none;
+  margin-right: 1.5rem;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.navBackLink:hover {
+  transform: translateX(-3px);
+  opacity: 0.85;
+}
+
 .logoLink {
   display: flex;
   align-items: center;

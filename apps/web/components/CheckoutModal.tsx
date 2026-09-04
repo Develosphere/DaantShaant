@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { authorizedFetch } from "@/lib/portal-auth";
+import { ModalPortal } from "@/components/common/ModalPortal";
 
 interface CheckoutModalProps {
   product: {
@@ -88,122 +89,124 @@ export function CheckoutModal({ product, isOpen, onClose }: CheckoutModalProps) 
   const total = product.price + tax;
 
   return (
-    <div className="checkout-overlay" onClick={onClose}>
-      <div className="checkout-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="checkout-header">
-          <h3 className="checkout-title">
-            {step === "form" && "Secure Checkout"}
-            {step === "submitting" && "Processing Transaction"}
-            {step === "success" && "Secure Purchase Confirmed"}
-          </h3>
-        </div>
-
-        {step === "form" && (
-          <form onSubmit={handleSubmit} className="checkout-step" style={{ gap: "0.85rem", alignItems: "stretch", textAlign: "left" }}>
-            <div style={{ background: "rgba(255,255,255,0.03)", padding: "0.8rem", borderRadius: "var(--radius-sm)", border: "1px solid rgba(255,255,255,0.05)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
-                <span>Item:</span>
-                <span style={{ fontWeight: 600 }}>{product.name}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", marginTop: "0.3rem" }}>
-                <span>Price:</span>
-                <span style={{ color: "var(--accent)", fontWeight: 600 }}>${product.price.toFixed(2)}</span>
-              </div>
-            </div>
-
-            {errorMsg && (
-              <p style={{ color: "#ef4444", fontSize: "0.75rem", margin: "0" }}>{errorMsg}</p>
-            )}
-
-            <div className="form-group">
-              <label htmlFor="checkout-email" style={{ display: "block", fontSize: "0.75rem", marginBottom: "0.25rem", color: "var(--text-muted)" }}>
-                Patient Email Address *
-              </label>
-              <input
-                id="checkout-email"
-                type="email"
-                className="input-field"
-                placeholder="your.email@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                style={{ width: "100%", padding: "0.5rem", borderRadius: "var(--radius-sm)", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#fff" }}
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="checkout-name" style={{ display: "block", fontSize: "0.75rem", marginBottom: "0.25rem", color: "var(--text-muted)" }}>
-                Patient Full Name
-              </label>
-              <input
-                id="checkout-name"
-                type="text"
-                className="input-field"
-                placeholder="John Doe"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                style={{ width: "100%", padding: "0.5rem", borderRadius: "var(--radius-sm)", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#fff" }}
-              />
-            </div>
-
-            <div style={{ display: "flex", gap: "0.85rem", marginTop: "1rem" }}>
-              <button type="button" className="btn btn-secondary" onClick={onClose} style={{ flex: 1 }}>
-                Cancel
-              </button>
-              <button type="submit" className="btn btn-buy" style={{ flex: 2, padding: "0.5rem", alignSelf: "unset", margin: 0, width: "100%" }}>
-                Place Order
-              </button>
-            </div>
-          </form>
-        )}
-
-        {step === "submitting" && (
-          <div className="checkout-step">
-            <div className="checkout-spinner" />
-            <p className="text-muted">Simulating secure checkout via portal API...</p>
+    <ModalPortal>
+      <div className="checkout-overlay" onClick={onClose}>
+        <div className="checkout-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="checkout-header">
+            <h3 className="checkout-title">
+              {step === "form" && "Secure Checkout"}
+              {step === "submitting" && "Processing Transaction"}
+              {step === "success" && "Secure Purchase Confirmed"}
+            </h3>
           </div>
-        )}
 
-        {step === "success" && (
-          <div className="checkout-step">
-            <div className="checkout-success-icon">✓</div>
-            <p className="text-success" style={{ fontWeight: 600 }}>Thank you for your order!</p>
-            
-            <div className="checkout-product-summary">
-              {orderId && (
-                <div className="checkout-summary-row" style={{ color: "var(--text-muted)" }}>
-                  <span>Order ID</span>
-                  <span style={{ fontFamily: "monospace" }}>{orderId}</span>
+          {step === "form" && (
+            <form onSubmit={handleSubmit} className="checkout-step" style={{ gap: "0.85rem", alignItems: "stretch", textAlign: "left" }}>
+              <div style={{ background: "var(--bg-surface-raised, rgba(0, 162, 240, 0.04))", padding: "0.85rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-default, rgba(0, 162, 240, 0.15))" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
+                  <span>Item:</span>
+                  <span style={{ fontWeight: 600 }}>{product.name}</span>
                 </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", marginTop: "0.3rem" }}>
+                  <span>Price:</span>
+                  <span style={{ color: "#00A2F0", fontWeight: 600 }}>${product.price.toFixed(2)}</span>
+                </div>
+              </div>
+
+              {errorMsg && (
+                <p style={{ color: "#ef4444", fontSize: "0.75rem", margin: "0" }}>{errorMsg}</p>
               )}
-              <div className="checkout-summary-row">
-                <span>Product</span>
-                <span style={{ fontWeight: 600 }}>{product.name}</span>
+
+              <div className="form-group">
+                <label htmlFor="checkout-email" style={{ display: "block", fontSize: "0.75rem", marginBottom: "0.25rem", color: "var(--text-muted)" }}>
+                  Patient Email Address *
+                </label>
+                <input
+                  id="checkout-email"
+                  type="email"
+                  className="input-field"
+                  placeholder="your.email@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  style={{ width: "100%", padding: "0.6rem 0.75rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-default, rgba(0, 162, 240, 0.2))", background: "var(--bg-surface-raised, rgba(0, 162, 240, 0.04))", color: "var(--text, #0f172a)" }}
+                />
               </div>
-              <div className="checkout-summary-row">
-                <span>Subtotal</span>
-                <span>${product.price.toFixed(2)}</span>
+
+              <div className="form-group">
+                <label htmlFor="checkout-name" style={{ display: "block", fontSize: "0.75rem", marginBottom: "0.25rem", color: "var(--text-muted)" }}>
+                  Patient Full Name
+                </label>
+                <input
+                  id="checkout-name"
+                  type="text"
+                  className="input-field"
+                  placeholder="John Doe"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  style={{ width: "100%", padding: "0.6rem 0.75rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-default, rgba(0, 162, 240, 0.2))", background: "var(--bg-surface-raised, rgba(0, 162, 240, 0.04))", color: "var(--text, #0f172a)" }}
+                />
               </div>
-              <div className="checkout-summary-row">
-                <span>Tax (8%)</span>
-                <span>${tax.toFixed(2)}</span>
+
+              <div style={{ display: "flex", gap: "0.85rem", marginTop: "1rem" }}>
+                <button type="button" className="btn btn-secondary" onClick={onClose} style={{ flex: 1 }}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-buy" style={{ flex: 2, padding: "0.6rem", alignSelf: "unset", margin: 0, width: "100%", background: "#00A2F0", color: "#ffffff", fontWeight: 700, borderRadius: "8px", border: "none" }}>
+                  Place Order
+                </button>
               </div>
-              <div className="checkout-summary-row checkout-summary-total">
-                <span>Total Charged</span>
-                <span style={{ color: "var(--accent)" }}>${total.toFixed(2)}</span>
-              </div>
+            </form>
+          )}
+
+          {step === "submitting" && (
+            <div className="checkout-step">
+              <div className="checkout-spinner" />
+              <p className="text-muted">Simulating secure checkout via portal API...</p>
             </div>
+          )}
 
-            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.5rem" }}>
-              This purchase notification has been successfully synchronized to the dentist portal.
-            </p>
+          {step === "success" && (
+            <div className="checkout-step">
+              <div className="checkout-success-icon">✓</div>
+              <p className="text-success" style={{ fontWeight: 600 }}>Thank you for your order!</p>
+              
+              <div className="checkout-product-summary">
+                {orderId && (
+                  <div className="checkout-summary-row" style={{ color: "var(--text-muted)" }}>
+                    <span>Order ID</span>
+                    <span style={{ fontFamily: "monospace" }}>{orderId}</span>
+                  </div>
+                )}
+                <div className="checkout-summary-row">
+                  <span>Product</span>
+                  <span style={{ fontWeight: 600 }}>{product.name}</span>
+                </div>
+                <div className="checkout-summary-row">
+                  <span>Subtotal</span>
+                  <span>${product.price.toFixed(2)}</span>
+                </div>
+                <div className="checkout-summary-row">
+                  <span>Tax (8%)</span>
+                  <span>${tax.toFixed(2)}</span>
+                </div>
+                <div className="checkout-summary-row checkout-summary-total">
+                  <span>Total Charged</span>
+                  <span style={{ color: "var(--accent)" }}>${total.toFixed(2)}</span>
+                </div>
+              </div>
 
-            <button className="btn btn-secondary" style={{ width: "100%", marginTop: "1rem" }} onClick={onClose}>
-              Close Window
-            </button>
-          </div>
-        )}
+              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.5rem" }}>
+                This purchase notification has been successfully synchronized to the dentist portal.
+              </p>
+
+              <button className="btn btn-secondary" style={{ width: "100%", marginTop: "1rem" }} onClick={onClose}>
+                Close Window
+              </button>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }

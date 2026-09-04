@@ -1,8 +1,11 @@
 """Unified user registration, login, profile, and refresh-session services."""
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from uuid import UUID
+
+logger = logging.getLogger(__name__)
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -190,12 +193,16 @@ async def login_user(
     if not user or not verify_password(req.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if user.role != expected_role.value:
-        raise HTTPException(
-            status_code=403,
-            detail=f"This account is not registered as a {expected_role.value}",
+        logger.warning(
+            "Role mismatch during login for user %s (expected %s, got %s)",
+            user.id,
+            expected_role.value,
+            user.role,
         )
+        raise HTTPException(status_code=401, detail="Invalid email or password")
     if user.status != "active":
-        raise HTTPException(status_code=403, detail="Account is disabled")
+        logger.warning("Login attempt on inactive/disabled user %s", user.id)
+        raise HTTPException(status_code=401, detail="Invalid email or password")
     return await _issue_tokens(session, user, user_agent=user_agent)
 
 

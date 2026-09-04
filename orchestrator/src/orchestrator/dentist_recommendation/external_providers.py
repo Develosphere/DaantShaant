@@ -94,6 +94,7 @@ async def search_foursquare_dentists(
         addr_parts = [loc.get("address", ""), loc.get("locality", ""), loc.get("region", "")]
         address = ", ".join(p.strip() for p in addr_parts if p.strip())
         phone = item.get("tel") or item.get("phone")
+        email = item.get("email")
         website = item.get("website")
         rating = item.get("rating")
         norm_rating = round(float(rating) / 2.0, 1) if rating is not None else None
@@ -109,7 +110,10 @@ async def search_foursquare_dentists(
                 "lng": c_lng,
                 "address": address,
                 "phone": phone,
+                "email": email,
                 "website": website,
+                "whatsapp": None,
+                "linkedin": None,
                 "rating": norm_rating,
                 "distance_km": round(dist, 2),
                 "specialties": ["general"],
@@ -191,6 +195,7 @@ async def search_geoapify_dentists(
         name = props.get("name") or "Dental Clinic"
         address = props.get("formatted") or props.get("address_line2") or ""
         phone = props.get("contact", {}).get("phone") if isinstance(props.get("contact"), dict) else None
+        email = props.get("contact", {}).get("email") if isinstance(props.get("contact"), dict) else props.get("email")
         website = props.get("website") or (props.get("contact", {}).get("website") if isinstance(props.get("contact"), dict) else None)
         place_id = props.get("place_id") or f"geo:{c_lat}_{c_lng}"
 
@@ -205,7 +210,10 @@ async def search_geoapify_dentists(
                 "lng": c_lng,
                 "address": address,
                 "phone": phone,
+                "email": email,
                 "website": website,
+                "whatsapp": None,
+                "linkedin": None,
                 "rating": None,
                 "distance_km": round(dist, 2),
                 "specialties": ["general"],

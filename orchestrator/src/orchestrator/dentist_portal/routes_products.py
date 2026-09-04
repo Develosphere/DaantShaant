@@ -149,6 +149,28 @@ async def my_products(
     return [_product_to_out(row) for row in rows]
 
 
+@router.get("/orders", response_model=list)
+async def list_dentist_orders(
+    dentist: dict = Depends(get_current_dentist),
+    session: AsyncSession = Depends(get_db_session),
+):
+    rows = await OrderRepository(session).list_for_dentist(dentist["user_id"])
+    return [
+        {
+            "order_id": str(row.id),
+            "product_id": str((row.items or {}).get("product_id", "")),
+            "product_name": (row.items or {}).get("product_name", "Product"),
+            "quantity": int((row.items or {}).get("quantity", 1)),
+            "price": float(row.total),
+            "patient_email": (row.items or {}).get("patient_email", ""),
+            "patient_name": (row.items or {}).get("patient_name", "Anonymous"),
+            "status": row.status,
+            "created_at": row.created_at.isoformat(),
+        }
+        for row in rows
+    ]
+
+
 @router.get("/orders/notifications", response_model=list)
 async def get_order_notifications(
     dentist: dict = Depends(get_current_dentist),

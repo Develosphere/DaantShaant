@@ -11,6 +11,7 @@ import {
   type ProductCategory,
   type ProductUpload,
 } from "@/lib/product-api";
+import { ModalPortal } from "@/components/common/ModalPortal";
 import styles from "./products-manager.module.css";
 
 const CATEGORIES: { value: ProductCategory; label: string }[] = [
@@ -140,91 +141,93 @@ export function ProductsManager() {
         )}
 
         {showForm && (
-          <div className={styles.modalOverlay} onClick={() => setShowForm(false)}>
-            <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-              <h2 className={styles.modalTitle}>
-                {editingId ? "Edit Product" : "Add New Product"}
-              </h2>
-              
-              <form onSubmit={handleSubmit} className={styles.form}>
-                <div className={styles.formGroup}>
-                  <label>Product Name</label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g., Advanced Whitening Toothpaste"
-                    required
-                  />
-                </div>
-
-                <div className={styles.formRow}>
+          <ModalPortal>
+            <div className={styles.modalOverlay} onClick={() => setShowForm(false)}>
+              <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+                <h2 className={styles.modalTitle}>
+                  {editingId ? "Edit Product" : "Add New Product"}
+                </h2>
+                
+                <form onSubmit={handleSubmit} className={styles.form}>
                   <div className={styles.formGroup}>
-                    <label>Category</label>
-                    <select
-                      value={formData.category}
-                      onChange={(e) =>
-                        setFormData({ ...formData, category: e.target.value as ProductCategory })
-                      }
-                      required
-                    >
-                      {CATEGORIES.map((cat) => (
-                        <option key={cat.value} value={cat.value}>
-                          {cat.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className={styles.formGroup}>
-                    <label>Price ($)</label>
+                    <label>Product Name</label>
                     <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={formData.price}
-                      onChange={(e) =>
-                        setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })
-                      }
-                      placeholder="0.00"
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      placeholder="e.g., Advanced Whitening Toothpaste"
                       required
                     />
                   </div>
-                </div>
 
-                <div className={styles.formGroup}>
-                  <label>Description</label>
-                  <textarea
-                    value={formData.raw_description}
-                    onChange={(e) => setFormData({ ...formData, raw_description: e.target.value })}
-                    placeholder="Brief description of the product and its benefits..."
-                    rows={4}
-                    required
-                  />
-                  <span className={styles.hint}>
-                    AI will enhance this description for patients
-                  </span>
-                </div>
+                  <div className={styles.formRow}>
+                    <div className={styles.formGroup}>
+                      <label>Category</label>
+                      <select
+                        value={formData.category}
+                        onChange={(e) =>
+                          setFormData({ ...formData, category: e.target.value as ProductCategory })
+                        }
+                        required
+                      >
+                        {CATEGORIES.map((cat) => (
+                          <option key={cat.value} value={cat.value}>
+                            {cat.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                <div className={styles.formActions}>
-                  <button
-                    type="button"
-                    className={styles.btnSecondary}
-                    onClick={() => {
-                      setShowForm(false);
-                      setEditingId(null);
-                    }}
-                    disabled={submitting}
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className={styles.btnPrimary} disabled={submitting}>
-                    {submitting ? "Saving..." : editingId ? "Update" : "Add Product"}
-                  </button>
-                </div>
-              </form>
+                    <div className={styles.formGroup}>
+                      <label>Price ($)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.price}
+                        onChange={(e) =>
+                          setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })
+                        }
+                        placeholder="0.00"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label>Description</label>
+                    <textarea
+                      value={formData.raw_description}
+                      onChange={(e) => setFormData({ ...formData, raw_description: e.target.value })}
+                      placeholder="Brief description of the product and its benefits..."
+                      rows={4}
+                      required
+                    />
+                    <span className={styles.hint}>
+                      AI will enhance this description for patients
+                    </span>
+                  </div>
+
+                  <div className={styles.formActions}>
+                    <button
+                      type="button"
+                      className={styles.btnSecondary}
+                      onClick={() => {
+                        setShowForm(false);
+                        setEditingId(null);
+                      }}
+                      disabled={submitting}
+                    >
+                      Cancel
+                    </button>
+                    <button type="submit" className={styles.btnPrimary} disabled={submitting}>
+                      {submitting ? "Saving..." : editingId ? "Update" : "Add Product"}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
-          </div>
+          </ModalPortal>
         )}
 
         {loading ? (

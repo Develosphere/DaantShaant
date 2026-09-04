@@ -41,6 +41,20 @@ export function PortalAuthShell({ role, mode, children }: Props) {
         </section>
 
         <section className={styles.panel}>
+          {role === "dentist" && (
+            <Link
+              href="/get-started"
+              className={styles.backLink}
+              aria-label="Back to Get Started"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="19" y1="12" x2="5" y2="12" />
+                <polyline points="12 19 5 12 12 5" />
+              </svg>
+              <span>Back</span>
+            </Link>
+          )}
+
           <div className={styles.panelHead}>
             <div className={styles.panelIcon} aria-hidden>
               {role === "patient" && "🦷"}

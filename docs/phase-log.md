@@ -1230,7 +1230,71 @@ Surgically repaired map background tile rendering by switching from external vec
 
 ### Next
 
+Phase 10.5 — Portal Security + Brand Consistency + Dentist Operations.
+
+---
+
+## Phase 10.5 — Portal Security + Brand Consistency + Dentist Operations
+
+**Date:** September 2026  
+**Status:** IMPLEMENTED — PENDING NATHAN MANUAL ACCEPTANCE
+
+### Summary
+
+Addressed security, brand consistency, session resilience, and dentist operational features across both the frontend and backend:
+- **Generic Role-Safe Login Authentication**: Fixed login account-role information disclosure and email enumeration. Both patient and dentist login endpoints now return generic 401 `{"detail": "Invalid email or password"}` on any failure (unknown email, incorrect password, inactive account, or cross-portal role mismatch). Frontend displays generic translated `auth.invalid_credentials` error in English and Urdu.
+- **Extended Session Lifetimes & Concurrency Fix**: Set access token expiration to 30 minutes (`ACCESS_TOKEN_EXPIRE_MINUTES=30`). Maintained 7-day rotating refresh tokens in HttpOnly cookies. Resolved concurrent frontend refresh race conditions by deduplicating refresh calls with a promise queue in `apps/web/lib/portal-auth.ts`.
+- **Global Modal Portal & Full-Viewport Backdrops**: Introduced `ModalPortal` (`createPortal(..., document.body)`). Wrapped patient `CheckoutModal` and dentist `ProductsManager` modals. Overlays use fixed viewport bounds (`100vw`/`100vh`, `inset: 0`, `z-index: 99999`) preventing parent container clipping.
+- **Canonical DaantShaant Logo**: Built `<DaantShaantLogo />` reusing `/landing/logo.png`. Applied across public header, patient header, dentist auth shell, and dentist portal header. Clicking logo in public/dentist auth routes to landing `/`; in authenticated portal routes to dashboard.
+- **Dentist Auth & Onboarding Back Navigation**: Added top-left "Back" arrow on dentist login and registration pages linking to `/get-started`. Added top-left "Back" arrow on `/get-started` linking to `/`.
+- **Dentist Brand Color Normalization**: Normalized dentist auth, onboarding, and portal controls from mismatched purple and navy (`#073564`) to DaantShaant brand blue `#00A2F0`. Patient product card CTA normalized to `#00A2F0` without altering clinical recommendation logic.
+- **Dentist Real Seller-Scoped Orders**: Built `GET /portal/products/orders` in `routes_products.py` resolving authenticated dentist ID from token. Dentists see only orders containing products they uploaded. Replaced "Coming soon" on `/dentist/orders` with `OrdersManager` table with bilingual empty states.
+- **Dentist Appointment Management**: Added "Appointments" nav item to dentist portal header (`/dentist/appointments`). Created `POST /recommend/dentists/appointments/{id}/status` allowing status mutations (`confirmed`, `completed`, `cancelled`) with strict dentist ownership verification (cross-dentist 404 denial). Built `AppointmentsManager` displaying appointments, patient contact details, and status actions.
+
+### Files Modified
+
+- `apps/web/components/common/ModalPortal.tsx` [NEW]
+- `apps/web/components/common/DaantShaantLogo.tsx` [NEW]
+- `apps/web/components/Header.tsx`
+- `apps/web/components/portal/PortalHeader.tsx`
+- `apps/web/components/portal/PortalAuthShell.tsx`
+- `apps/web/components/portal/LoginPage.tsx`
+- `apps/web/components/portal/portal-auth.module.css`
+- `apps/web/components/portal/portal-header.module.css`
+- `apps/web/components/get-started/RoleSelection.tsx`
+- `apps/web/components/get-started/role-selection.module.css`
+- `apps/web/components/dentist/ProductsManager.tsx`
+- `apps/web/components/dentist/products-manager.module.css`
+- `apps/web/components/dentist/OrdersManager.tsx` [NEW]
+- `apps/web/components/dentist/orders-manager.module.css` [NEW]
+- `apps/web/components/dentist/AppointmentsManager.tsx` [NEW]
+- `apps/web/app/dentist/orders/page.tsx`
+- `apps/web/app/dentist/appointments/page.tsx` [NEW]
+- `apps/web/components/CheckoutModal.tsx`
+- `apps/web/app/globals.css`
+- `apps/web/i18n/en.ts`
+- `apps/web/i18n/ur.ts`
+- `apps/web/lib/portal-auth.ts`
+- `.env` & `.env.example`
+- `orchestrator/src/orchestrator/config.py`
+- `orchestrator/src/orchestrator/dentist_portal/user_service.py`
+- `orchestrator/src/orchestrator/dentist_portal/routes_products.py`
+- `orchestrator/src/orchestrator/dentist_recommendation/routes.py`
+- `orchestrator/tests/test_phase10_5_portal_security_and_ops.py` [NEW]
+- `context.md`
+- `docs/phase-log.md`
+
+### Validation
+
+- Frontend TypeScript check (`npx tsc --noEmit`): Exit code 0, 0 errors.
+- Frontend Next.js Production Build (`npm run build`): Exit code 0, 27/27 static routes generated successfully.
+- Orchestrator Pytest Suite (`test_phase10_5_portal_security_and_ops.py`): 12 passed, 0 failed.
+- Strict compliance: NO browser, dev server, localhost, or live automated testing performed by agent.
+
+### Next
+
 Phase 11 — Deployment Fast Track.
+
 
 
 

@@ -195,7 +195,10 @@ class DentistPin(BaseModel):
     lng: float
     address: str = ""
     phone: Optional[str] = None
+    email: Optional[str] = None
     website: Optional[str] = None
+    whatsapp: Optional[str] = None
+    linkedin: Optional[str] = None
     rating: Optional[float] = None
     review_count: Optional[int] = None
     distance_km: float = 0.0

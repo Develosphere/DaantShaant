@@ -303,57 +303,48 @@ Phase 10.1 implemented full bilingual capabilities, light/dark theme support, an
 | 10.4.1 | Optional Scan Context Resilience (Stale/Missing/Unowned scan_id Never Blocks Discovery) | COMPLETE |
 | 10.4.2 | Map Visibility, Brand Styling, Full-Viewport Modals & Contact Details | COMPLETE |
 | 10.4.3 | Final Map Baselayer Repair + Dentist Listing UI Simplification | IMPLEMENTED — PENDING NATHAN MANUAL LIVE ACCEPTANCE |
+| 10.5 | Portal Security + Brand Consistency + Dentist Operations | IMPLEMENTED — PENDING NATHAN MANUAL ACCEPTANCE |
 
 The former Phase 1C is obsolete because its domain migration scope was merged into Phase 1B.
 
-## Phase 10.4 Summary — Production Live Dentist Discovery + Map Integration
+## Phase 10.5 Summary — Portal Security + Brand Consistency + Dentist Operations
 
 - **Implementation Status**:
-  - PHASE 10.4 IMPLEMENTED — PENDING NATHAN MANUAL LIVE ACCEPTANCE
-- **Unified Discovery & Adaptive Search**:
-  - Direct exact coordinates sent from both manual address autocomplete and GPS flows.
-  - Adaptive search radii `[3, 5, 8, 10]` km with `MIN_RESULT_TARGET = 5` finds the nearest sufficient set without unnecessary city-wide expansion.
-- **Resilient Multi-Source Integration & Platform Authority**:
-  - PostgreSQL registered dentists remain authoritative platform records.
-  - OpenStreetMap / Overpass live external discovery with 30-minute successful-response cache and endpoint mirror fallback.
-  - Optional Foursquare and Geoapify providers query when configured, failing or skipping safely without affecting core discovery.
-- **Statistical Clinical Ranking & Bayesian Ratings**:
-  - Deterministic ranking: Specialist match > Platform verified > Distance > Bayesian rating > Multi-source consensus & profile completeness > Partner tiebreaker.
-  - Bayesian weighted rating formula: `(v / (v + m)) * R + (m / (v + m)) * C` prevents low-sample high-star domination. Missing ratings are preserved as `None` (never 0 stars).
-  - General dental clinics lacking specific specialty tags are retained and ranked by proximity.
-- **MapLibre Interactive Map & UI Polish**:
-  - MapLibre GL JS + OpenFreeMap with local auto-fit bounds (no city-wide over-zoom).
-  - Interactive two-way card <-> marker focus and flyTo.
-  - Distinct CTAs: "Book Consultation" exclusively for registered platform dentists; external listings show Call, Directions, and Website.
-  - Clean bilingual support (English/Urdu) and theme styling (Light/Dark).
-
-## Phase 10.4.1 Summary — Optional Scan Context Resilience (Stale/Missing/Unowned scan_id)
-
-- **Optional Scan Linking**: Dentist discovery (`POST /portal/recommend/dentists/`) now treats `scan_id` strictly as optional linking context rather than a mandatory precondition.
-- **Resilience**: Invalid, stale, missing, or unowned scan IDs no longer block clinic discovery with 404 or 400 errors.
-- **Security & Ownership**: Unowned or nonexistent scan IDs are safely dropped (`scan_id=None`), never attached to the recommendation session, and never exposed to unauthorized users. Valid owned scans continue to be linked to recommendation records.
-
-## Phase 10.4.2 Summary — Map Visibility, Brand Styling, Full-Viewport Modals & Contact Details
-
-- **Map Rendering Fix**: Bundled `maplibre-gl.css` statically, preserved map container mounting during queries with an overlay loader, and connected `ResizeObserver` + post-load `.resize()` so tiles render immediately without blank canvas.
-- **Brand Colors & Identity**: Reserved `#00A2F0` exclusively for registered dentists (pin flair, card border, badge, and booking button). External listings use neutral slate `#64748b` styling. Removed all incorrect green (`#22c55e`, `#059669`). Patient location marker uses an amber pulsing circle (`#f59e0b`).
-- **Full-Viewport Modal Coverage**: Rendered the dentist detail modal via `createPortal(..., document.body)` with fixed full-viewport backdrop (`100vw`/`100vh`, `z-index: 99999`) matching `LocationPickerModal`.
-- **Optional Contact Details**: Extended models to extract and render `phone`, `email`, `website`, `whatsapp`, and `linkedin` as direct links (`tel:`, `mailto:`, `https://wa.me/...`, new-tab URLs). Unavailable fields are cleanly omitted with no "N/A" placeholders.
-- **Google Maps Directions**: "Get Directions" CTA opens Google Maps directions (`https://www.google.com/maps/dir/?api=1&origin=...&destination=...`) in a new tab.
-
-## Phase 10.4.3 Summary — Final Map Baselayer Repair + Dentist Listing UI Simplification
-
-- **Explicit OSM Raster Basemap**: Replaced OpenFreeMap external vector style JSON dependency with an explicit MapLibre raster style object (`OSM_RASTER_STYLE`) targeting OpenStreetMap standard raster tiles (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`). Roads, labels, and land features render immediately with zero CORS/style network failures.
-- **Attribution & Fallback**: Retained clean truthful legal attribution (`© OpenStreetMap contributors`) and removed obsolete OpenFreeMap/OpenMapTiles tags. Added safe internal map error fallback overlay (`dentists.map_unavailable`) without technical stack trace exposure.
-- **Registered Dentist Brand Treatment**: Reserved `#00A2F0` exclusively for registered dentists (`tier === 'platform' || dentist_id != null`). Registered cards display `border-left: 4px solid #00A2F0`, `#00A2F0` map marker with inner crest, single badge `DaantShaant Recommended` (`background: #00A2F0; color: #ffffff`), and consultation booking CTA.
-- **Normal Dentist UI Simplification**: Publicly discovered dentists appear as clean, neutral cards with slate markers (`#64748B`), no left flair, and no badges. Removed "External Clinic Listing", "Best Specialist Match", "Verified Dental Clinic", and "Nearby Dental Clinic" badges from patient cards, modal, and legend.
-- **Minimal Legend**: Simplified legend to three clean items: 🟠 Your Location, 🔵 DaantShaant Recommended, ⚫ Nearby Dentists.
-- **Modal Cleanup**: Dentist detail modal eliminates external clinic notices and footers, preserving direct contact links (Call, WhatsApp, Email, Website, LinkedIn) and Google Maps directions.
-- **Color Consistency**: Zero green styling remains; verified 100% theme compatibility (Light/Dark mode) and bilingual parity (EN/UR).
+  - PHASE 10.5 IMPLEMENTED — PENDING NATHAN MANUAL ACCEPTANCE
+- **Generic Role-Safe Login Authentication**:
+  - Eliminated account-role enumeration / information disclosure vulnerability.
+  - Login endpoints (patient & dentist) return generic 401 `"Invalid email or password"` for unknown email, incorrect password, inactive status, and cross-portal role mismatch.
+  - Frontend auth UI displays generic `auth.invalid_credentials` translated in EN/UR without disclosing role mismatch.
+- **Session Lifetimes & Refresh Token Rotation**:
+  - Access token expiry updated to 30 minutes (`ACCESS_TOKEN_EXPIRE_MINUTES=30` in config and env).
+  - Refresh session retained at 7 days with secure rotating tokens in HttpOnly cookies.
+  - Frontend concurrent silent refresh race conditions resolved using `refreshPromise` deduplication in `lib/portal-auth.ts`.
+- **Global Modal Portal / Backdrop Primitive**:
+  - Created reusable `ModalPortal` (`createPortal(..., document.body)`).
+  - Backdrops across patient checkout and dentist product modals normalized to fixed full-viewport (`100vw`/`100vh`, `z-index: 99999`) preventing layout container clipping.
+- **Canonical DaantShaant Logo**:
+  - Created `<DaantShaantLogo />` reusing existing canonical `/landing/logo.png`.
+  - Applied across public header, patient header, dentist auth shell, and dentist portal header.
+  - Public & dentist auth logo clicks route to landing page `/`; authenticated portal logo clicks route to respective dashboard.
+- **Dentist Auth & Onboarding Navigation**:
+  - Added accessible top-left "Back" arrow on dentist login/registration navigating to `/get-started`.
+  - Added top-left "Back" arrow on dentist onboarding `/get-started` navigating to `/`.
+- **Dentist Brand Color Normalization**:
+  - Replaced arbitrary purple, navy (`#073564`), and dark accents across dentist auth, onboarding, and portal headers/buttons with canonical DaantShaant brand blue `#00A2F0`.
+  - Patient recommended product CTAs normalized to `#00A2F0` while preserving clinical recommendation integrity.
+- **Dentist Real Seller-Scoped Orders**:
+  - Implemented `GET /portal/products/orders` in `routes_products.py` resolving authenticated dentist ID from session token.
+  - Strict seller isolation: dentists see only order items for products they uploaded (`product.dentist_id == dentist_id`). Multi-seller orders expose only the owning dentist's items and revenues.
+  - Replaced placeholder on `/dentist/orders` with `OrdersManager` featuring order table, customer info, quantities, amounts, statuses, and bilingual empty states.
+- **Dentist Appointment Management**:
+  - Added "Appointments" nav item to dentist portal header (`/dentist/appointments`).
+  - Added `POST /recommend/dentists/appointments/{id}/status` allowing status mutations (`confirmed`, `completed`, `cancelled`) with strict dentist ownership verification (cross-dentist 404 denial).
+  - Built `AppointmentsManager` displaying booked appointments, patient contact details, issues, notes, statuses, and quick status mutation action buttons.
+- **Automated Validation**:
+  - Next.js production build (`npm run build`) succeeded with 27/27 static routes generated.
+  - Backend pytest suite `test_phase10_5_portal_security_and_ops.py` passed (12/12 tests passing) verifying auth enumeration safety, session expiry, seller order isolation, and appointment status authorization.
+  - STRICT AGENT TESTING COMPLIANCE: 0 browser, dev server, localhost, or live automated testing performed.
 
 ## Next Phase
-
-**Phase 11 — Deployment Fast Track**.
-
 
 

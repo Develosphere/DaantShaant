@@ -28,6 +28,7 @@ export const ur = {
   "nav.my_scans": "میرے اسکینز",
   "nav.products": "مصنوعات",
   "nav.orders": "آرڈرز",
+  "nav.appointments": "ملاقاتیں",
   "nav.users": "صارفین",
   "nav.login": "لاگ ان کریں",
   "nav.register": "رجسٹر کریں",
@@ -63,6 +64,7 @@ export const ur = {
   "auth.password_min_length": "پاس ورڈ کم از کم 8 حروف پر مشتمل ہونا چاہیے",
   "auth.password_too_short": "پاس ورڈ کم از کم 8 حروف پر مشتمل ہونا چاہیے",
   "auth.login_failed": "لاگ ان ناکام رہا۔ براہ کرم اپنی معلومات چیک کریں۔",
+  "auth.invalid_credentials": "غلط ای میل یا پاس ورڈ۔",
   "auth.reg_failed": "رجسٹریشن ناکام رہی۔ براہ کرم دوبارہ کوشش کریں۔",
   "auth.registration_failed": "رجسٹریشن ناکام رہی۔ براہ کرم دوبارہ کوشش کریں۔",
 
@@ -283,5 +285,30 @@ export const ur = {
   // Scans History
   "scans.title": "میرے زبانی اسکینز",
   "scans.desc": "آپ کی پچھلی اسکریننگ رپورٹس اور تجاویز یہاں محفوظ ہیں۔",
-  "scans.empty": "کوئی محفوظ شدہ اسکین نہیں ملا۔ آج ہی اپنا پہلا اسکین شروع کریں!"
+  "scans.empty": "کوئی محفوظ شدہ اسکین نہیں ملا۔ آج ہی اپنا پہلا اسکین شروع کریں!",
+
+  // Dentist Orders & Appointments
+  "orders.title": "پروڈکٹ آرڈرز",
+  "orders.subtitle": "آپ کی درج کردہ دانتوں کی مصنوعات کی خریداریوں کو ٹریک کریں",
+  "orders.empty": "ابھی تک کوئی پروڈکٹ آرڈر نہیں ہے۔",
+  "orders.order_id": "آرڈر نمبر",
+  "orders.date": "تاریخ",
+  "orders.product": "پروڈکٹ",
+  "orders.quantity": "تعداد",
+  "orders.customer": "مریض / کسٹمر",
+  "orders.amount": "رقم",
+  "orders.status": "حالت",
+  "appointments.title": "مشاورت کے اوقات",
+  "appointments.subtitle": "مریضوں کی مشاورت کی بکنگ اور درخواستوں کا نظم کریں",
+  "appointments.empty": "ابھی تک کوئی ملاقات کی درخواست نہیں ہے۔",
+  "appointments.patient": "مریض",
+  "appointments.issue": "مسئلہ",
+  "appointments.date": "درخواست کی تاریخ",
+  "appointments.contact": "رابطہ",
+  "appointments.status": "حالت",
+  "appointments.actions": "اقدامات",
+  "appointments.accept": "تصدیق کریں",
+  "appointments.complete": "مکمل کریں",
+  "appointments.cancel": "منسوخ کریں",
+  "appointments.status_updated": "ملاقات کی حالت اپ ڈیٹ ہو گئی ہے"
 };

@@ -36,23 +36,43 @@ async function readUserResponse(res: Response): Promise<PortalUser> {
   return (await res.json()) as PortalUser;
 }
 
+let refreshPromise: Promise<PortalUser | null> | null = null;
+
 export async function refreshPortalSession(
   expectedRole?: PortalRole
 ): Promise<PortalUser | null> {
-  const res = await fetch(`${API_BASE}/portal/auth/refresh`, {
-    method: "POST",
-    credentials: "include",
-  });
-  if (!res.ok) {
-    activeUser = null;
+  if (refreshPromise) {
+    const user = await refreshPromise;
+    if (expectedRole && user && user.role !== expectedRole) {
+      return null;
+    }
+    return user;
+  }
+
+  refreshPromise = (async () => {
+    try {
+      const res = await fetch(`${API_BASE}/portal/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        activeUser = null;
+        return null;
+      }
+      const user = (await res.json()) as PortalUser;
+      activeUser = user;
+      return user;
+    } catch {
+      return null;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  const user = await refreshPromise;
+  if (expectedRole && user && user.role !== expectedRole) {
     return null;
   }
-  const user = (await res.json()) as PortalUser;
-  if (expectedRole && user.role !== expectedRole) {
-    activeUser = user;
-    return null;
-  }
-  activeUser = user;
   return user;
 }
 

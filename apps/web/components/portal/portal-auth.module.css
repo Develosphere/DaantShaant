@@ -132,7 +132,7 @@
 }
 
 .shell[data-role="dentist"] .eyebrow {
-  color: var(--pa-navy);
+  color: #00A2F0;
 }
 
 .shell[data-role="admin"] .eyebrow {
@@ -159,7 +159,7 @@
 }
 
 .shell[data-role="dentist"] .heroGradient {
-  background: linear-gradient(135deg, var(--pa-navy) 0%, var(--pa-primary) 100%);
+  background: linear-gradient(135deg, #00A2F0 0%, #008ecc 100%);
   -webkit-background-clip: text;
   background-clip: text;
 }
@@ -318,11 +318,29 @@
 }
 
 .shell[data-role="dentist"] .tabActive {
-  background: var(--pa-navy);
+  background: #00A2F0;
 }
 
 .shell[data-role="admin"] .tabActive {
   background: var(--pa-warn);
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #00A2F0;
+  text-decoration: none;
+  margin-bottom: 1.25rem;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+  width: fit-content;
+}
+
+.backLink:hover {
+  transform: translateX(-3px);
+  opacity: 0.85;
 }
 
 .form {
@@ -416,15 +434,15 @@
 
 .shell[data-role="dentist"] .submit {
   color: #fff;
-  background: var(--pa-navy);
-  border-color: var(--pa-navy);
-  box-shadow: 0 6px 24px rgba(7, 53, 100, 0.25);
+  background: #00A2F0;
+  border-color: #00A2F0;
+  box-shadow: 0 6px 24px rgba(0, 162, 240, 0.25);
 }
 
 .shell[data-role="dentist"] .submit:hover:not(:disabled) {
-  background: var(--pa-primary);
-  border-color: var(--pa-primary);
-  box-shadow: 0 8px 32px rgba(0, 162, 240, 0.3);
+  background: #008ecc;
+  border-color: #008ecc;
+  box-shadow: 0 8px 32px rgba(0, 162, 240, 0.35);
 }
 
 .shell[data-role="admin"] .submit {

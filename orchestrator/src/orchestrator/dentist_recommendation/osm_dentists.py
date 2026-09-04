@@ -108,7 +108,10 @@ def normalize_osm_element(
     name = tags.get("name") or tags.get("operator") or "Dental Clinic"
     address = _extract_address(tags)
     phone = tags.get("phone") or tags.get("contact:phone")
+    email = tags.get("email") or tags.get("contact:email")
     website = tags.get("website") or tags.get("contact:website")
+    whatsapp = tags.get("whatsapp") or tags.get("contact:whatsapp")
+    linkedin = tags.get("linkedin") or tags.get("contact:linkedin")
     specialties = _extract_specialties(tags)
 
     return {
@@ -121,7 +124,10 @@ def normalize_osm_element(
         "lng": lng,
         "address": address,
         "phone": phone,
+        "email": email,
         "website": website,
+        "whatsapp": whatsapp,
+        "linkedin": linkedin,
         "rating": None,  # Explicitly None: do NOT fabricate rating for OSM
         "distance_km": round(dist, 2),
         "specialties": specialties,

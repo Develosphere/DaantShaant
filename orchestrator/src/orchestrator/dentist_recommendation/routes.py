@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from orchestrator.db.models import AppointmentRequest
 from orchestrator.db.session import get_db_session
-from orchestrator.dentist_portal.auth import get_current_patient, get_current_user
+from orchestrator.dentist_portal.auth import get_current_dentist, get_current_patient, get_current_user
 from orchestrator.dentist_portal.models import (
     BookConsultationRequest,
     BookConsultationResponse,
@@ -134,15 +135,55 @@ async def list_appointments(
     appointments = await AppointmentRepository(session).list_for_principal(
         user_id=user["user_id"], role=user["role"]
     )
-    return [
-        {
+    user_repo = UserRepository(session)
+    results = []
+    for item in appointments:
+        entry = {
             "appointment_id": str(item.id),
             "patient_user_id": str(item.patient_user_id),
             "dentist_id": str(item.dentist_id),
             "scan_id": str(item.scan_id) if item.scan_id else None,
             "issue": item.issue,
+            "message": item.message,
+            "preferred_time": item.preferred_time,
             "status": item.status,
             "created_at": item.created_at.isoformat(),
         }
-        for item in appointments
-    ]
+        if user["role"] in {"dentist", "admin"}:
+            patient_user = await user_repo.get(item.patient_user_id)
+            if patient_user:
+                full_name = f"{patient_user.first_name or ''} {patient_user.last_name or ''}".strip()
+                entry["patient_name"] = full_name or "Patient"
+                entry["patient_email"] = patient_user.email or ""
+                entry["patient_phone"] = patient_user.phone or ""
+        results.append(entry)
+    return results
+
+
+@router.post("/appointments/{appointment_id}/status", response_model=dict)
+async def update_appointment_status(
+    appointment_id: UUID,
+    payload: dict,
+    dentist: dict = Depends(get_current_dentist),
+    session: AsyncSession = Depends(get_db_session),
+):
+    appointment = await AppointmentRepository(session).get_for_principal(
+        appointment_id, user_id=dentist["user_id"], role="dentist"
+    )
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found or not yours")
+    new_status = str(payload.get("status", "")).lower().strip()
+    valid_statuses = {"pending", "confirmed", "accepted", "completed", "cancelled", "rejected"}
+    if new_status not in valid_statuses:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid status. Must be one of {valid_statuses}"
+        )
+    if new_status == "accepted":
+        new_status = "confirmed"
+    elif new_status == "rejected":
+        new_status = "cancelled"
+    appointment.status = new_status
+    appointment.updated_at = datetime.now(timezone.utc)
+    await session.flush()
+    return {"updated": True, "appointment_id": str(appointment.id), "status": new_status}
+

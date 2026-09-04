@@ -1,0 +1,187 @@
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1.5rem 2.5rem;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: var(--bg-surface, rgba(255, 255, 255, 0.85));
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 2px solid rgba(0, 162, 240, 0.2);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 162, 240, 0.12);
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-family: var(--font-anton), var(--font-syne, var(--font-jakarta)), sans-serif;
+  font-size: 1.75rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  margin: 0 0 0.35rem;
+  color: #00A2F0;
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--text-muted, #5a5a5a);
+  font-size: 0.95rem;
+}
+
+.error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  margin-bottom: 1.5rem;
+  background: rgba(255, 107, 122, 0.08);
+  border: 2px solid rgba(255, 107, 122, 0.3);
+  border-radius: 12px;
+  color: #d32f2f;
+  font-weight: 500;
+}
+
+.loading,
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  background: var(--bg-surface, rgba(255, 255, 255, 0.85));
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 2px solid rgba(0, 162, 240, 0.2);
+  border-radius: 16px;
+  text-align: center;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(0, 162, 240, 0.15);
+  border-top-color: #00A2F0;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.emptyIcon {
+  font-size: 3.5rem;
+  margin-bottom: 1rem;
+  opacity: 0.7;
+}
+
+.empty h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.35rem;
+  color: #00A2F0;
+}
+
+.empty p {
+  margin: 0;
+  color: var(--text-muted, #5a5a5a);
+}
+
+.tableContainer {
+  background: var(--bg-surface, rgba(255, 255, 255, 0.85));
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 2px solid rgba(0, 162, 240, 0.2);
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 162, 240, 0.08);
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+.table th {
+  padding: 1rem 1.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #00A2F0;
+  border-bottom: 2px solid rgba(0, 162, 240, 0.15);
+  background: rgba(0, 162, 240, 0.03);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 1.1rem 1.25rem;
+  border-bottom: 1px solid var(--border-default, rgba(0, 162, 240, 0.1));
+  color: var(--text, #0f172a);
+  vertical-align: middle;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.table tr:hover td {
+  background: rgba(0, 162, 240, 0.02);
+}
+
+.orderId {
+  font-family: monospace;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #00A2F0;
+}
+
+.productName {
+  font-weight: 600;
+}
+
+.amount {
+  font-weight: 700;
+  color: #00A2F0;
+}
+
+.statusBadge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.3rem 0.65rem;
+  border-radius: 6px;
+}
+
+.statusPending {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+}
+
+.statusConfirmed {
+  background: rgba(0, 162, 240, 0.15);
+  color: #00A2F0;
+}
+
+.statusShipped,
+.statusCompleted {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+.statusCancelled {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}

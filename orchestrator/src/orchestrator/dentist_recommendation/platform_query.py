@@ -64,6 +64,13 @@ async def search_platform_dentists(
                 if not dentist_specs:
                     dentist_specs = ["general"]
 
+                meta = dentist.source_metadata or {}
+                plat_email = dentist.email or (owner.email if owner else None) or meta.get("email") or meta.get("contact:email")
+                plat_phone = dentist.phone or (owner.phone if owner else None) or meta.get("phone") or meta.get("contact:phone")
+                plat_website = meta.get("website") or meta.get("contact:website") or meta.get("url")
+                plat_whatsapp = meta.get("whatsapp") or meta.get("contact:whatsapp")
+                plat_linkedin = meta.get("linkedin") or meta.get("contact:linkedin")
+
                 results.append(
                     {
                         "tier": "platform",
@@ -73,7 +80,11 @@ async def search_platform_dentists(
                         "lat": float(dentist.latitude),
                         "lng": float(dentist.longitude),
                         "address": dentist.address or "",
-                        "phone": dentist.phone,
+                        "phone": plat_phone,
+                        "email": plat_email,
+                        "website": plat_website,
+                        "whatsapp": plat_whatsapp,
+                        "linkedin": plat_linkedin,
                         "rating": dentist.rating,
                         "distance_km": round(distance, 2),
                         "specialties": [str(s) for s in dentist_specs],

@@ -200,8 +200,14 @@ def _merge_candidate(existing: dict[str, Any], new_cand: dict[str, Any]) -> dict
 
     if not target.get("phone") and source.get("phone"):
         target["phone"] = source["phone"]
+    if not target.get("email") and source.get("email"):
+        target["email"] = source["email"]
     if not target.get("website") and source.get("website"):
         target["website"] = source["website"]
+    if not target.get("whatsapp") and source.get("whatsapp"):
+        target["whatsapp"] = source["whatsapp"]
+    if not target.get("linkedin") and source.get("linkedin"):
+        target["linkedin"] = source["linkedin"]
     if not target.get("address") and source.get("address"):
         target["address"] = source["address"]
     if target.get("rating") is None and source.get("rating") is not None:

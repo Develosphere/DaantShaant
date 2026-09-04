@@ -28,6 +28,7 @@ export const en = {
   "nav.my_scans": "My Scans",
   "nav.products": "Products",
   "nav.orders": "Orders",
+  "nav.appointments": "Appointments",
   "nav.users": "Users",
   "nav.login": "Sign In",
   "nav.register": "Register",
@@ -63,6 +64,7 @@ export const en = {
   "auth.password_min_length": "Password must be at least 8 characters",
   "auth.password_too_short": "Password must be at least 8 characters",
   "auth.login_failed": "Sign in failed. Please check your credentials.",
+  "auth.invalid_credentials": "Invalid email or password.",
   "auth.reg_failed": "Registration failed. Please try again.",
   "auth.registration_failed": "Registration failed. Please try again.",
 
@@ -281,5 +283,30 @@ export const en = {
   // Scans History
   "scans.title": "My Oral Scans",
   "scans.desc": "Your past screening reports and recommendations are securely saved here.",
-  "scans.empty": "No saved oral scans found. Start your first scan today!"
+  "scans.empty": "No saved oral scans found. Start your first scan today!",
+
+  // Dentist Orders & Appointments
+  "orders.title": "Product Orders",
+  "orders.subtitle": "Track purchases of dental products you have listed",
+  "orders.empty": "No product orders yet.",
+  "orders.order_id": "Order #",
+  "orders.date": "Date",
+  "orders.product": "Product",
+  "orders.quantity": "Qty",
+  "orders.customer": "Patient / Customer",
+  "orders.amount": "Amount",
+  "orders.status": "Status",
+  "appointments.title": "Consultation Appointments",
+  "appointments.subtitle": "Manage patient consultation bookings and requests",
+  "appointments.empty": "No appointment requests yet.",
+  "appointments.patient": "Patient",
+  "appointments.issue": "Issue",
+  "appointments.date": "Date Requested",
+  "appointments.contact": "Contact",
+  "appointments.status": "Status",
+  "appointments.actions": "Actions",
+  "appointments.accept": "Confirm",
+  "appointments.complete": "Complete",
+  "appointments.cancel": "Cancel",
+  "appointments.status_updated": "Appointment status updated"
 };

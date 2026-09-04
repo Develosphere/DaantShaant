@@ -111,8 +111,8 @@
 }
 
 .header[data-role="dentist"] .navLinkActive {
-  color: #073564;
-  background: rgba(7, 53, 100, 0.1);
+  color: #00A2F0;
+  background: rgba(0, 162, 240, 0.12);
 }
 
 .header[data-role="admin"] .navLinkActive {
@@ -184,7 +184,7 @@
 }
 
 .header[data-role="dentist"] .avatar {
-  border-color: #073564;
+  border-color: #00A2F0;
 }
 
 .header[data-role="admin"] .avatar {
