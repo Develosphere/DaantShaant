@@ -3,86 +3,58 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PortalDashboard } from "@/components/portal/PortalDashboard";
-import { getStoredUser, authorizedFetch, API_BASE } from "@/lib/portal-auth";
-import { listMyProducts, type Product } from "@/lib/product-api";
+import { getStoredUser } from "@/lib/portal-auth";
+import {
+  getDentistDashboard,
+  type DentistDashboardResponse,
+} from "@/lib/dashboard-api";
 import { useLanguage } from "@/i18n";
 import styles from "./dentist-dashboard.module.css";
-
-interface OrderItem {
-  order_id: string;
-  product_name: string;
-  quantity: number;
-  price: number;
-  patient_name: string;
-  status: string;
-  created_at: string;
-}
-
-interface AppointmentItem {
-  appointment_id: string;
-  issue: string | null;
-  status: string;
-  created_at: string;
-  patient_name?: string;
-}
 
 export function DentistDashboardHome() {
   const { t } = useLanguage();
   const [dentistName, setDentistName] = useState("");
-  const [productsCount, setProductsCount] = useState(0);
-  const [orders, setOrders] = useState<OrderItem[]>([]);
-  const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
+  const [data, setData] = useState<DentistDashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  async function loadDashboardData() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await getDentistDashboard();
+      setData(res);
+    } catch (err: any) {
+      console.warn("Error loading dentist dashboard data:", err);
+      setError(t("dashboard.error_loading"));
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
     const user = getStoredUser("dentist");
     if (user?.first_name) {
       setDentistName(`Dr. ${user.first_name} ${user.last_name || ""}`.trim());
     }
-
-    async function loadDashboardData() {
-      setLoading(true);
-      try {
-        // Products
-        const prodData = await listMyProducts().catch(() => [] as Product[]);
-        setProductsCount(Array.isArray(prodData) ? prodData.length : 0);
-
-        // Orders
-        const ordersRes = await authorizedFetch("dentist", `${API_BASE}/portal/products/orders`).catch(() => null);
-        if (ordersRes && ordersRes.ok) {
-          const ordData = await ordersRes.json();
-          if (Array.isArray(ordData)) {
-            setOrders(ordData);
-          }
-        }
-
-        // Appointments
-        const appRes = await authorizedFetch("dentist", `${API_BASE}/portal/recommend/dentists/appointments`).catch(() => null);
-        if (appRes && appRes.ok) {
-          const appData = await appRes.json();
-          if (Array.isArray(appData)) {
-            setAppointments(appData);
-          }
-        }
-      } catch (err) {
-        console.warn("Error loading dentist dashboard data:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
     loadDashboardData();
   }, []);
 
-  const pendingOrders = orders.filter(
-    (o) => (o.status || "").toLowerCase() === "pending" || (o.status || "").toLowerCase() === "placed"
-  ).length;
-
-  const totalSales = orders.reduce((sum, o) => sum + (Number(o.price) || 0), 0);
+  const orders = data?.recent_orders || [];
+  const appointments = data?.recent_appointments || [];
 
   return (
     <PortalDashboard role="dentist" maxWidth={1180}>
       <div className={styles.dashboard}>
+        {error && (
+          <div className={styles.errorNotice} role="alert">
+            <span>{error}</span>
+            <button type="button" className={styles.retryBtn} onClick={loadDashboardData}>
+              {t("dashboard.retry")}
+            </button>
+          </div>
+        )}
+
         {/* Welcome Hero */}
         <section className={styles.hero}>
           <div className={styles.heroContent}>
@@ -112,7 +84,9 @@ export function DentistDashboardHome() {
               </svg>
             </div>
             <div>
-              <div className={styles.statVal}>{productsCount}</div>
+              <div className={styles.statVal}>
+                {loading ? <span className={styles.skeletonPulse}>···</span> : (data?.stats.product_count ?? 0)}
+              </div>
               <div className={styles.statLabel}>{t("dentist_dashboard.stat_products")}</div>
             </div>
           </div>
@@ -127,7 +101,9 @@ export function DentistDashboardHome() {
               </svg>
             </div>
             <div>
-              <div className={styles.statVal}>{appointments.length}</div>
+              <div className={styles.statVal}>
+                {loading ? <span className={styles.skeletonPulse}>···</span> : (data?.stats.appointment_count ?? 0)}
+              </div>
               <div className={styles.statLabel}>{t("dentist_dashboard.stat_appointments")}</div>
             </div>
           </div>
@@ -141,7 +117,9 @@ export function DentistDashboardHome() {
               </svg>
             </div>
             <div>
-              <div className={styles.statVal}>{pendingOrders}</div>
+              <div className={styles.statVal}>
+                {loading ? <span className={styles.skeletonPulse}>···</span> : (data?.stats.pending_order_count ?? 0)}
+              </div>
               <div className={styles.statLabel}>{t("dentist_dashboard.stat_pending_orders")}</div>
             </div>
           </div>
@@ -154,7 +132,9 @@ export function DentistDashboardHome() {
               </svg>
             </div>
             <div>
-              <div className={styles.statVal}>${totalSales.toFixed(2)}</div>
+              <div className={styles.statVal}>
+                {loading ? <span className={styles.skeletonPulse}>···</span> : (data?.stats.completed_order_count ?? 0)}
+              </div>
               <div className={styles.statLabel}>{t("dentist_dashboard.stat_total_sales")}</div>
             </div>
           </div>
@@ -210,7 +190,7 @@ export function DentistDashboardHome() {
           </div>
         </section>
 
-        {/* Two-column Previews */}
+        {/* Two-column Previews: Recent Orders & Upcoming Consultations */}
         <div className={styles.twoColGrid}>
           {/* Recent Orders Preview */}
           <div className={styles.cardBlock}>
@@ -228,13 +208,18 @@ export function DentistDashboardHome() {
               </Link>
             </div>
 
-            {orders.length === 0 ? (
+            {loading ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                <div className={styles.skeletonBlock} style={{ height: "42px" }} />
+                <div className={styles.skeletonBlock} style={{ height: "42px" }} />
+              </div>
+            ) : orders.length === 0 ? (
               <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", margin: "1rem 0" }}>
                 {t("dentist_dashboard.no_orders_yet")}
               </p>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                {orders.slice(0, 4).map((order) => (
+                {orders.map((order) => (
                   <div key={order.order_id} className={styles.previewItem}>
                     <div className={styles.previewInfo}>
                       <span className={styles.previewTitle}>{order.product_name}</span>
@@ -242,7 +227,7 @@ export function DentistDashboardHome() {
                         {order.patient_name || "Patient"} • Qty: {order.quantity} • ${Number(order.price || 0).toFixed(2)}
                       </span>
                     </div>
-                    <span className={`${styles.statusPill} ${order.status === "confirmed" ? styles.statusConfirmed : styles.statusPending}`}>
+                    <span className={`${styles.statusPill} ${order.status === "confirmed" || order.status === "completed" ? styles.statusConfirmed : styles.statusPending}`}>
                       {order.status}
                     </span>
                   </div>
@@ -268,13 +253,18 @@ export function DentistDashboardHome() {
               </Link>
             </div>
 
-            {appointments.length === 0 ? (
+            {loading ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                <div className={styles.skeletonBlock} style={{ height: "42px" }} />
+                <div className={styles.skeletonBlock} style={{ height: "42px" }} />
+              </div>
+            ) : appointments.length === 0 ? (
               <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", margin: "1rem 0" }}>
                 {t("dentist_dashboard.no_appointments_yet")}
               </p>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                {appointments.slice(0, 4).map((app) => (
+                {appointments.map((app) => (
                   <div key={app.appointment_id} className={styles.previewItem}>
                     <div className={styles.previewInfo}>
                       <span className={styles.previewTitle}>{app.patient_name || "Patient Consultation"}</span>

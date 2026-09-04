@@ -38,3 +38,10 @@ Thumbs.db
 htmlcov/
 .tox/
 .cache/
+
+
+# Datasets
+dataset/oral-disease.yolov11/
+dataset/oral-disease.yolov11.zip
+best.pt
+*.pt

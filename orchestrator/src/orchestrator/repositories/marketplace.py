@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from orchestrator.db.models import (
@@ -96,6 +96,14 @@ class ProductRepository:
         )
         return list(result.scalars())
 
+    async def count_owned(self, owner_user_id: UUID) -> int:
+        result = await self.session.execute(
+            select(func.count(Product.id))
+            .join(Dentist, Dentist.id == Product.dentist_id)
+            .where(Dentist.owner_user_id == owner_user_id)
+        )
+        return int(result.scalar_one_or_none() or 0)
+
     async def delete(self, product: Product) -> None:
         await self.session.delete(product)
         await self.session.flush()
@@ -130,6 +138,21 @@ class OrderRepository:
         )
         return list(result.scalars())
 
+    async def count_for_dentist(
+        self, owner_user_id: UUID, status: str | list[str] | None = None
+    ) -> int:
+        query = (
+            select(func.count(Order.id))
+            .join(Dentist, Dentist.id == Order.dentist_id)
+            .where(Dentist.owner_user_id == owner_user_id)
+        )
+        if isinstance(status, list):
+            query = query.where(Order.status.in_(status))
+        elif isinstance(status, str):
+            query = query.where(Order.status == status)
+        result = await self.session.execute(query)
+        return int(result.scalar_one_or_none() or 0)
+
     async def list_for_patient(
         self, patient_user_id: UUID, limit: int = 100
     ) -> list[tuple[Order, Dentist | None]]:
@@ -141,6 +164,13 @@ class OrderRepository:
             .limit(limit)
         )
         return list(result.all())
+
+    async def count_for_patient(self, patient_user_id: UUID) -> int:
+        result = await self.session.execute(
+            select(func.count(Order.id))
+            .where(Order.patient_user_id == patient_user_id)
+        )
+        return int(result.scalar_one_or_none() or 0)
 
 
 class RecommendationRepository:
@@ -209,3 +239,22 @@ class AppointmentRepository:
             query.order_by(AppointmentRequest.created_at.desc()).limit(limit)
         )
         return list(result.scalars())
+
+    async def count_for_principal(
+        self, *, user_id: UUID, role: str, status: str | list[str] | None = None
+    ) -> int:
+        query = select(func.count(AppointmentRequest.id))
+        if role == "patient":
+            query = query.where(AppointmentRequest.patient_user_id == user_id)
+        elif role == "dentist":
+            query = query.join(Dentist, Dentist.id == AppointmentRequest.dentist_id).where(
+                Dentist.owner_user_id == user_id
+            )
+        elif role != "admin":
+            return 0
+        if isinstance(status, list):
+            query = query.where(AppointmentRequest.status.in_(status))
+        elif isinstance(status, str):
+            query = query.where(AppointmentRequest.status == status)
+        result = await self.session.execute(query)
+        return int(result.scalar_one_or_none() or 0)

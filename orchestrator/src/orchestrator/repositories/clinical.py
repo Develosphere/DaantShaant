@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from orchestrator.db.models import ClinicalReport, Scan, ScanFinding
@@ -51,11 +51,20 @@ class ScanRepository:
                 )
             )
 
+        urgency = None
+        recommended_specialist = None
+        if hasattr(diagnosis, "triage") and diagnosis.triage is not None:
+            t_urgency = getattr(diagnosis.triage, "urgency_level", None)
+            urgency = getattr(t_urgency, "value", str(t_urgency)) if t_urgency else None
+            recommended_specialist = getattr(diagnosis.triage, "recommended_specialist", None)
+        if not urgency:
+            urgency = getattr(diagnosis.severity, "value", str(diagnosis.severity))
+
         report = ClinicalReport(
             scan_id=scan.id,
             patient_user_id=patient_user_id,
             verdict=diagnosis.condition_label.value,
-            urgency_level=diagnosis.severity.value,
+            urgency_level=urgency,
             summary=(
                 f"AI screening observed {diagnosis.condition_label.value} "
                 f"with {diagnosis.confidence:.0%} confidence."
@@ -64,6 +73,7 @@ class ScanRepository:
                 "findings": [finding.model_dump(mode="json") for finding in analysis.findings]
             },
             recommended_actions={"action_trigger": diagnosis.action_trigger.value},
+            recommended_specialist=recommended_specialist or "General Dentist",
             limitations={"disclaimer": diagnosis.disclaimer},
             agent_trace_summary={"confidence": diagnosis.confidence},
         )
@@ -87,6 +97,27 @@ class ScanRepository:
             .limit(limit)
         )
         return list(result.scalars())
+
+    async def count_scans(self, patient_user_id: UUID) -> int:
+        result = await self.session.execute(
+            select(func.count(Scan.id)).where(Scan.patient_user_id == patient_user_id)
+        )
+        return int(result.scalar_one_or_none() or 0)
+
+    async def get_latest_screening(
+        self, patient_user_id: UUID
+    ) -> tuple[Scan, ClinicalReport | None] | None:
+        result = await self.session.execute(
+            select(Scan, ClinicalReport)
+            .outerjoin(ClinicalReport, ClinicalReport.scan_id == Scan.id)
+            .where(Scan.patient_user_id == patient_user_id)
+            .order_by(Scan.created_at.desc())
+            .limit(1)
+        )
+        row = result.first()
+        if not row:
+            return None
+        return row[0], row[1]
 
     async def recent_reports(
         self, patient_user_id: UUID, limit: int = 5

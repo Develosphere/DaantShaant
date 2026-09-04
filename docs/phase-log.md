@@ -1435,7 +1435,51 @@ Hardened auth refresh coordination across browser tabs to eliminate race conditi
 
 ### Next
 
+Phase 10.7 — Real Data-Driven Patient + Dentist Dashboards.
+
+---
+
+## Phase 10.7 - Real Data-Driven Patient + Dentist Dashboards
+
+**Date:** September 2026
+
+**Status:** IMPLEMENTED — PENDING NATHAN MANUAL ACCEPTANCE
+
+### Summary
+
+Replaced hardcoded and placeholder values in Patient and Dentist dashboards with real, authenticated, server-scoped database data without altering the visual layouts. Built lightweight aggregate dashboard endpoints (`GET /portal/patient/dashboard` and `GET /portal/dentist/dashboard`) derived strictly from authenticated user credentials. Replaced hardcoded "Good Standing" with deterministic triage-derived status ("No Screening Yet", "Routine Oral Care", "Dental Visit Recommended", "Prompt Dental Care", "Urgent Professional Care"). Scoped all scans, orders, products, and appointments strictly to their respective patient or dentist owner. Added neutral skeletons during loading and clean error states with retry.
+
+### Files Created
+
+- `orchestrator/src/orchestrator/dentist_portal/routes_dashboard.py` (aggregate patient and dentist dashboard endpoints)
+- `orchestrator/tests/test_phase10_7_dashboards.py` (comprehensive 12-test suite covering all patient and dentist dashboard scenarios)
+- `apps/web/lib/dashboard-api.ts` (typed client fetch helpers for patient and dentist dashboards)
+
+### Files Modified
+
+- `orchestrator/src/orchestrator/main.py` (registered `portal_dashboard_router`)
+- `orchestrator/src/orchestrator/repositories/clinical.py` (added `count_scans`, `get_latest_screening`, and triage metadata enrichment in `add_result`)
+- `orchestrator/src/orchestrator/repositories/marketplace.py` (added `count_owned` to `ProductRepository`, `count_for_patient` and `count_for_dentist` to `OrderRepository`, and `count_for_principal` to `AppointmentRepository`)
+- `apps/web/components/patient/PatientDashboardView.tsx` (wired real aggregate stats, triage status badge, latest screening summary, real recommended products, recent orders preview, and recent activity)
+- `apps/web/components/patient/patient-dashboard.module.css` (added pulse skeletons, preview items, and dark mode tokens)
+- `apps/web/components/dentist/DentistDashboardHome.tsx` (wired real aggregate stats for products, consultations, pending orders, completed orders, recent orders preview, and upcoming appointments)
+- `apps/web/components/dentist/dentist-dashboard.module.css` (added pulse skeletons, error notice, and retry button)
+- `apps/web/i18n/en.ts` (added oral status strings, error loading, retry, and dashboard titles)
+- `apps/web/i18n/ur.ts` (added 100% key parity Urdu translations for all new dashboard strings)
+- `context.md`
+- `docs/phase-log.md`
+
+### Validation
+
+- Backend Pytest Suite: 26 passed, 0 failed across `test_phase10_5_portal_security_and_ops.py` and `test_phase10_7_dashboards.py`.
+- TypeScript Type Check (`npx tsc --noEmit`): Exit code 0, 0 errors.
+- Next.js Production Build (`npm run build`): Exit code 0, 28/28 static and dynamic routes compiled successfully.
+- Strict compliance: NO browser, dev server, localhost, or live testing performed by agent.
+
+### Next
+
 Phase 11 — Deployment Fast Track.
+
 
 
 

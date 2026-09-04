@@ -399,3 +399,60 @@
   background: rgba(0, 162, 240, 0.05);
 }
 
+/* ═══════════════════════ SKELETON & STATES ═══════════════════════ */
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.85; }
+}
+
+.skeletonPulse {
+  display: inline-block;
+  animation: pulse 1.5s ease-in-out infinite;
+  color: var(--text-muted, #94a3b8);
+}
+
+.skeletonBlock {
+  height: 20px;
+  background: rgba(0, 162, 240, 0.08);
+  border-radius: 6px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.errorNotice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 10px;
+  color: #dc2626;
+  font-size: 0.88rem;
+  margin-bottom: 1rem;
+}
+
+.retryBtn {
+  background: #00A2F0;
+  color: #ffffff;
+  border: none;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s ease;
+}
+
+.retryBtn:hover {
+  background: #008ecc;
+}
+
+:global([data-theme="dark"]) .errorNotice {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
+
+

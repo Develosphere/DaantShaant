@@ -303,37 +303,41 @@ Phase 10.1 implemented full bilingual capabilities, light/dark theme support, an
 | 10.4.1 | Optional Scan Context Resilience (Stale/Missing/Unowned scan_id Never Blocks Discovery) | COMPLETE |
 | 10.4.3 | Final Map Baselayer Repair + Dentist Listing UI Simplification | COMPLETE |
 | 10.5 | Portal Security + Brand Consistency + Dentist Operations | COMPLETE |
-| 10.6 | Final Design Cleanup + Cross-Tab Session Hardening | IMPLEMENTED — PENDING NATHAN MANUAL ACCEPTANCE |
+| 10.6 | Final Design Cleanup + Cross-Tab Session Hardening | COMPLETE |
+| 10.7 | Real Data-Driven Patient + Dentist Dashboards | IMPLEMENTED — PENDING NATHAN MANUAL ACCEPTANCE |
 
 The former Phase 1C is obsolete because its domain migration scope was merged into Phase 1B.
 
-## Phase 10.6 Summary — Final Design Cleanup + Cross-Tab Session Hardening
+## Phase 10.7 Summary — Real Data-Driven Patient + Dentist Dashboards
 
 - **Implementation Status**:
-  - PHASE 10.6 IMPLEMENTED — PENDING NATHAN MANUAL ACCEPTANCE
-- **Cross-Tab Refresh Coordination & Mutex Lock**:
-  - Created `apps/web/lib/cross-tab-auth.ts` introducing `withCrossTabLock` utilizing the `navigator.locks` API with an atomic, timestamped `localStorage` fallback and 8-second stale lock expiration.
-  - Resolved the rotating refresh token race condition across multiple browser tabs: when concurrent requests receive 401, only ONE tab acquires the mutex and sends `POST /portal/auth/refresh`. Other tabs wait on the mutex and receive the rotated HttpOnly cookie sequentially, preventing token collisions and unwanted session destruction.
-  - Configured BroadcastChannel (`"daantshaant-auth"`) broadcasting `REFRESH_STARTED`, `REFRESH_SUCCEEDED`, `REFRESH_FAILED`, and `LOGGED_OUT` events across tabs without ever broadcasting or leaking sensitive access/refresh tokens.
-  - Hardened error handling in `portal-auth.ts`: differentiates genuine revoked sessions (401 -> clears session and broadcasts failure) from temporary backend failures (5xx) and network disconnects (TypeError -> preserves existing session without false logout).
-  - Integrated tab-safe logout: explicit logout in any tab notifies all active portal tabs via `LOGGED_OUT` to clear their local in-memory session and redirect to login.
-- **Header Structure & RTL Locking**:
-  - Locked all header chrome (`PortalHeader`, public `Header`, `RoleSelection`) to `direction: ltr !important;` so switching to Urdu (`dir="rtl"`) never mirrors or reorders header navigation, keeping the logo on the left and language/theme/user controls on the right.
-- **Logo Dark Mode Visibility**:
-  - Enhanced `DaantShaantLogo` with `.ds-logo-chip` in `globals.css`: renders a subtle light surface chip in dark mode (`rgba(255, 255, 255, 0.94)`) with smooth border-radius and shadow, ensuring the canonical `logo.png` text is crisp and legible without inverting colors or modifying the source asset.
-- **Get-Started UI Polish**:
-  - Removed the highlighted top-left `← Back` link from `/get-started` header while preserving the clickable home logo link.
-  - Polished dark mode surfaces in `role-selection.module.css` with dark slate surfaces, subtle radial glow, and high-contrast card titles and action buttons.
-- **Dashboard Icon Consistency (#00A2F0)**:
-  - Replaced all visual emojis (`📸`, `💬`, `🗺️`, `📦`, `⚡`, `🛍️`, `📅`, `💳`, `➕`, `📋`, `✨`) used as UI action icons in both Patient Dashboard (`PatientDashboardView.tsx`) and Dentist Dashboard (`DentistDashboardHome.tsx`) with monotone vector SVGs colored `#00A2F0`.
-  - Added full dark mode token styling across patient and dentist dashboards and orders views.
-- **Urdu Localization Final Pass**:
-  - Added new translation keys for verified partner status, updated scan actions, and screening disclaimers with 100% key parity across `en.ts` and `ur.ts`.
+  - PHASE 10.7 IMPLEMENTED — PENDING NATHAN MANUAL ACCEPTANCE
+- **Authenticated Aggregate Dashboard Endpoints**:
+  - `GET /portal/patient/dashboard`: Aggregate endpoint deriving current patient from authenticated access token via `get_current_patient`. Replaces multiple uncoordinated frontend requests with a single fast, indexed read.
+  - `GET /portal/dentist/dashboard`: Aggregate endpoint deriving current dentist from authenticated access token via `get_current_dentist`. Strictly scopes products, orders, and appointments by verified dentist owner user ID.
+- **Patient Dashboard Data Pipeline**:
+  - `stats.scan_count`: Computed directly from persisted `Scan` table (`patient_user_id == user_id`) using `func.count()`. Honest zero returned if patient has no scans.
+  - `stats.order_count`: Computed directly from persisted `Order` table (`patient_user_id == user_id`) using `func.count()`.
+  - `stats.oral_status`: Derived deterministically from latest persisted screening / deterministic triage urgency (`routine`, `soon`, `urgent`, `emergency`). If no scans exist, returns `null` ("No Screening Yet"), eliminating hardcoded "Good Standing".
+  - `latest_screening`: Resolves the latest persisted screening and clinical report ordered deterministically by canonical timestamp (`created_at.desc()`). Exposes human-readable verdict, summary, urgency, AI visual confidence, recommended specialist, and major visible observations.
+  - `recommended_products`: Clinically relevant active dentist products matching patient's screening findings (or persisted recommendations). No AI calls, no hallucinations, no fake marketplace products. Returns honest empty state if no matching products exist.
+  - `recent_orders`: Up to 4 recent orders from patient history with item names, clinic names, quantities, amounts, and statuses.
+  - `recent_activity`: Assembled from real persisted scan, order, and appointment events merged and sorted by canonical timestamp.
+- **Dentist Dashboard Data Pipeline**:
+  - `product_count`: Scoped to products owned by the authenticated dentist (`Product.dentist_id == dentist.id`).
+  - `order_count`: Reflects orders containing products uploaded by this dentist. Multi-seller orders never leak or inflate other seller data.
+  - `pending_order_count` & `completed_order_count`: Accurate counts based on real order lifecycle statuses.
+  - `appointment_count` & `pending_appointment_count`: Consultations requested with this dentist, hydrated with patient details.
+  - Fake business metrics (fake revenue, fake conversion rate, fake growth percentages) removed in favor of honest counts.
+- **Frontend Architecture, Skeletons & i18n**:
+  - `apps/web/lib/dashboard-api.ts`: Typed fetch helpers using `authorizedFetch` with automatic session refresh and cross-tab lock integration.
+  - Skeletons and neutral loading states (`.skeletonPulse`, `.skeletonBlock`): Eliminates flash of zero counts or premature "Good Standing" while data resolves.
+  - Clean error states with retry actions that preserve the user's session.
+  - 100% key parity across `en.ts` and `ur.ts` for all oral wellness states, error messages, and dashboard labels.
 - **Automated Validation**:
-  - Unit Test Suite (`cross-tab-auth.test.ts`): 7 passed, 0 failed across all cross-tab concurrency, broadcast, and fallback scenarios.
-  - Backend Pytest Suite: 20 passed, 0 failed.
-  - TypeScript Type Check (`npx tsc --noEmit`): Exit code 0, 0 errors.
-  - Next.js Production Build (`npm run build`): Exit code 0, 28/28 static routes generated successfully.
+  - Pytest Suite: 26 passed, 0 failed across all portal security, session, patient dashboard (13 scenarios), and dentist dashboard (8 scenarios) tests.
+  - TypeScript Check (`npx tsc --noEmit`): Exit code 0, 0 errors.
+  - Next.js Production Build (`npm run build`): Exit code 0, 28/28 static/dynamic routes compiled.
   - Strict compliance: NO browser, dev server, localhost, or live testing performed by agent.
 
 ## Next Phase
