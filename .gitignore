@@ -72,10 +72,19 @@ Thumbs.db
 data/
 
 # Model weights and safetensors
-models/
+/models/
 *.pt
 *.safetensors
 best.pt
+
+# Keep Python database model source package
+!orchestrator/src/orchestrator/db/models/
+!orchestrator/src/orchestrator/db/models/**
+
+# Keep canonical DentalTensor production checkpoint
+!services/teeth_analyzer/models/
+!services/teeth_analyzer/models/oral_disease/
+!services/teeth_analyzer/models/oral_disease/dentaltensor_nathan_asif_v1.pt
 
 # Whitelist: Canonical DentalTensor production model checkpoint
 !services/teeth_analyzer/models/
