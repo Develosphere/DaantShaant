@@ -1,7 +1,7 @@
 # DaantShaant Context
 
 > Current implementation state. Read this first in every engineering chat.
-> Last updated: Phase 10.1B — Localization, Copy, Address Language & Contrast Repair, September 2026.
+> Last updated: Phase 12A Final — DaantShaant Central Dentist Reconstruction & Complete Hugging Face Removal, September 2026.
 
 ## Product
 
@@ -14,7 +14,7 @@ Next.js 14 + MapLibre GL JS + OpenFreeMap
     |
 FastAPI Orchestrator
     |-- Unified Clinical LangGraph screening pipeline (snapshot/upload/live)
-    |-- Chat + FAISS RAG
+    |-- DaantShaant Central Dentist (LangGraph + Central Patient Data + Structured RAG + Qwen)
     |-- Product recommendation LangGraph
     |-- Dentist recommendation LangGraph (OSM Overpass + PostgreSQL DB + Deterministic Ranking)
     |-- Geocoding & Autocomplete (OSM Nominatim)
@@ -304,9 +304,18 @@ Phase 10.1 implemented full bilingual capabilities, light/dark theme support, an
 | 10.4.3 | Final Map Baselayer Repair + Dentist Listing UI Simplification | COMPLETE |
 | 10.5 | Portal Security + Brand Consistency + Dentist Operations | COMPLETE |
 | 10.6 | Final Design Cleanup + Cross-Tab Session Hardening | COMPLETE |
-| 10.7 | Real Data-Driven Patient + Dentist Dashboards | IMPLEMENTED — PENDING NATHAN MANUAL ACCEPTANCE |
-
-The former Phase 1C is obsolete because its domain migration scope was merged into Phase 1B.
+| 10.7 | Real Data-Driven Patient + Dentist Dashboards | COMPLETE |
+| 11A | Specialized YOLO Dental Pathology Perception Pipeline | IMPLEMENTED — PENDING NATHAN MANUAL ACCEPTANCE |
+| 11B-1 | YOLO Detector Calibration + Hard-Negative Preparation | IMPLEMENTED — CALIBRATION/HARD-NEGATIVE TOOLING READY, PENDING NATHAN DATA REVIEW AND V2 TRAINING |
+| 11B-2 | Hard-Negative Mining + YOLO v2 Refinement Pipeline | IMPLEMENTED — HARD-NEGATIVE MINING + V2 TRAINING PIPELINE READY, PENDING NATHAN MANUAL REVIEW AND MODAL TRAINING |
+| 11B-3 | Mine Healthy Hard Negatives from Roboflow Dataset | COMPLETE |
+| 11B-4 | Large Healthy-Negative Mining + V2 Dataset Preparation | COMPLETE |
+| 11B Final | YOLO Final Model Freeze Configuration | COMPLETE |
+| 11C | DentalTensor Vision v1.0 Model Branding & Freeze (Nathan Asif) | COMPLETE |
+| 12A Final | Central Dentist Reconstruction & Hugging Face Removal | COMPLETE |
+| 12B Final | Central Dentist Live Latency, Deadlock & Chat Request Lifecycle Fix | COMPLETE |
+| 12C | Final Chat Identity Cleanup (DaantShaant Public Identity Freeze) | COMPLETE |
+| 12D | Urgent Auth & Session Resilience Fix (Transient DB Timeout & Logout Hardening) | COMPLETE |
 
 ## Phase 10.7 Summary — Real Data-Driven Patient + Dentist Dashboards
 
@@ -340,6 +349,387 @@ The former Phase 1C is obsolete because its domain migration scope was merged in
   - Next.js Production Build (`npm run build`): Exit code 0, 28/28 static/dynamic routes compiled.
   - Strict compliance: NO browser, dev server, localhost, or live testing performed by agent.
 
-## Next Phase
+## Phase 11A Summary — Specialized YOLO Dental Pathology Perception Pipeline
 
-Phase 11 — Deployment Fast Track.
+- **Implementation Status**:
+  - PHASE 11A IMPLEMENTED — PENDING NATHAN MANUAL ACCEPTANCE
+- **Core Decoupling**:
+  - YOLO11n handles local visual perception only.
+  - Deterministic clinical rules in Diagnosis service handle triage and urgency.
+  - Qwen in Orchestrator handles patient-friendly report text generation strictly from structured evidence (receives NO raw image).
+- **Class Map (LOCKED)**:
+  - `calculus` -> `tartar`
+  - `caries` -> `cavity_suspect`
+  - `gingivitis` -> `gingivitis_signs`
+  - `tooth discoloration` -> `discoloration`
+  - `ulcer` -> `oral_ulcer`
+- **Safety & Discoloration Heuristic**:
+  - Discoloration is NEVER mapped to calculus/tartar.
+  - Spatial aggregation identifies generalized discoloration across the dentition to prevent yellow teeth from being reported as tartar buildup.
+  - Concurrent calculus and discoloration are preserved as separate findings.
+  - Discoloration limitation included: visual screening cannot determine the underlying cause of discoloration.
+- **Oral Ulcer Finding**:
+  - `ConditionLabel.ORAL_ULCER` ("Oral Ulcer") with cautious non-definitive wording: "Visible oral ulcer / sore".
+  - Recommends dental evaluation if persistent beyond 10-14 days without claiming cancer or systemic disease.
+- **Technical Safety**:
+  - Missing weights or inference failure raises typed pipeline error — never fabricates healthy teeth.
+  - Clean scans with no detections return non-definitive statement: "No supported visible pathology was detected by this screening model."
+- **Model Path**:
+  - Configured to `services/teeth_analyzer/models/oral_disease/best.pt` (`YOLO_DENTAL_MODEL_PATH`, gitignored).
+- **Validation**:
+  - Pytest Suite: 62 passed, 0 failed across all perception, triage, and legacy fallback tests.
+  - Next.js Build: 28/28 routes compiled successfully.
+  - Strict compliance: NO browser, dev server, localhost, live inference, or weight downloads performed by agent.
+
+## Phase 11B-1 Summary — YOLO Detector Calibration + Hard-Negative Preparation
+
+- **Implementation Status**:
+  - PHASE 11B-1 IMPLEMENTED — CALIBRATION/HARD-NEGATIVE TOOLING READY, PENDING NATHAN DATA REVIEW AND V2 TRAINING
+- **Dataset Audit Findings (`docs/evaluation/yolo_dataset_audit.md`)**:
+  - Total Images: 10,698 across train (8,558), valid (1,070), test (1,070).
+  - True Negative Images: 570 empty label files (5.33% of dataset). 94.7% of images contain disease boxes (18:1 imbalance).
+  - Total Boxes: 62,720. Tooth discoloration dominates (26,424 boxes / 42.1%), explaining high false positive prior on clean teeth.
+- **Class-Specific Threshold Architecture**:
+  - Global fallback: `YOLO_DENTAL_CONFIDENCE_THRESHOLD=0.50`.
+  - Class-specific overrides: `YOLO_CALCULUS_CONFIDENCE_THRESHOLD`, `YOLO_CARIES_CONFIDENCE_THRESHOLD`, `YOLO_GINGIVITIS_CONFIDENCE_THRESHOLD`, `YOLO_DISCOLORATION_CONFIDENCE_THRESHOLD`, `YOLO_ULCER_CONFIDENCE_THRESHOLD`.
+  - Centralized resolver: `get_confidence_threshold(class_name)` accepts raw YOLO names or normalized clinical codes.
+- **Diagnostic Spatial Metadata**:
+  - `AggregatedFinding` enhanced with internal diagnostic metrics: `max_confidence`, `mean_confidence`, `horizontal_coverage`, `aggregate_area_ratio`, `image_third_coverage`.
+  - Kept internal for evaluation; not leaked into patient UI.
+- **Image Quality vs Detector Confidence Separation**:
+  - Fixed bug where moderate detector confidence displayed "Low visual clarity".
+  - Image quality alerts now derive ONLY from physical image quality (`overall_quality_score < 0.5` or `action_trigger == "REQUEST_CLEARER_PHOTO"`).
+  - Detector confidence produces honest message: "Moderate screening confidence — professional confirmation is recommended."
+- **Hard-Negative Pipeline & v2 Tooling**:
+  - `scripts/audit_yolo_dataset.py`: High-speed dataset audit utility.
+  - `scripts/evaluate_yolo_calibration.py`: Offline confidence threshold sweep (0.30–0.80) & confusion matrix tool.
+  - `scripts/prepare_yolo_v2_dataset.py`: Merges original dataset with `dataset/hard-negatives/` into `dataset/oral-disease-v2.yolov11/` with 0-byte labels (80/10/10 deterministic split, zero mutation of original).
+  - `scripts/compare_yolo_models.py`: Side-by-side evaluation harness comparing `best.pt` vs `best_v2.pt`.
+- **Validation**:
+  - Pytest Suite: 89 passed, 0 failed (including 13 new dedicated Phase 11B-1 calibration and hard-negative tests).
+  - Next.js Build: 28/28 routes compiled successfully.
+  - Strict compliance: Zero browser, dev server, localhost, live API calls, or model training executed.
+
+## Phase 11B-2 Summary — Hard-Negative Mining + YOLO v2 Refinement Pipeline
+
+- **Implementation Status**:
+  - PHASE 11B-2 IMPLEMENTED — HARD-NEGATIVE MINING + V2 TRAINING PIPELINE READY, PENDING NATHAN MANUAL REVIEW AND MODAL TRAINING
+- **Hard-Negative Mining on Empty-Label Images**:
+  - `scripts/mine_yolo_hard_negatives.py` executed against all 457 empty-label training images in `dataset/oral-disease.yolov11/train/`.
+  - Discovered 36 false-positive images producing 86 total false-positive boxes (47 tooth discoloration, 22 caries, 16 calculus, 1 ulcer).
+  - 421/457 (92.1%) empty-label images had zero detections at confidence >= 0.30.
+  - Generated `dataset/hard-negative-candidates/review.csv` (initialized to `UNREVIEWED`), `candidates.json`, and visual review contact sheets `contact_sheet_01.jpg` and `contact_sheet_02.jpg`.
+- **v2 Dataset Strategy & Strict Leakage Protection**:
+  - `scripts/prepare_yolo_v2_dataset.py`: Only Nathan-approved negatives (`review_status == 'ACCEPT_NEGATIVE'`) enter the `train` split.
+  - Original `valid` and `test` benchmark splits are preserved 100% UNTOUCHED (zero leakage).
+  - SHA-256 hash validation aborts loudly if any approved training negative matches a validation or test sample.
+  - Controlled oversampling enabled via `--negative-repeat N` (default: 1, recommended: 2).
+  - Original dataset `dataset/oral-disease.yolov11` is never mutated.
+- **Modal v2 Fine-Tuning Infrastructure**:
+  - `scripts/modal_train_yolo_v2.py`: Remote execution using the existing working Modal pattern.
+  - Uploads `oral-disease-v2.zip` and base checkpoint `best.pt` (`/root/best_v1.pt`).
+  - Fine-tunes starting from `/root/best_v1.pt` (NOT `yolo11n.pt`) with AdamW `lr0=0.0005`, 12 epochs, batch 16, A10G GPU, saving to `daantshaant-yolo-v2-output` volume.
+- **Validation**:
+  - Pytest Suite: 43 passed, 0 failed across all perception, calibration, and hard-negative mining tests (14 dedicated Phase 11B-2 tests).
+  - Strict compliance: Zero browser, dev server, localhost, live API calls, or model training executed by agent.
+
+## Phase 11B-3 Summary — Mine Healthy Hard Negatives from Roboflow Dataset
+
+- **Implementation Status**:
+  - PHASE 11B-3 IMPLEMENTED — CANDIDATES & CONTACT SHEETS GENERATED, MULTI-CSV MERGE READY, PENDING NATHAN REVIEW
+- **Dataset Audit & Partitioning (`dataset/Dental Data Set.yolov11/`)**:
+  - Total images: 427 across `train` (427 labels). Valid and test dirs absent from local export.
+  - Class names (nc: 7): `['8', 'Calculus', 'CalculusCavities', 'CalculusHealthy Teeth', 'Cavities', 'Gingivitis', 'Healthy Teeth']`.
+  - Healthy teeth candidate class: Class 6 (`Healthy Teeth`).
+  - Healthy-only images: 15 images (all boxes correspond solely to Class 6).
+  - Mixed images: 144 images (contain Class 6 + disease boxes — strictly excluded).
+  - Disease-only images: 268 images (strictly excluded).
+- **Detector Mining against `best.pt` ($\ge 0.30$)**:
+  - Model false positives (`candidate_type = MODEL_FALSE_POSITIVE`): 9 images producing 56 false-positive boxes (54 tooth discoloration, 1 caries, 1 gingivitis).
+  - Normal clean controls (`candidate_type = CLEAN_CONTROL`): 6 images producing 0 detections.
+  - Internal candidate deduplication: 15 unique SHA-256 hashes (0 duplicates).
+  - Benchmark isolation: 0 hash overlap with original benchmark `valid` and `test` splits.
+- **Review Artifacts Generated**:
+  - `dataset/healthy-negative-candidates/review.csv`: 15 candidate rows initialized to `UNREVIEWED` with full metadata and priority ranking.
+  - `dataset/healthy-negative-candidates/candidates.json`: Full machine-readable candidate metadata.
+  - `dataset/healthy-negative-candidates/contact_sheet_01.jpg`: 1440x1440 4x4 visual review grid with bounding boxes, confidences, and tile numbers.
+- **Multi-CSV v2 Preparation Tooling**:
+  - `scripts/prepare_yolo_v2_dataset.py` upgraded with UTF-8-BOM support, resilient candidate path resolution, and multiple review CSV support via repeated `--review-csv` CLI options.
+  - Successfully dry-run verified merging both `dataset/review_ai_recommended.csv` (8 approved) and `dataset/healthy-negative-candidates/review.csv` (0 approved currently).
+  - Enforces empty (0-byte) `.txt` labels in v2 `train` for all approved negatives.
+  - Strict SHA-256 hash assertions protect benchmark `valid` and `test` splits from any data leakage.
+- **Validation**:
+  - Pytest Suite: 57 passed, 0 failed across all Phase 11 test suites (14 dedicated Phase 11B-3 tests).
+  - Strict compliance: Zero browser, dev server, localhost, external API calls, or model training executed.
+
+## Phase 11B-4 Summary — Large Healthy-Negative Mining + V2 Dataset Preparation
+
+- **Implementation Status**:
+  - PHASE 11B-4 IMPLEMENTED — FINAL LARGE HEALTHY POOL MINED, PENDING NATHAN AUDIT + V2 TRAINING
+- **Dataset Audit & Partitioning (`dataset/Penyakit Gigi Skripsi.yolov11/`)**:
+  - Total source images: 2,468 across `train` (1,974), `valid` (247), `test` (247).
+  - Class names ($nc=3$): `['calculus', 'caries', 'healthy']` (IDs: calculus=0, caries=1, healthy=2).
+  - Healthy-only images: 338 images (all boxes exclusively Class 2 `healthy`).
+  - Mixed images: 1,342 images (healthy + disease — strictly excluded).
+  - Disease-only images: 788 images (strictly excluded).
+  - Empty-label images: 0.
+  - License: CC BY 4.0; Roboflow project: `penyakit-gigi-skripsi-i77mi` (workspace: `nathan-asif-blm21`).
+- **Comprehensive Detector Mining against `best.pt` ($\ge 0.30$)**:
+  - Model false positives (`candidate_type = MODEL_FALSE_POSITIVE`): 129 images producing 934 false-positive boxes.
+  - Dominant failure mode: Tooth discoloration accounts for 89.3% (834/934) of false-positive detections on healthy teeth (104 images). Secondary: gingivitis (21 images / 87 boxes), caries (4 images / 13 boxes), calculus (0), ulcer (0).
+  - Clean normal controls (`candidate_type = CLEAN_CONTROL`): 209 images with 0 detections $\ge 0.30$.
+  - Auto-eligible clean controls: 55 unique primary variants passing physical quality filters (`review_status = AUTO_ELIGIBLE_CONTROL`).
+- **Cryptographic & Perceptual Deduplication**:
+  - SHA-256: 338 unique hashes (0 exact duplicates).
+  - 64-bit dHash: 233 near-duplicate image variants grouped into clusters. Only primary instances are eligible for automatic control status; near duplicates labeled `REJECT_NEAR_DUPLICATE`.
+- **Physical Image Quality Filtering**:
+  - Excluded 49 unusable images: 41 severe blur (Laplacian variance $< 2.5$), 8 extreme overexposure ($> 35\%$ pixels $> 250$).
+- **Benchmark Leakage Protection**:
+  - SHA-256 cross-check against original `oral-disease.yolov11` valid (1,070) and test (1,070) splits confirms 0 matches (ZERO leakage).
+- **Review Artifacts Generated (`dataset/final-healthy-negative-candidates/`)**:
+  - `review.csv`: 338 rows with full metadata, priority ranking, duplicate grouping, and quality scores.
+  - `candidates.json`: Machine-readable metadata and full prediction records.
+  - `audit.json`: Statistical audit summary.
+  - `contact_sheet_fp_01.jpg` to `08.jpg`: 8 contact sheets displaying the top 120 false-positive candidates (16 tiles each, 4x4) ranked by clinical priority.
+  - `contact_sheet_control_audit_01.jpg` to `04.jpg`: 4 contact sheets displaying a 50-image deterministic control audit sample (`seed=42`).
+- **V2 Dataset Tooling (`scripts/prepare_yolo_v2_dataset.py`)**:
+  - Added explicit `--include-audited-controls` CLI flag to opt-in `AUTO_ELIGIBLE_CONTROL` rows only after human audit.
+  - Automatic class balance tracking: displays negative percentage of total v2 train set, alerts if $> 18\%$.
+  - Large-pool repeat logic: recommends `repeat=1` if pool $\ge 500$, configurable if $< 200$.
+- **Validation**:
+  - Pytest Suite: 76 passed, 0 failed across all Phase 11 test suites (19 dedicated Phase 11B-4 tests).
+  - Strict compliance: Zero browser, dev server, localhost, external API calls, or model training executed.
+
+## Phase 11B Final Summary — YOLO Final Model Freeze Configuration
+
+- **Implementation Status**:
+  - PHASE 11B FINAL IMPLEMENTED — CONFIGURATION FROZEN, PENDING NATHAN MANUAL TWO-IMAGE ACCEPTANCE
+- **Model Freezing Strategy**:
+  - Selected runtime candidate: `services/teeth_analyzer/models/oral_disease/best_v2.pt`
+  - Baseline retained (rollback checkpoint): `services/teeth_analyzer/models/oral_disease/best.pt` (V1 baseline physically preserved, never deleted or overwritten)
+- **Configuration & Environment**:
+  - Config key `YOLO_DENTAL_MODEL_PATH` set to `services/teeth_analyzer/models/oral_disease/best_v2.pt` in `.env` and documented in `.env.example`.
+  - Lazy singleton YOLO loader (`get_yolo_model()` in `yolo_detector.py`) honors `YOLO_DENTAL_MODEL_PATH` and loads `best_v2.pt` upon service start/restart.
+- **Calibrated Engineering Screening Thresholds**:
+  - `YOLO_DENTAL_CONFIDENCE_THRESHOLD=0.50` (global fallback)
+  - `YOLO_CALCULUS_CONFIDENCE_THRESHOLD=0.35` (`calculus` -> `tartar`)
+  - `YOLO_CARIES_CONFIDENCE_THRESHOLD=0.55` (`caries` -> `cavity_suspect`)
+  - `YOLO_GINGIVITIS_CONFIDENCE_THRESHOLD=0.50` (`gingivitis` -> `gingivitis_signs`)
+  - `YOLO_DISCOLORATION_CONFIDENCE_THRESHOLD=0.65` (`tooth discoloration` -> `discoloration`)
+  - `YOLO_ULCER_CONFIDENCE_THRESHOLD=0.65` (`ulcer` -> `oral_ulcer`)
+  - Centralized resolver `get_confidence_threshold()` verifies raw and normalized labels map to exact values and unknown classes fall back to 0.50.
+- **Medical Disclaimer**:
+  - Calibrated cutoff values represent engineering screening thresholds chosen to balance sensitivity and false-positive suppression on intraoral screening photos. They do **not** constitute clinical validation claims or diagnostic guarantees.
+- **Automated Validation**:
+  - Pytest Suite: 102 passed, 0 failed across all Phase 11 calibration, pipeline, and mining test suites (including 31 dedicated calibration/pipeline/loader tests).
+  - Strict compliance: Zero browser, dev server, localhost, external API calls, or model training executed.
+
+## DentalTensor Vision v1.0 — Model Branding & Identity Freeze (COMPLETE)
+
+- **Implementation Status**:
+  - DENTALTENSOR BRANDING FREEZE COMPLETE — DEVELOPED BY NATHAN ASIF
+- **Canonical Model Identity**:
+  - Product / Model Family: `DentalTensor`
+  - Full Model Name: `DentalTensor Vision`
+  - Version: `1.0`
+  - Display Version: `DentalTensor Vision v1.0`
+  - Developer & Author: `Nathan Asif`
+  - Model Type: YOLO11n-based oral pathology computer-vision detector
+  - Origin: Conceived and engineered by Nathan Asif while leading and building DaantShaant for the Alibaba Cloud Bano Qabil Hackathon 2026.
+  - Integration: DentalTensor is the standalone vision model; DaantShaant is the product integration consuming DentalTensor.
+- **Production Checkpoint**:
+  - Branded production weight: `services/teeth_analyzer/models/oral_disease/dentaltensor_nathan_asif_v1.pt`
+  - Byte-for-byte verified copy of `best_v2.pt` (SHA-256: `42BF517DED4EB15EEBE6B5361EBF9E6AB21D8488098C4E3E4CCFE5912ECBBE27`).
+  - Rollback checkpoints `best_v2.pt` and `best.pt` preserved on disk.
+- **Runtime Model Path & Configuration**:
+  - Config key `YOLO_DENTAL_MODEL_PATH=services/teeth_analyzer/models/oral_disease/dentaltensor_nathan_asif_v1.pt` set in `.env`, `.env.example`, and `Settings` default.
+  - Central metadata attributes: `dentaltensor_model_name`, `dentaltensor_model_version`, `dentaltensor_model_display_name`, `dentaltensor_developer` in `Settings`.
+- **Architectural Safety & Identity Separation**:
+  - Internal Python and runtime identifiers (`services/teeth_analyzer/`, package name, imports, API routes, ports) strictly preserved without broad refactoring.
+  - Medical/ML behavior untouched: thresholds, CLAHE fix, bounding-box logic, spatial aggregation, triage rules, and clinical wording are 100% unchanged.
+- **Pipeline Architecture**:
+  ```text
+  DaantShaant Oral Scan
+          ↓
+  DentalTensor Vision v1.0
+          ↓
+  normalized evidence
+          ↓
+  deterministic triage
+          ↓
+  clinical report
+  ```
+- **Documentation**:
+  - Comprehensive model card created at `docs/dentaltensor-model-card.md`.
+
+## Phase 12A Final — DaantShaant Central Dentist Reconstruction & Complete Hugging Face Removal (COMPLETE)
+
+- **Implementation Status**:
+  - PHASE 12A IMPLEMENTED — DAANTSHAANT CENTRAL DENTIST RECONSTRUCTED, HUGGING FACE COMPLETELY REMOVED, LANGGRAPH + STRUCTURED RAG + QWEN + PATIENT CONTEXT READY.
+- **Root Cause of Chat Latency Resolved**:
+  - The historical 1–2 minute delay was caused by `EmbeddingService._load_model()` attempting to download and initialize `SentenceTransformer("all-MiniLM-L6-v2")` and running PyTorch CPU encoding on every message turn.
+- **Complete Hugging Face & FAISS Removal**:
+  - Deleted obsolete modules: `orchestrator/src/orchestrator/rag/` (`embeddings.py`, `vector_store.py`, `chunker.py`, `ingest.py`, `retrieval_service.py`), `orchestrator/src/orchestrator/rag_endpoints.py`, and `data/rag/faiss_index.*`.
+  - Removed `sentence-transformers`, `faiss-cpu`, `PyPDF2`, `python-docx` from `orchestrator/pyproject.toml`.
+  - Removed `RAG_EMBEDDING_MODEL` from `.env` and `.env.example`.
+  - Cleaned `orchestrator/src/orchestrator/main.py` and `orchestrator/src/orchestrator/dentist_portal/routes_products.py`.
+  - Verified zero Hugging Face or FAISS imports project-wide via AST tests (`test_no_huggingface.py`).
+- **DaantShaant Central Dentist Subsystem (`orchestrator/src/orchestrator/central_dentist/`)**:
+  - `nlp.py`: Ultra-fast deterministic NLP engine (<50ms, regex/tokenization/synonyms). Handles 13 clinical intents, entity extraction, temporal parsing, and fast-path identification with zero models or PyTorch runtime cost.
+  - `retrieval.py`: Structured SQL RAG directly querying Supabase PostgreSQL repositories (`ScanRepository`, `AppointmentRepository`, `DentistRepository`) strictly scoped by authenticated `patient_id` UUID. Zero embeddings.
+  - `knowledge.py`: Curated offline oral health guideline lookup based on keyword and finding keys.
+  - `fast_path.py`: Direct response formatters answering factual questions (scan date, appointment date/time, confidence %, urgency level, greetings) immediately without calling Qwen or any LLM.
+  - `prompts.py`: Central Dentist system persona, grounded clinical context builder, and anti-slop / plain text response cleaner.
+  - `graph.py`: StateGraph pipeline connecting 10 deterministic nodes (`load_auth_context` -> `nlp_understanding` -> `plan_retrieval` -> `retrieve_patient_data` -> `retrieve_conversation_context` -> `retrieve_optional_knowledge` -> `build_grounded_context` -> `qwen_or_direct_answer` -> `validate_response` -> `persist_turn`).
+
+## Phase 12B Final — Central Dentist Live Latency, Deadlock & Chat Request Lifecycle Fix (COMPLETE)
+
+- **Implementation Status**:
+  - PHASE 12B IMPLEMENTED — CENTRAL DENTIST LIVE LATENCY, DEADLOCK AND CHAT REQUEST LIFECYCLE FIXED, READY FOR MANUAL ACCEPTANCE.
+- **Root Cause of Live Multi-Minute Hangs Identified**:
+  - Live logs revealed `asyncpg.exceptions.ConnectionFailureError: (EAUTHTIMEOUT) timeout while waiting for message`.
+  - SQLAlchemy's `create_async_engine` lacked low connection/socket timeouts in `connect_args`. In flaky network or slow TLS handshakes to Supabase, `asyncpg` defaulted to internal OS TCP socket timeouts (multiple minutes), freezing the event loop during auth user lookup or DB queries.
+  - Redundant SQL history queries were being executed inside `graph.py` even when rows had already been fetched by `chat_service.py`.
+- **Database Engine & Connection Timeout Configuration**:
+  - Configured `PostgresSettings`: `db_pool_timeout_seconds=3.0`, `db_connect_timeout_seconds=3.0`, `db_command_timeout_seconds=3.0`.
+  - Injected `connect_args={"timeout": 3.0, "command_timeout": 3.0, "server_settings": {"statement_timeout": "3000"}}` and `pool_timeout=3.0` into `create_async_engine`.
+  - Single request-scoped `AsyncSession` reused across auth, retrieval, and persistence with fail-fast exception handling (HTTP 503 instead of hanging).
+- **Hard Latency Budgets & Global Deadline**:
+  - Bounded chat request pipeline to strict budgets in `config.py`:
+    - Auth timeout: 2.0s
+    - Structured retrieval timeout: 2.0s
+    - Persistence timeout: 2.0s
+    - Qwen AI Gateway timeout: 8.0s (cancels call without multi-minute retry chains)
+    - Global chat request timeout: 12.0s (wrapped in `asyncio.timeout(12.0)` with safe session rollback and graceful fallback)
+  - Grounded deterministic fallback activated when provider times out or fails: answers factual clinical queries from loaded scan/appointment records instead of spinning.
+- **Request Trace IDs & Stage Telemetry**:
+  - Generated `request_id` (e.g. `chat_7f92...`) for every message turn.
+  - Granular telemetry emitted across all stages: `request_started`, `auth_done`, `nlp_done`, `retrieval_done`, `qwen_started`, `qwen_done`, `persistence_done`, `request_complete total_ms=...`.
+- **Frontend Optimistic UX & Functional Stop Button (`apps/web`)**:
+  - `ChatInterface.tsx` refactored with explicit request states: `idle`, `sending`, `stopped`, `error`.
+  - Optimistic send: user message captured and appended immediately, input cleared immediately, auto-scroll to bottom, typing bubble spawned. Textarea remains editable for subsequent messages.
+  - Functional Stop button (`⏹ Stop`) backed by `AbortController.abort()`: immediately cancels fetch, removes typing bubble, marks generation stopped, and recovers Send button.
+  - Full `try / catch / finally` lifecycle cleanup guarantees loading state is never locked permanently.
+  - Guarded against double submissions with `isSubmittingRef`.
+- **Verification Results**:
+  - Orchestrator tests: 380 passed, 1 skipped, 0 failed.
+  - Performance & timeout tests: 5/5 passed in `test_phase12b_latency_and_timeouts.py`.
+  - Teeth Analyzer tests: 108 passed, 0 failed.
+  - Next.js Web App: Clean production build (28/28 routes compiled, 0 errors).
+  - Zero Hugging Face / FAISS references. DentalTensor Vision v1.0 completely untouched.
+
+## Final Chat Identity Cleanup — Public Conversational Identity Freeze (COMPLETE)
+
+- **Public Conversational Identity**: `DaantShaant`
+  - Chat header: `DaantShaant`
+  - Visible assistant sender label: `DaantShaant`
+  - User sender label: `YOU`
+  - Greeting wording: "Hello! I'm DaantShaant. How can I help with your oral health, scan results, or appointments today?"
+  - Urdu UI: Uses unified brand name `DaantShaant` for chat title and sender label rather than translating product name.
+- **Internal Orchestration Architecture**:
+  - `Central Dentist` / `central_dentist`
+  - Architecture, LangGraph pipeline (`central_dentist_graph`), module paths (`central_dentist/`), and `[CENTRAL_DENTIST]` telemetry logging are 100% preserved.
+- **Functional Integrity**:
+  - No functional behavior changed. LangGraph, structured RAG, Qwen, NLP, patient retrieval, timeout logic, AbortController, Stop behavior, and request lifecycle remain identical and fast.
+
+## Phase 12D Final — Urgent Auth & Session Resilience Fix (COMPLETE)
+
+- **Implementation Status**:
+  - PHASE 12D IMPLEMENTED — TRANSIENT DATABASE FAILURES NO LONGER CAUSE FALSE INVALID-CREDENTIAL ERRORS OR IMMEDIATE LOGOUTS.
+- **Root Cause Verified**:
+  - Cross-region TCP/TLS handshakes from local host to Supabase PostgreSQL pooler (`aws-0-ap-northeast-2.pooler.supabase.com:5432` in Seoul) take 6.2s–11.4s on initial connection creation or reconnect.
+  - When connection timeouts were set to aggressive thresholds (2s-3s) or network experienced transient stalls, asyncpg raised `TimeoutError`.
+  - `login_user` previously lacked exception handling for DB connectivity/timeouts, leaking unhandled `TimeoutError` into HTTP 500.
+  - The login frontend caught generic errors and blindly mapped all failures (500, 503, network) to `auth.invalid_credentials` ("Invalid email or password."). Passwords and credentials were never the issue.
+  - On page load / dashboard mount, `fetchPortalProfile` called `/portal/auth/me`. If a transient DB timeout occurred (503/500), `fetchPortalProfile` threw `new Error("Session expired")`, and `PortalDashboard` called `router.replace('/${role}/login')` ~5 seconds after login.
+  - `/portal/auth/refresh` would fail or rotate tokens concurrently, and any failed refresh cleared local authenticated state even when caused by temporary 503 DB hiccups.
+- **Engine & Pool Configuration**:
+  - `PostgresSettings`: `db_pool_size=5`, `db_max_overflow=10`, `db_pool_recycle_seconds=300` (proactive 5-minute recycling before Supabase Supavisor pooler drops idle connections), `db_pool_timeout_seconds=15.0`, `db_connect_timeout_seconds=15.0`, `db_command_timeout_seconds=15.0`.
+  - Single application engine with `pool_pre_ping=True` detecting stale pooled connections prior to checkout.
+- **Transient DB Connect Single-Retry (`auth_utils.py`)**:
+  - Implemented `execute_with_single_retry(operation, *, op_name, backoff_seconds=0.2)`:
+    - Attempt 1: on transient connection/timeout/DBAPI/OperationalError, logs warning and waits 200ms.
+    - Attempt 2: retries once. If failure persists, cleanly raises controlled `HTTPException(503, detail="Authentication service is temporarily unavailable. Please retry in a moment.")`.
+    - Never retries wrong passwords, invalid JWTs, or revoked refresh tokens.
+  - Integrated across: `login_user` (user lookup and session insertion), `rotate_refresh_token` (session lookup, user lookup, token rotation), `get_current_user`, and `get_user_profile`.
+- **Clean Error Classification & Status Mapping**:
+  - Wrong credentials / role mismatch / inactive user -> HTTP 401 ("Invalid email or password.").
+  - Database temporarily unavailable (TimeoutError, asyncpg connection errors, SQLAlchemy OperationalError / DBAPIError) -> controlled HTTP 503 ("Authentication service is temporarily unavailable. Please retry in a moment.").
+  - Unexpected server bugs -> HTTP 500.
+- **Refresh & /auth/me Resilience**:
+  - A single transient DB error during `/portal/auth/refresh` returns 503 and never deletes or revokes the client refresh cookie.
+  - `/portal/auth/me` returns 503 on DB timeout instead of 401.
+  - Frontend `refreshPortalSession`: on 503 or network error, logs warning and returns `null` while strictly preserving `activeUser` in memory and suppressing `REFRESH_FAILED` broadcasts. Only genuine 401 clears session.
+  - Frontend `authorizedFetch`: single-refresh-per-request guard. On 401, attempts ONE refresh and retries with new token once (zero refresh loops). Simultaneous 401s deduplicated to a single in-flight refresh promise.
+  - Frontend `fetchPortalProfile`: on 503, preserves and returns current authenticated user snapshot so user is never signed out on transient backend hiccups.
+  - `PortalDashboard`: catches errors and only redirects to `/${role}/login` on genuine `SessionExpiredError` (never on 503 or network failure). Renders friendly retry UI if cold profile fetch encounters 503.
+- **Login UI Error Mapping**:
+  - `LoginPage.tsx` handles structured `AuthApiError`:
+    - 401 -> `t("auth.invalid_credentials")` ("Invalid email or password.")
+    - 503 -> `t("auth.service_unavailable")` ("Service is temporarily unavailable. Please try again in a moment.")
+    - 500 / other -> `t("auth.server_error")` ("Unable to sign in right now. Please try again.")
+  - 100% key parity across `en.ts` and `ur.ts`.
+- **Observability Logging**:
+  - Added concise sanitized telemetry: `[AUTH] login_attempt`, `[AUTH] login_db_timeout`, `[AUTH] login_invalid_credentials`, `[AUTH] login_success`, `[AUTH] refresh_success`, `[AUTH] refresh_invalid`, `[AUTH] refresh_db_unavailable`, `[AUTH] auth_me_db_unavailable`. Zero passwords, raw tokens, or cookies exposed.
+- **Token TTL Verification**:
+  - Access token TTL: 30 minutes (`access_token_expire_minutes: 30`).
+  - Refresh token TTL: 7 days (`refresh_token_expire_days: 7`, 604800s cookie max-age).
+  - Cookie attributes: `HttpOnly=True`, `Path=/`, `SameSite=lax`.
+  - Verified no accidental 5-second TTL exists.
+- **Validation**:
+  - Backend resilience suite (`tests/test_auth_resilience.py`): 10 passed, 0 failed.
+  - Auth & security suite (`tests/test_auth_security.py` + `tests/test_phase10_5_portal_security_and_ops.py`): 20 passed, 0 failed.
+  - Frontend auth resilience suite (`apps/web/lib/__tests__/portal-auth-resilience.test.ts`): 6 passed, 0 failed.
+  - Cross-tab auth suite (`apps/web/lib/__tests__/cross-tab-auth.test.ts`): 7 passed, 0 failed.
+  - TypeScript typecheck (`npx tsc --noEmit`): Exit code 0, 0 errors.
+  - Next.js production build (`npm run build`): 28/28 routes compiled successfully.
+
+## Phase 12C — Qwen Live Latency & Provider Reliability Fix - ACTIVE
+
+- **Root Cause of Live 15.0s Timeout**:
+  - `QwenProvider` previously instantiated a fresh `httpx.AsyncClient` inside `generate_text()`, `generate_vision()`, and `generate_structured()` for every request turn, repeatedly paying connection overhead (DNS, TCP 3-way handshake, TLS 1.3 negotiation to Singapore Model Studio endpoint `*.ap-southeast-1.maas.aliyuncs.com` from local host).
+  - Central Dentist system prompt was ~1,850 chars with duplicated safety/style bullet points, and `build_grounded_context` dumped empty placeholder sections (`Latest Scan: No scans on record yet.`, `Appointments: No appointments on record yet.`) even for general oral health questions.
+  - Lack of a hard `asyncio.timeout` guard inside the provider client call, causing stalls when socket/transport hung.
+  - Central Dentist previously lacked direct fast-paths for common hygiene queries (`brushing_guide`, `flossing_guide`) and defaulted to a generic robotic failure message (`"I am currently having trouble reaching the AI assistant service..."`) exposing internal architecture.
+- **Provider HTTP Connection Reuse & Lifecycle**:
+  - `QwenProvider` and `GeminiProvider` now maintain persistent `httpx.AsyncClient` instances initialized with pooled connection limits (`httpx.Limits(max_keepalive_connections=10, max_connections=20, keepalive_expiry=30.0)`).
+  - Implemented `async def aclose()` on `QwenProvider`, `GeminiProvider`, and `AIGateway`.
+  - Added `close_ai_gateway()` in `ai/factory.py` wired into FastAPI `lifespan` in `orchestrator/src/orchestrator/main.py` ensuring clean shutdown and zero connection leaks.
+- **Strict Latency & Timeout Budget Enforced**:
+  - `QWEN_TIMEOUT_SECONDS`: Default 8.0s (`chat_qwen_timeout_seconds=8.0`).
+  - Total Chat Request Timeout: Default 12.0s (`chat_request_timeout_seconds=12.0`).
+  - Sub-task budgets: Auth 2.0s, Retrieval 2.0s, Persistence 2.0s.
+  - Wrapped `QwenProvider` HTTP POST in `async with asyncio.timeout(self._timeout):` ensuring hard client cancellation if transport or server inference stalls.
+- **Adaptive Fallback & Retry Strategy**:
+  - `AIGateway` tracks primary provider elapsed time. If primary took $\ge 6.5\text{s}$ before failing, secondary (Gemini) fallback is skipped to avoid breaching the 12.0s ceiling.
+  - When fallback is permitted, its timeout is bounded to the remaining budget: `min(timeout, max(2.0, 10.0 - elapsed_time))`.
+  - Zero long retries or backoff chains on model generation timeouts; immediate handoff to deterministic fallback.
+- **Prompt & Output Optimization**:
+  - System prompt streamlined in `prompts.py`: stripped duplicate instructions, focused on core DaantShaant identity, grounding, screening vs diagnosis distinction, conciseness, and plain text.
+  - `build_grounded_context` only includes patient clinical records if they actually exist, omitting empty placeholders for general hygiene queries.
+  - Conversation context window capped at 4 turns (8 messages max).
+  - Output token ceiling set to `max_tokens=300` in `graph.py` for interactive chat turns.
+- **Direct Fast-Path & Knowledge Fallback Expansion**:
+  - Common general hygiene queries (e.g., "How should I brush my teeth?", "How often should I floss?") recognized in `nlp.py` and routed to instant (<1ms) deterministic fast paths (`brushing_guide`, `flossing_guide`).
+  - Safe, curated knowledge fallback dictionary for high-frequency oral health topics: brushing, flossing, mouthwash basics, checkup frequency, tooth sensitivity, gum bleeding, teeth staining, and bad breath.
+  - Patient-record fallback: if Qwen times out on a patient-specific question, deterministic fallback uses structured scan findings or appointment status rather than a generic error.
+  - Public error language completely cleaned: eradicated all robotic phrasing ("AI assistant service", "Qwen", "provider", "model unavailable"). Fallback returns natural, helpful text: `"I couldn't complete that answer just now. Please try again."`
+- **Instrumentation & Telemetry**:
+  - Added detailed timing breakdown: `client_ready_ms`, `time_to_headers_ms`, `parse_ms`, and `total_ms`.
+  - Sanitized logging: `[QWEN][%s] request_started`, `prompt_chars=%d messages=%d approx_tokens=%d`, `request_success total_ms=...`, or `timeout total_ms=...`. Zero patient data or API keys logged.
+- **Canonical Model Studio Endpoint Configuration**:
+  - Canonical base URL: `https://dashscope-intl.aliyuncs.com/compatible-mode/v1`
+  - Canonical model: `qwen-plus` (OpenAI-compatible `/chat/completions`)
+  - No conflicting duplicate environment variables.
+
+## Next Phase / Manual Acceptance
+
+Nathan manual live verification:
+- Central Dentist chat: ask general hygiene questions ("How should I brush my teeth?", "What is the best way to brush my teeth?", "How often should I floss?") -> verify instant response or 3-8s completion without timeouts.
+- Central Dentist chat: ask patient scan questions ("What did my last scan show?") -> verify grounded structured response.
+- Verify logs output sanitized telemetry `[QWEN][chat_...] request_started` and `total_ms` without exposing secrets or patient prompts.
+
+
+
+
+

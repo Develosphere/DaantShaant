@@ -145,8 +145,17 @@ def get_ai_gateway() -> AIGateway:
     return _gateway
 
 
+async def close_ai_gateway() -> None:
+    """Cleanly close persistent provider resources on shutdown."""
+    global _gateway
+    if _gateway is not None:
+        await _gateway.aclose()
+        _gateway = None
+
+
 __all__ = [
     "SUPPORTED_AI_PROVIDERS",
     "create_ai_gateway",
     "get_ai_gateway",
+    "close_ai_gateway",
 ]

@@ -94,6 +94,30 @@ class GeminiProvider(AIProvider):
         if self._timeout is None or self._timeout <= 0:
             raise ProviderConfigurationError("AI_REQUEST_TIMEOUT_SECONDS must be a positive number")
 
+        self._client: httpx.AsyncClient | None = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        """Return existing persistent client or initialize a new one with connection pooling."""
+        if self._client is None or self._client.is_closed:
+            kwargs: dict[str, Any] = {
+                "timeout": httpx.Timeout(self._timeout, connect=5.0),
+                "limits": httpx.Limits(
+                    max_keepalive_connections=10,
+                    max_connections=20,
+                    keepalive_expiry=30.0,
+                ),
+            }
+            if self._transport is not None:
+                kwargs["transport"] = self._transport
+            self._client = httpx.AsyncClient(**kwargs)
+        return self._client
+
+    async def aclose(self) -> None:
+        """Cleanly close the long-lived HTTP client on application shutdown."""
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
+
     # ------------------------------------------------------------------
     # AIProvider implementation
     # ------------------------------------------------------------------
@@ -190,11 +214,8 @@ class GeminiProvider(AIProvider):
             "Content-Type": "application/json",
         }
         try:
-            kwargs: dict[str, Any] = {"timeout": self._timeout}
-            if self._transport is not None:
-                kwargs["transport"] = self._transport
-            async with httpx.AsyncClient(**kwargs) as client:
-                response = await client.post(endpoint, headers=request_headers, json=payload)
+            client = self._get_client()
+            response = await client.post(endpoint, headers=request_headers, json=payload)
         except httpx.TimeoutException as exc:
             raise ProviderTimeoutError(
                 f"Gemini request exceeded its {self._timeout}s HTTP timeout"

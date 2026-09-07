@@ -55,6 +55,14 @@ class AIGateway:
         self.timeout_seconds = float(timeout_seconds)
 
     # ------------------------------------------------------------------
+    async def aclose(self) -> None:
+        """Close provider resources."""
+        if hasattr(self.primary, "aclose"):
+            await self.primary.aclose()
+        if self.fallback is not None and hasattr(self.fallback, "aclose"):
+            await self.fallback.aclose()
+
+    # ------------------------------------------------------------------
     # Public routing API
     # ------------------------------------------------------------------
     async def generate_text(self, request: TextRequest) -> AIResult:
@@ -71,10 +79,12 @@ class AIGateway:
     # ------------------------------------------------------------------
     async def _run(self, method: str, request: TextRequest | VisionRequest | StructuredRequest) -> AIResult:
         started = time.perf_counter()
+        primary_elapsed = 0.0
         try:
             result = await self._call(self.primary, method, request)
             return self._normalize(result, self.primary, started, fallback_used=False)
         except AIGatewayError as exc:
+            primary_elapsed = time.perf_counter() - started
             # Configuration, request-construction, and schema/programming
             # errors must NEVER be masked by a silent fallback.
             if not exc.fallback_eligible:
@@ -82,18 +92,34 @@ class AIGateway:
             if self.fallback is None:
                 raise
             primary_error = exc
+
+            # Skip fallback if primary elapsed time consumed safe request budget
+            if primary_elapsed >= 6.5:
+                logger.warning(
+                    "Skipping fallback provider %s: primary elapsed %.2fs exceeds safe fallback budget",
+                    self.fallback.name,
+                    primary_elapsed,
+                )
+                raise AllProvidersFailedError(
+                    f"Primary provider {self.primary.name} failed ({type(primary_error).__name__}); "
+                    f"fallback {self.fallback.name} skipped to preserve latency ceiling (elapsed {primary_elapsed:.1f}s)",
+                    provider_errors={self.primary.name: primary_error},
+                ) from exc
+
             logger.warning(
-                "Primary AI provider %s failed (%s); trying fallback %s",
+                "Primary AI provider %s failed (%s) in %.2fs; trying fallback %s",
                 self.primary.name,
                 type(exc).__name__,
+                primary_elapsed,
                 self.fallback.name,
             )
 
-        # Fallback attempt.
-        started = time.perf_counter()
+        # Fallback attempt with bounded budget
+        started_fb = time.perf_counter()
+        fb_timeout = min(self.timeout_seconds, max(2.0, 10.0 - primary_elapsed))
         try:
-            result = await self._call(self.fallback, method, request)
-            return self._normalize(result, self.fallback, started, fallback_used=True)
+            result = await self._call(self.fallback, method, request, timeout_override=fb_timeout)
+            return self._normalize(result, self.fallback, started_fb, fallback_used=True)
         except AIGatewayError as exc:
             if not exc.fallback_eligible:
                 raise
@@ -107,7 +133,13 @@ class AIGateway:
                 },
             ) from exc
 
-    async def _call(self, provider: AIProvider, method: str, request) -> AIResult:
+    async def _call(
+        self,
+        provider: AIProvider,
+        method: str,
+        request,
+        timeout_override: float | None = None,
+    ) -> AIResult:
         """Invoke one adapter method, converting timeouts to typed errors.
 
         Adapters are expected to raise :class:`AIGatewayError` subclasses for
@@ -116,12 +148,13 @@ class AIGateway:
         :class:`ProviderInternalError` so programming bugs are never silently
         masked by a provider switch.
         """
+        timeout_s = timeout_override if timeout_override is not None else self.timeout_seconds
         handler: Callable[[object], Awaitable[AIResult]] = getattr(provider, method)
         try:
-            return await asyncio.wait_for(handler(request), timeout=self.timeout_seconds)
+            return await asyncio.wait_for(handler(request), timeout=timeout_s)
         except asyncio.TimeoutError as exc:
             raise ProviderTimeoutError(
-                f"{provider.name} timed out after {self.timeout_seconds}s"
+                f"{provider.name} timed out after {timeout_s}s"
             ) from exc
         except AIGatewayError:
             raise

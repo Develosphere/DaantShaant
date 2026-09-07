@@ -35,6 +35,8 @@ class TextRequest(BaseModel):
     max_tokens: int | None = None
     model: str | None = None
     """Optional explicit model id; providers fall back to their configured default."""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    """Optional request tracking metadata (e.g. request_id)."""
 
 
 class VisionRequest(BaseModel):
@@ -52,6 +54,8 @@ class VisionRequest(BaseModel):
     max_tokens: int | None = None
     model: str | None = None
     """Optional explicit model id; providers fall back to their configured default."""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    """Optional request tracking metadata (e.g. request_id)."""
 
 
 class StructuredRequest(BaseModel):
@@ -70,6 +74,8 @@ class StructuredRequest(BaseModel):
     max_tokens: int | None = None
     model: str | None = None
     """Optional explicit model id; providers fall back to their configured default."""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    """Optional request tracking metadata (e.g. request_id)."""
 
 
 class AIResult(BaseModel):

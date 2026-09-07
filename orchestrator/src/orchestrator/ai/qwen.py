@@ -22,6 +22,7 @@ Design rules:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -99,12 +100,36 @@ class QwenProvider(AIProvider):
             raise ProviderConfigurationError("AI_REQUEST_TIMEOUT_SECONDS must be a positive number")
 
         self._endpoint = self._base_url.rstrip("/") + "/chat/completions"
+        self._client: httpx.AsyncClient | None = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        """Return existing persistent client or initialize a new one with connection pooling."""
+        if self._client is None or self._client.is_closed:
+            kwargs: dict[str, Any] = {
+                "timeout": httpx.Timeout(self._timeout, connect=5.0),
+                "limits": httpx.Limits(
+                    max_keepalive_connections=10,
+                    max_connections=20,
+                    keepalive_expiry=30.0,
+                ),
+            }
+            if self._transport is not None:
+                kwargs["transport"] = self._transport
+            self._client = httpx.AsyncClient(**kwargs)
+        return self._client
+
+    async def aclose(self) -> None:
+        """Cleanly close the long-lived HTTP client on application shutdown."""
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
 
     # ------------------------------------------------------------------
     # AIProvider implementation
     # ------------------------------------------------------------------
     async def generate_text(self, request: TextRequest) -> AIResult:
         messages = self._plain_messages(request.messages, request.prompt)
+        req_id = request.metadata.get("request_id") if request.metadata else None
         return await self._chat(
             messages,
             # Plain text generation is conversational generation: it defaults to
@@ -113,10 +138,12 @@ class QwenProvider(AIProvider):
             model=request.model or self._chat_model or self._default_model,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
+            request_id=req_id,
         )
 
     async def generate_vision(self, request: VisionRequest) -> AIResult:
         prompt = request.prompt or self._last_user_text(request.messages)
+        req_id = request.metadata.get("request_id") if request.metadata else None
         user_content: list[dict[str, Any]] = [
             {"type": "text", "text": prompt},
             {
@@ -132,10 +159,12 @@ class QwenProvider(AIProvider):
             model=request.model or self._vision_model,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
+            request_id=req_id,
         )
 
     async def generate_structured(self, request: StructuredRequest) -> AIResult:
         prompt = request.prompt or self._last_user_text(request.messages)
+        req_id = request.metadata.get("request_id") if request.metadata else None
         instruction = self._structured_instruction(prompt, request.json_schema)
         if request.image_base64:
             user_content: list[dict[str, Any]] | str = [
@@ -156,6 +185,7 @@ class QwenProvider(AIProvider):
             temperature=request.temperature,
             max_tokens=request.max_tokens,
             json_mode=True,
+            request_id=req_id,
         )
         result.data = self._parse_json_object(result.content)
         self._validate_against_schema(result.data, request.json_schema)
@@ -172,7 +202,25 @@ class QwenProvider(AIProvider):
         temperature: float | None,
         max_tokens: int | None,
         json_mode: bool = False,
+        request_id: str | None = None,
     ) -> AIResult:
+        req_id = request_id or "qwen_req"
+        prompt_chars = sum(
+            len(m.get("content", "")) if isinstance(m.get("content"), str) else 0
+            for m in messages
+        )
+        msg_count = len(messages)
+        approx_tokens = prompt_chars // 4
+
+        logger.info("[QWEN][%s] request_started", req_id)
+        logger.info(
+            "[QWEN][%s] prompt_chars=%d messages=%d approx_tokens=%d",
+            req_id,
+            prompt_chars,
+            msg_count,
+            approx_tokens,
+        )
+
         payload: dict[str, Any] = {"model": model, "messages": messages}
         if temperature is not None:
             payload["temperature"] = temperature
@@ -187,25 +235,47 @@ class QwenProvider(AIProvider):
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
         }
+
+        t_client_0 = time.perf_counter()
+        client = self._get_client()
+        client_ready_ms = (time.perf_counter() - t_client_0) * 1000.0
+
+        t_send_0 = time.perf_counter()
         try:
-            kwargs: dict[str, Any] = {"timeout": self._timeout}
-            if self._transport is not None:
-                kwargs["transport"] = self._transport
-            async with httpx.AsyncClient(**kwargs) as client:
-                response = await client.post(self._endpoint, headers=request_headers, json=payload)
-        except httpx.TimeoutException as exc:
+            async with asyncio.timeout(self._timeout):
+                req = client.build_request("POST", self._endpoint, headers=request_headers, json=payload)
+                response = await client.send(req, stream=True)
+                time_to_headers_ms = (time.perf_counter() - t_send_0) * 1000.0
+                await response.aread()
+        except (httpx.TimeoutException, TimeoutError) as exc:
+            total_ms = (time.perf_counter() - started) * 1000.0
+            logger.warning("[QWEN][%s] timeout total_ms=%.1f", req_id, total_ms)
             raise ProviderTimeoutError(
                 f"Qwen request exceeded its {self._timeout}s HTTP timeout"
             ) from exc
         except httpx.TransportError as exc:
-            # Connect failures, DNS errors, and other transport-level problems.
+            total_ms = (time.perf_counter() - started) * 1000.0
+            logger.warning("[QWEN][%s] transport_error (%s) total_ms=%.1f", req_id, type(exc).__name__, total_ms)
             raise ProviderUnavailableError(
                 f"Qwen endpoint unreachable ({type(exc).__name__})"
             ) from exc
-        latency_ms = round((time.perf_counter() - started) * 1000.0, 3)
 
+        total_ms = round((time.perf_counter() - started) * 1000.0, 3)
         self._raise_for_status(response)
-        return self._parse_completion(response, latency_ms=latency_ms)
+
+        t_parse_0 = time.perf_counter()
+        result = self._parse_completion(response, latency_ms=total_ms)
+        parse_ms = (time.perf_counter() - t_parse_0) * 1000.0
+
+        logger.info(
+            "[QWEN][%s] request_success total_ms=%.1f time_to_headers_ms=%.1f parse_ms=%.1f client_ready_ms=%.1f",
+            req_id,
+            total_ms,
+            time_to_headers_ms,
+            parse_ms,
+            client_ready_ms,
+        )
+        return result
 
     def _raise_for_status(self, response: httpx.Response) -> None:
         """Map HTTP failures to the correct fallback class. Never echoes secrets."""

@@ -1475,13 +1475,688 @@ Replaced hardcoded and placeholder values in Patient and Dentist dashboards with
 - TypeScript Type Check (`npx tsc --noEmit`): Exit code 0, 0 errors.
 - Next.js Production Build (`npm run build`): Exit code 0, 28/28 static and dynamic routes compiled successfully.
 - Strict compliance: NO browser, dev server, localhost, or live testing performed by agent.
+### Next
+
+Phase 11A — Specialized YOLO Dental Pathology Perception Pipeline.
+
+---
+
+## Phase 11A — Specialized YOLO Dental Pathology Perception Pipeline
+
+**Date:** September 2026
+
+**Status:** IMPLEMENTED — PENDING NATHAN MANUAL ACCEPTANCE
+
+### Summary
+
+Replaced Qwen multimodal vision as the normal visual pathology detector with local Ultralytics YOLO11n oral disease perception (`teeth_analyzer/yolo_detector.py`), confidence filtering (`threshold >= 0.50`), spatial aggregation (localized, multiple, generalized), deterministic clinical triage (`diagnosis/triage.py`), and text-only Qwen patient report generation (`orchestrator/clinical/report_generator.py`).
+
+### Key Decisions & Architecture
+
+- **Visual Perception**: Local YOLO11n model trained offline on Modal (Roboflow Universe oral-disease dataset, 10,698 images, CC BY 4.0).
+- **Locked Class Map**:
+  - `calculus` -> `tartar`
+  - `caries` -> `cavity_suspect`
+  - `gingivitis` -> `gingivitis_signs`
+  - `tooth discoloration` -> `discoloration`
+  - `ulcer` -> `oral_ulcer`
+- **Calculus vs Discoloration Safety**: Tooth discoloration is never converted to calculus/tartar. Spatial aggregation recognizes generalized discoloration across the dentition to prevent yellow teeth from being reported as tartar buildup. If both conditions are detected, both are preserved separately.
+- **Oral Ulcer Addition**: Added `oral_ulcer` finding and `ConditionLabel.ORAL_ULCER` with cautious non-definitive wording ("Visible oral ulcer / sore") and routine follow-up recommendation if persistent beyond 10-14 days. Does not imply cancer or systemic disease.
+- **Detector Failure & No-Finding Safety**: If model weights are missing or inference crashes, raises a typed pipeline error (`VisionBackendError`) — never fabricates healthy findings or silently claims "no concerns". Clean scans with 0 detections return non-definitive screening statement: "No supported visible pathology was detected by this screening model."
+- **Qwen Text-Only Role**: Qwen receives NO raw images. Receives pre-validated structured evidence (findings, deterministic triage, limitations) via AIGateway with strict guardrails preventing finding mutation, urgency escalation, or etiology hallucinations (no fluorosis, amelogenesis imperfecta, or oral cancer).
+- **Weight Location**: Configured to `services/teeth_analyzer/models/oral_disease/best.pt` via `YOLO_DENTAL_MODEL_PATH` (gitignored).
+
+### Files Created
+
+- `services/teeth_analyzer/src/teeth_analyzer/yolo_detector.py`
+- `orchestrator/src/orchestrator/clinical/report_generator.py`
+- `services/teeth_analyzer/tests/test_yolo_pipeline.py`
+
+### Files Modified
+
+- `packages/dantshaant_common/src/dantshaant_common/schemas.py` (added `distribution` & `detection_count` to `VisualFinding`; added `ConditionLabel.ORAL_ULCER`)
+- `services/teeth_analyzer/pyproject.toml` (added `ultralytics>=8.0.0`)
+- `services/teeth_analyzer/src/teeth_analyzer/config.py` (added YOLO configuration settings, default provider="yolo")
+- `services/teeth_analyzer/src/teeth_analyzer/inference.py` (wired YOLO detection with failure safety & legacy fallback)
+- `services/diagnosis/src/diagnosis/triage.py` (added oral ulcer rule, discoloration limitation & safety phrasing)
+- `services/diagnosis/src/diagnosis/classifier.py` (added threshold for `ConditionLabel.ORAL_ULCER`)
+- `orchestrator/src/orchestrator/clinical/graph.py` (integrated `report_node` text generation)
+- `orchestrator/src/orchestrator/repositories/clinical.py` (persisted report text into `ClinicalReport`)
+- `orchestrator/src/orchestrator/evaluation/metrics.py` (added `compute_yolo_evaluation_metrics`)
+- `apps/web/i18n/en.ts` & `apps/web/i18n/ur.ts` (added finding keys for oral ulcer and generalized discoloration)
+- `apps/web/components/DiagnosisReport.tsx` (added ulcer icon)
+- `docs/third-party-usage.md`
+- `docs/architecture.md`
+- `context.md`
+
+### Validation
+
+- Unit Test Suite (`test_yolo_pipeline.py`): 16 passed, 0 failed covering all 16 required test conditions.
+- Triage Test Suite (`test_triage.py`): 27 passed, 0 failed.
+- Legacy Clinical Vision Test Suite (`test_clinical_vision.py`): 19 passed, 0 failed.
+- Total Backend Python Tests: 62 passed, 0 failed.
+- Next.js Production Build (`npm run build`): Exit code 0, 28/28 static & dynamic routes compiled.
+- Strict compliance: NO browser, dev server, localhost, live image inference, or weight downloads performed by agent.
 
 ### Next
 
-Phase 11 — Deployment Fast Track.
+Nathan to provide `best.pt` locally and perform manual smoke-test acceptance.
 
+---
 
+## Phase 11B-1 — YOLO Detector Calibration + Hard-Negative Preparation
 
+**Date:** September 2026
+
+**Status:** IMPLEMENTED — CALIBRATION/HARD-NEGATIVE TOOLING READY, PENDING NATHAN DATA REVIEW AND V2 TRAINING
+
+### Summary
+
+Addressed false positive over-detection on clean treated teeth by auditing the dataset, building class-specific confidence threshold configuration and centralized resolver, creating offline calibration evaluation and model comparison tooling, establishing the hard-negative dataset infrastructure with deterministic splitting, and fixing the conceptual bug conflating detector confidence with visual image clarity.
+
+### Key Deliverables & Architecture
+
+- **Dataset Audit (`scripts/audit_yolo_dataset.py`)**:
+  - Audited all 10,698 images across train (8,558), valid (1,070), test (1,070).
+  - Confirmed exactly 570 true negative (empty `.txt` label) images exist (5.33% of dataset).
+  - 94.7% of images contain disease annotations (18:1 imbalance).
+  - Tooth discoloration constitutes 26,424 boxes (42.1% of all boxes), heavily biasing background priors.
+  - Results published to `docs/evaluation/yolo_dataset_audit.md`.
+- **Class-Specific Threshold Configuration**:
+  - Global fallback: `YOLO_DENTAL_CONFIDENCE_THRESHOLD=0.50`.
+  - Class-specific overrides: `YOLO_CALCULUS_CONFIDENCE_THRESHOLD`, `YOLO_CARIES_CONFIDENCE_THRESHOLD`, `YOLO_GINGIVITIS_CONFIDENCE_THRESHOLD`, `YOLO_DISCOLORATION_CONFIDENCE_THRESHOLD`, `YOLO_ULCER_CONFIDENCE_THRESHOLD`.
+  - Centralized resolver: `get_confidence_threshold(class_name)` accepts both raw YOLO labels and normalized clinical codes.
+  - Predict layer queries minimum active threshold, and detection loop enforces per-class thresholds.
+- **Diagnostic Spatial Metadata**:
+  - Extended `AggregatedFinding` with internal metrics: `max_confidence`, `mean_confidence`, `horizontal_coverage`, `aggregate_area_ratio`, `image_third_coverage`.
+  - Kept internal for evaluation; not leaked into patient UI.
+- **Image Quality vs Detector Confidence Separation**:
+  - Fixed bug where moderate detector confidence was presented as "Low visual clarity".
+  - Mechanical image quality messages derive ONLY from `overall_quality_score < 0.5` or `action_trigger == "REQUEST_CLEARER_PHOTO"`.
+  - Moderate detector confidence displays honest message: "Moderate screening confidence — professional confirmation is recommended."
+- **Hard-Negative Infrastructure & Preparation Utility (`scripts/prepare_yolo_v2_dataset.py`)**:
+  - Supports `dataset/hard-negatives/images/` and `labels/`.
+  - Generates `dataset/oral-disease-v2.yolov11/` without mutating original dataset.
+  - Deterministically partitions hard negatives into 80% train, 10% valid, 10% test using fixed seed (42).
+  - Every hard negative receives a verified 0-byte `.txt` label (never manufactures false boxes).
+- **Offline Evaluation & Comparison Tooling**:
+  - `scripts/evaluate_yolo_calibration.py`: Sweeps confidence thresholds (0.30–0.80) to calculate Precision, Recall, F1, and cross-class confusion.
+  - `scripts/compare_yolo_models.py`: Side-by-side comparison harness for `best.pt` vs `best_v2.pt`.
+- **Documentation**:
+  - `docs/evaluation/yolo_manual_acceptance.md`: 10 standardized clinical test categories (A–J) for Nathan's manual testing.
+  - `docs/evaluation/yolo_hard_negatives_guide.md`: Detailed collection guide and Modal v2 fine-tuning commands.
+
+### Files Created
+
+- `scripts/audit_yolo_dataset.py`
+- `scripts/evaluate_yolo_calibration.py`
+- `scripts/prepare_yolo_v2_dataset.py`
+- `scripts/compare_yolo_models.py`
+- `docs/evaluation/yolo_dataset_audit.md`
+- `docs/evaluation/yolo_manual_acceptance.md`
+- `docs/evaluation/yolo_hard_negatives_guide.md`
+- `services/teeth_analyzer/tests/test_calibration_and_negatives.py`
+
+### Files Modified
+
+- `services/teeth_analyzer/src/teeth_analyzer/config.py` (added class-specific threshold fields & `get_confidence_threshold` resolver)
+- `services/teeth_analyzer/src/teeth_analyzer/yolo_detector.py` (added diagnostic metadata & per-class thresholding)
+- `services/diagnosis/src/diagnosis/classifier.py` (fixed `BELOW_THRESHOLD_LIMITATION` wording)
+- `apps/web/i18n/en.ts` & `apps/web/i18n/ur.ts` (added `report.moderate_confidence_alert`)
+- `apps/web/components/DiagnosisReport.tsx` (separated image quality alert from moderate confidence alert)
+- `docs/evaluation.md`
+- `context.md`
+- `docs/phase-log.md`
+
+### Validation
+
+- Unit Tests: 89 passed, 0 failed across all suites (including 13 new dedicated Phase 11B-1 tests).
+- Next.js Build: 28/28 static & dynamic routes compiled successfully.
+- Dataset Audit: Completed against all 10,698 dataset images.
+- Strict compliance: Zero browser, dev server, localhost, live API calls, or model training executed.
+
+### Next
+
+Phase 11B-2 — Hard-Negative Mining + YOLO v2 Refinement Pipeline.
+
+---
+
+## Phase 11B-2 — Hard-Negative Mining + YOLO v2 Refinement Pipeline
+
+**Date:** September 2026  
+**Status:** IMPLEMENTED — HARD-NEGATIVE MINING + V2 TRAINING PIPELINE READY, PENDING NATHAN MANUAL REVIEW AND MODAL TRAINING
+
+### Summary
+
+Implemented the offline hard-negative mining and v2 fine-tuning pipeline to eliminate false-positive oral pathology predictions (specifically tooth discoloration and tartar) without mutating benchmark validation sets or manufacturing synthetic pathology:
+- **Hard-Negative Mining**:
+  - `scripts/mine_yolo_hard_negatives.py`: Evaluated all 457 empty-label training images in `dataset/oral-disease.yolov11/train/`.
+  - Discovered 36 false-positive candidate images producing 86 false-positive bounding boxes (47 tooth discoloration, 22 caries, 16 calculus, 1 ulcer).
+  - Clean pass rate: 421/457 (92.1%) empty-label images had zero detections at confidence >= 0.30.
+  - Generated `dataset/hard-negative-candidates/review.csv` with initial status `UNREVIEWED` and priority scores.
+  - Rendered offline visual contact sheets: `contact_sheet_01.jpg` (20 tiles) and `contact_sheet_02.jpg` (16 tiles).
+- **v2 Dataset Strategy & Leakage Protection**:
+  - `scripts/prepare_yolo_v2_dataset.py`: Updated with strict Phase 11B-2 split rules.
+  - Only Nathan-approved hard negatives (`review_status == 'ACCEPT_NEGATIVE'`) are merged into the `train` split.
+  - `valid` and `test` splits are copied 100% UNTOUCHED from original benchmark (zero negative leakage).
+  - SHA-256 hash checking prevents any approved candidate matching valid or test images from entering training.
+  - Controlled oversampling enabled via `--negative-repeat N` (default: 1, recommended: 2).
+  - Original dataset `dataset/oral-disease.yolov11` is never mutated.
+- **Modal v2 Fine-Tuning Script**:
+  - `scripts/modal_train_yolo_v2.py`: Built using the existing working Modal pattern.
+  - Uploads both `dataset/oral-disease-v2.yolov11.zip` and base weights `services/teeth_analyzer/models/oral_disease/best.pt` (`/root/best_v1.pt`).
+  - Fine-tunes starting from `/root/best_v1.pt` (NOT `yolo11n.pt`) with AdamW `lr0=0.0005`, 12 epochs, batch 16, A10G GPU, saving to `daantshaant-yolo-v2-output` volume.
+- **Documentation & Workflow**:
+  - Updated `docs/evaluation/yolo_hard_negatives_guide.md` with candidate counts, review instructions, and exact execution commands.
+  - Updated `docs/evaluation.md` and `context.md`.
+
+### Files Created
+
+- `scripts/mine_yolo_hard_negatives.py`
+- `scripts/modal_train_yolo_v2.py`
+- `services/teeth_analyzer/tests/test_phase11b2_mining_and_v2.py`
+- `dataset/hard-negative-candidates/review.csv`
+- `dataset/hard-negative-candidates/candidates.json`
+- `dataset/hard-negative-candidates/contact_sheet_01.jpg`
+- `dataset/hard-negative-candidates/contact_sheet_02.jpg`
+
+### Files Modified
+
+- `scripts/prepare_yolo_v2_dataset.py`
+- `docs/evaluation/yolo_hard_negatives_guide.md`
+- `docs/evaluation.md`
+- `context.md`
+- `docs/phase-log.md`
+
+### Validation
+
+- Unit Tests: 43 passed, 0 failed across all YOLO perception, calibration, and hard-negative mining suites (including 14 new dedicated Phase 11B-2 tests).
+- Strict Compliance: Zero browser, dev server, localhost, live API calls, or model training executed by agent.
+
+### Next
+
+Nathan to manually inspect contact sheets and review CSV, approve clean negatives (`ACCEPT_NEGATIVE`), package v2 dataset, and launch Modal training.
+
+---
+
+## Phase 11B-3 — Mine Healthy Hard Negatives from Roboflow Dataset
+
+**Date:** September 2026  
+**Status:** IMPLEMENTED — CANDIDATES & CONTACT SHEETS GENERATED, MULTI-CSV MERGE READY, PENDING NATHAN REVIEW
+
+### Summary
+
+- Audited the external Roboflow dataset `dataset/Dental Data Set.yolov11` (427 images in `train`, 0 in `valid`/`test`).
+- Parsed `data.yaml` dynamically: identified 7 classes with Class 6 (`Healthy Teeth`) representing normal dentition.
+- Implemented strict exclusion logic:
+  - 15 healthy-only images (all boxes belong solely to Class 6).
+  - 144 mixed images (contain Class 6 + disease boxes like Calculus, Cavities, Gingivitis) strictly excluded to avoid false negatives.
+  - 268 disease-only images strictly excluded.
+- Evaluated all 15 healthy-only candidate images against current DaantShaant detector (`best.pt`) at confidence threshold $\ge 0.30$:
+  - 9 images produced 56 false-positive predictions (54 tooth discoloration, 1 caries, 1 gingivitis) -> categorized as `candidate_type = MODEL_FALSE_POSITIVE`.
+  - 6 images produced 0 detections -> categorized as `candidate_type = CLEAN_CONTROL`.
+- Ranked false positives by priority score using severity weights (tooth discoloration 1.5, caries 1.4, calculus 1.3, gingivitis 1.1, ulcer 1.0).
+- Computed SHA-256 file hashes: all 15 candidates are unique, and asserted 0 hash overlap with benchmark `valid` and `test` splits.
+- Generated review deliverables:
+  - `dataset/healthy-negative-candidates/review.csv`: 15 rows with `review_status = UNREVIEWED`, full predictions, confidence, priority, and notes.
+  - `dataset/healthy-negative-candidates/candidates.json`: complete machine-readable metadata.
+  - `dataset/healthy-negative-candidates/contact_sheet_01.jpg`: 1440x1440 4x4 visual review grid showing bounding boxes and confidences.
+- Upgraded `scripts/prepare_yolo_v2_dataset.py` to support UTF-8-BOM, flexible path resolution, and merging multiple review CSVs (`dataset/review_ai_recommended.csv` + `dataset/healthy-negative-candidates/review.csv`).
+- Documented third-party dataset source and CC BY 4.0 license in `docs/third-party-usage.md`.
+- Generated detailed audit report in `docs/evaluation/yolo_small_healthy_dataset_audit.md`.
+
+### Files Created
+
+- `scripts/mine_healthy_negatives.py`
+- `dataset/healthy-negative-candidates/review.csv`
+- `dataset/healthy-negative-candidates/candidates.json`
+- `dataset/healthy-negative-candidates/contact_sheet_01.jpg`
+- `docs/evaluation/yolo_small_healthy_dataset_audit.md`
+- `services/teeth_analyzer/tests/test_phase11b3_healthy_negatives.py`
+
+### Files Modified
+
+- `scripts/prepare_yolo_v2_dataset.py`
+- `docs/third-party-usage.md`
+- `context.md`
+- `docs/phase-log.md`
+
+### Validation
+
+- Unit Tests: 57 passed, 0 failed across all Phase 11 test suites (14 dedicated Phase 11B-3 tests).
+- Dry-run v2 Dataset Merge: verified successful loading of 8 approved from `dataset/review_ai_recommended.csv` and 0 from `dataset/healthy-negative-candidates/review.csv` with zero data leakage.
+- Strict Compliance: Zero browser, dev server, localhost, external API calls, or model training executed by agent.
+
+### Next
+
+Nathan to review the 15 candidate images in `dataset/healthy-negative-candidates/contact_sheet_01.jpg` / `review.csv`, mark approved negatives as `ACCEPT_NEGATIVE`, run `prepare_yolo_v2_dataset.py` to package `oral-disease-v2.yolov11.zip`, and launch Modal v2 fine-tuning.
+
+---
+
+## Phase 11B-4 — Large Healthy-Negative Mining + V2 Dataset Preparation (FINAL)
+
+**Date:** September 2026  
+**Status:** IMPLEMENTED — FINAL LARGE HEALTHY POOL MINED, PENDING NATHAN AUDIT + V2 TRAINING
+
+### Summary
+
+- Audited external Roboflow dataset `dataset/Penyakit Gigi Skripsi.yolov11` (2,468 images across `train`: 1,974, `valid`: 247, `test`: 247).
+- Verified metadata from local `data.yaml`: 3 classes (`0: calculus`, `1: caries`, `2: healthy`), license `CC BY 4.0`, project `penyakit-gigi-skripsi-i77mi`.
+- Extracted all healthy-only images across all splits:
+  - 338 healthy-only images (strictly Class 2 `healthy` boxes).
+  - 1,342 mixed images excluded (`healthy` + `calculus`/`caries`).
+  - 788 disease-only images excluded.
+  - 0 empty-label files.
+- Evaluated all 338 healthy-only images with `best.pt` (min confidence 0.30):
+  - 129 `MODEL_FALSE_POSITIVE` images producing 934 false-positive bounding boxes.
+  - Dominant failure mode: Tooth discoloration accounts for 89.3% (834/934) of false-positive detections on healthy teeth (104 images). Secondary: gingivitis (21 images / 87 boxes), caries (4 images / 13 boxes), calculus (0), ulcer (0).
+  - 209 `CLEAN_CONTROL` images with zero detections $\ge 0.30$.
+  - 55 auto-eligible controls passing physical quality filters (`review_status = AUTO_ELIGIBLE_CONTROL`).
+- Implemented cryptographic and perceptual deduplication:
+  - SHA-256: 338 unique hashes (0 exact duplicates).
+  - 64-bit dHash: 233 near-duplicate image variants grouped into clusters. Primary instances retained; near duplicates labeled `REJECT_NEAR_DUPLICATE`.
+- Evaluated physical quality metrics:
+  - Excluded 49 unusable images: 41 severe blur (Laplacian variance $< 2.5$), 8 extreme overexposure ($> 35\%$ pixels $> 250$).
+- Strict benchmark leakage protection:
+  - SHA-256 cross-check against original `oral-disease.yolov11` valid (1,070) and test (1,070) splits confirms 0 matches (ZERO leakage).
+- Generated candidate artifacts in `dataset/final-healthy-negative-candidates/`:
+  - `review.csv`: 338 rows with full metadata, priority ranking, duplicate grouping, and quality scores.
+  - `candidates.json`: complete machine-readable metadata.
+  - `audit.json`: statistical audit summary.
+  - `contact_sheet_fp_01.jpg` to `08.jpg`: 8 contact sheets displaying the top 120 false-positive candidates (16 tiles each, 4x4) ranked by clinical priority.
+  - `contact_sheet_control_audit_01.jpg` to `04.jpg`: 4 contact sheets displaying a 50-image deterministic control audit sample (`seed=42`).
+- Upgraded `scripts/prepare_yolo_v2_dataset.py`:
+  - Added `--include-audited-controls` flag to opt-in `AUTO_ELIGIBLE_CONTROL` rows only after human audit.
+  - Automatic class balance calculation: reports negative percentage of total v2 train set, alerts if $> 18\%$.
+  - Large-pool repeat recommendation logic: recommends `repeat=1` if pool $\ge 500$, configurable if $< 200$.
+- Verified `scripts/modal_train_yolo_v2.py` preserves the working A10G architecture, persistent volume, AdamW optimizer, `lr0=0.0005`, 12 epochs, and starting checkpoint `best_v1.pt`.
+
+### Files Created
+
+- `scripts/mine_large_healthy_pool.py`
+- `dataset/final-healthy-negative-candidates/review.csv`
+- `dataset/final-healthy-negative-candidates/candidates.json`
+- `dataset/final-healthy-negative-candidates/audit.json`
+- `dataset/final-healthy-negative-candidates/contact_sheet_fp_01.jpg` ... `08.jpg`
+- `dataset/final-healthy-negative-candidates/contact_sheet_control_audit_01.jpg` ... `04.jpg`
+- `docs/evaluation/yolo_final_large_negative_audit.md`
+- `services/teeth_analyzer/tests/test_phase11b4_large_healthy_pool.py`
+
+### Files Modified
+
+- `scripts/prepare_yolo_v2_dataset.py`
+- `docs/third-party-usage.md`
+- `context.md`
+- `docs/phase-log.md`
+- `services/teeth_analyzer/tests/test_yolo_pipeline.py`
+
+### Validation
+
+- Unit Tests: 76 passed, 0 failed across all Phase 11 test suites (19 dedicated Phase 11B-4 tests).
+- Dry-Run v2 Dataset Merge: verified successful loading of 14 existing approved negatives and 55 auto-eligible controls with zero leakage into validation or test splits.
+- Strict Compliance: Zero browser, dev server, localhost, external API calls, or model training executed by agent.
+
+### Next
+
+Nathan visual review of top false positives (`contact_sheet_fp_*.jpg`) and 50-image control audit (`contact_sheet_control_audit_*.jpg`), v2 dataset generation with `prepare_yolo_v2_dataset.py`, and Modal v2 fine-tuning (`modal_train_yolo_v2.py`).
+
+---
+
+## Phase 11B Final — YOLO Final Model Freeze Configuration - IMPLEMENTED
+
+**Date:** September 2026
+**Status:** IMPLEMENTED — CONFIGURATION FROZEN (best_v2.pt), PENDING NATHAN TWO-IMAGE MANUAL ACCEPTANCE
+
+### Summary
+
+V2 model training and calibration have completed. In this phase, the detector configuration was frozen:
+- Selected runtime model candidate: `services/teeth_analyzer/models/oral_disease/best_v2.pt`.
+- Baseline retained as rollback checkpoint: `services/teeth_analyzer/models/oral_disease/best.pt` (V1 baseline physically preserved on disk, not deleted or overwritten).
+- Environment configuration: `.env` and `.env.example` configured with `YOLO_DENTAL_MODEL_PATH=services/teeth_analyzer/models/oral_disease/best_v2.pt`.
+- Model loader verification: The lazy singleton YOLO loader (`get_yolo_model()` in `services/teeth_analyzer/src/teeth_analyzer/yolo_detector.py`) resolves `settings.yolo_dental_model_path` against the repo root and will load `best_v2.pt` upon service start/restart.
+- Engineering screening thresholds:
+  - `calculus` (`tartar`): `0.35`
+  - `caries` (`cavity_suspect`): `0.55`
+  - `gingivitis` (`gingivitis_signs`): `0.50`
+  - `tooth discoloration` (`discoloration`): `0.65`
+  - `ulcer` (`oral_ulcer`): `0.65`
+  - Global Fallback: `0.50`
+- Centralized threshold resolver `get_confidence_threshold()` verified to return these exact per-class cutoffs for both raw and normalized clinical labels and fall back to 0.50 for unknown classes.
+- Explicit non-medical disclaimer: These calibrated cutoffs represent engineering screening thresholds to balance sensitivity and false-positive suppression on intraoral screening photos; they do not constitute clinical validation claims or diagnostic guarantees.
+
+### Files Modified
+
+- `.env` — added `YOLO_DENTAL_MODEL_PATH=services/teeth_analyzer/models/oral_disease/best_v2.pt` and verified thresholds.
+- `.env.example` — documented `YOLO_DENTAL_MODEL_PATH` and final engineering thresholds.
+- `docs/architecture.md` — updated clinical perception pipeline stage 3 with `best_v2.pt` and class-specific thresholds.
+- `docs/third-party-usage.md` — updated Ultralytics YOLO entry to reflect `best_v2.pt` frozen runtime and `best.pt` baseline retention.
+- `docs/evaluation.md` — added Section 6 documenting model freeze configuration, baseline retention, and thresholds.
+- `context.md` — recorded Phase 11B Final status, model freeze details, thresholds, and manual acceptance requirements.
+- `docs/phase-log.md` — appended this chronological Phase 11B Final entry.
+- `services/teeth_analyzer/tests/conftest.py` — added sibling module paths to `sys.path`.
+- `services/teeth_analyzer/tests/test_calibration_and_negatives.py` — isolated fallback tests with `_env_file=None` and added tests 14 & 15 for Phase 11B frozen thresholds and model loader verification.
+
+### Validation
+
+- Unit Tests: 102 passed, 0 failed across all Phase 11 calibration, pipeline, and mining test suites (including 31 dedicated calibration/pipeline/loader tests in `test_calibration_and_negatives.py` and `test_yolo_pipeline.py`).
+- Strict Compliance: Zero browser, dev server, localhost, live API calls, or model training executed by agent.
+
+### Next
+
+Nathan manual live verification of two acceptance test images after restarting services:
+- **A. Known yellow/discolored teeth**: Tooth discoloration detection must survive threshold $\ge 0.65$.
+- **B. Recently treated/clean teeth**: No unsupported discoloration or pathology prediction should be generated.
+
+---
+
+## Phase 11C — DentalTensor Vision v1.0 Model Branding & Identity Freeze
+
+**Date:** September 2026  
+**Status:** COMPLETE  
+
+### Summary
+
+Officially branded and froze the custom oral-vision model developed for DaantShaant as **DentalTensor Vision v1.0**, developed by **Nathan Asif**.
+- **Model Product Separation**: DentalTensor is established as the standalone perception product / model family; DaantShaant is the product integration consuming DentalTensor.
+- **Production Checkpoint**: `services/teeth_analyzer/models/oral_disease/dentaltensor_nathan_asif_v1.pt` created via byte-for-byte copy from `best_v2.pt`. SHA-256 verified identical (`42BF517DED4EB15EEBE6B5361EBF9E6AB21D8488098C4E3E4CCFE5912ECBBE27`). Previous checkpoints `best_v2.pt` and `best.pt` retained for rollback/history.
+- **Runtime Model Path**: Configured `YOLO_DENTAL_MODEL_PATH=services/teeth_analyzer/models/oral_disease/dentaltensor_nathan_asif_v1.pt` in `.env`, `.env.example`, and `Settings` default.
+- **Canonical Brand Metadata**: Added `DENTALTENSOR_MODEL_NAME = "DentalTensor Vision"`, `DENTALTENSOR_MODEL_VERSION = "1.0"`, `DENTALTENSOR_MODEL_DISPLAY_NAME = "DentalTensor Vision v1.0"`, and `DENTALTENSOR_DEVELOPER = "Nathan Asif"` centrally in `teeth_analyzer/config.py`.
+- **Detection Metadata**: Updated diagnostic output metadata to identify `model = "DentalTensor Vision v1.0"` and `model_version = "dentaltensor-vision-v1.0"`.
+- **Startup Logging**: Formatted startup/loading logs to cleanly report `Loading DentalTensor Vision v1.0`, `Developer: Nathan Asif`, and `Checkpoint: <resolved path>`.
+- **Health Endpoint**: Added non-breaking fields `model_name`, `model_version`, and `developed_by` to `/health` in Teeth Analyzer.
+- **Model Card**: Authored comprehensive model card `docs/dentaltensor-model-card.md` covering architecture (YOLO11n, 101 layers, 2.58M params, 6.4 GFLOPs), class mappings, dataset audit, 27 hard negatives (108 effective instances), Modal A10 training parameters, calibration improvements, screening limitations, and Nathan Asif ownership.
+- **Safety Rule Enforced**: Internal identifiers (`services/teeth_analyzer/`, package name, imports, existing API routes, ports) strictly preserved. ML/triage behavior untouched.
+
+### Files Created
+
+- `docs/dentaltensor-model-card.md` — Professional model card for DentalTensor Vision v1.0.
+
+### Files Modified
+
+- `services/teeth_analyzer/src/teeth_analyzer/config.py` — Canonical brand metadata constants, settings attributes, and default checkpoint path.
+- `services/teeth_analyzer/src/teeth_analyzer/yolo_detector.py` — DentalTensor branding comments, result dataclass metadata, loader logging, and detection result return values.
+- `services/teeth_analyzer/src/teeth_analyzer/inference.py` — Docstring and perception pipeline comments updated.
+- `services/teeth_analyzer/src/teeth_analyzer/main.py` — Added non-breaking model metadata to `/health`.
+- `.env` — Set `YOLO_DENTAL_MODEL_PATH` to `dentaltensor_nathan_asif_v1.pt`.
+- `.env.example` — Documented `dentaltensor_nathan_asif_v1.pt` and DentalTensor identity.
+- `docs/architecture.md` — Updated pipeline diagram to reflect DentalTensor Vision v1.0 flow.
+- `docs/third-party-usage.md` — Updated Ultralytics entry with DentalTensor Vision branding and model card link.
+- `docs/evaluation.md` — Documented DentalTensor Vision v1.0 freeze in Section 6.
+- `context.md` — Recorded Phase 11C status, model branding, and canonical identity.
+- `docs/phase-log.md` — Appended this chronological entry.
+
+### Validation
+
+---
+
+## Phase 12A Final — Central Dentist Reconstruction & Complete Hugging Face Removal
+
+**Date:** September 2026  
+**Status:** COMPLETE  
+
+### Summary
+
+Completely reconstructed the DaantShaant conversational assistant into **DaantShaant Central Dentist** and eliminated 100% of Hugging Face models, weights, embeddings, downloads, and runtime dependencies from the repository.
+
+1. **Root Cause Resolution**: The 1–2 minute chat latency was diagnosed and eliminated. It was caused by `EmbeddingService._load_model()` attempting to download and execute `SentenceTransformer("all-MiniLM-L6-v2")` CPU embeddings inside the synchronous request lifecycle.
+2. **Complete Hugging Face & FAISS Removal**:
+   - Permanently deleted `orchestrator/src/orchestrator/rag/` (`embeddings.py`, `vector_store.py`, `chunker.py`, `ingest.py`, `retrieval_service.py`), `orchestrator/src/orchestrator/rag_endpoints.py`, and `data/rag/faiss_index.*`.
+   - Removed `sentence-transformers`, `faiss-cpu`, `PyPDF2`, and `python-docx` from `orchestrator/pyproject.toml`.
+   - Removed `RAG_EMBEDDING_MODEL` and FAISS index settings from `.env` and `.env.example`.
+   - Cleaned `orchestrator/src/orchestrator/main.py` and `orchestrator/src/orchestrator/dentist_portal/routes_products.py`.
+   - Verified zero Hugging Face or FAISS imports project-wide via AST tests.
+3. **DaantShaant Central Dentist Engine (`orchestrator/src/orchestrator/central_dentist/`)**:
+   - `nlp.py`: Pure lightweight deterministic NLP engine (<50ms, regex/tokenization/synonym mapping). 13 intents, entity extraction, temporal parsing, and fast-path identification without any neural models.
+   - `retrieval.py`: Structured SQL RAG directly querying Supabase PostgreSQL repositories (`ScanRepository`, `AppointmentRepository`, `DentistRepository`) strictly scoped by authenticated `patient_id` UUID. Zero embeddings.
+   - `knowledge.py`: Curated offline oral health guideline lookup based on keyword and finding keys.
+   - `fast_path.py`: Deterministic response formatters that immediately answer factual questions (scan date, appointment date/time, confidence %, urgency level, greetings) bypassing Qwen entirely.
+   - `prompts.py`: Central Dentist system persona, structured clinical context builder, and anti-slop / plain text response cleaner.
+   - `graph.py`: Complete LangGraph pipeline orchestration with 10 deterministic nodes (`load_auth_context` -> `nlp_understanding` -> `plan_retrieval` -> `retrieve_patient_data` -> `retrieve_conversation_context` -> `retrieve_optional_knowledge` -> `build_grounded_context` -> `qwen_or_direct_answer` -> `validate_response` -> `persist_turn`).
+4. **Tenant Isolation & Security**: Every patient data query is strictly scoped by the authenticated JWT session identity. Any user IDs or SQL injections in message text are ignored. Internal model weights, database schemas, and API keys are strictly excluded from context.
+5. **DentalTensor Integrity Preserved**: DentalTensor Vision v1.0 in `services/teeth_analyzer/` (`torch`, `ultralytics`, `dentaltensor_nathan_asif_v1.pt`) was left untouched and fully verified with all 108 tests passing.
+
+### Files Created
+
+- `orchestrator/src/orchestrator/central_dentist/__init__.py`
+- `orchestrator/src/orchestrator/central_dentist/nlp.py`
+- `orchestrator/src/orchestrator/central_dentist/retrieval.py`
+- `orchestrator/src/orchestrator/central_dentist/knowledge.py`
+- `orchestrator/src/orchestrator/central_dentist/fast_path.py`
+- `orchestrator/src/orchestrator/central_dentist/prompts.py`
+- `orchestrator/src/orchestrator/central_dentist/graph.py`
+- `orchestrator/tests/test_no_huggingface.py`
+- `orchestrator/tests/test_central_dentist_nlp.py`
+- `orchestrator/tests/test_central_dentist_data_isolation.py`
+- `orchestrator/tests/test_central_dentist_query_aware_retrieval.py`
+- `orchestrator/tests/test_central_dentist_grounding.py`
+- `orchestrator/tests/test_central_dentist_fast_path.py`
+- `orchestrator/tests/test_central_dentist_quality.py`
+- `orchestrator/tests/test_central_dentist_graph.py`
+
+### Files Deleted
+
+- `orchestrator/src/orchestrator/rag/__init__.py`
+- `orchestrator/src/orchestrator/rag/embeddings.py`
+- `orchestrator/src/orchestrator/rag/vector_store.py`
+- `orchestrator/src/orchestrator/rag/chunker.py`
+- `orchestrator/src/orchestrator/rag/ingest.py`
+- `orchestrator/src/orchestrator/rag/retrieval_service.py`
+- `orchestrator/src/orchestrator/rag_endpoints.py`
+- `data/rag/faiss_index.bin`
+- `data/rag/faiss_index.meta.json`
+
+### Files Modified
+
+- `orchestrator/pyproject.toml`
+- `orchestrator/src/orchestrator/main.py`
+- `orchestrator/src/orchestrator/chat_service.py`
+- `orchestrator/src/orchestrator/conversation_engine.py`
+- `orchestrator/src/orchestrator/dentist_portal/routes_products.py`
+- `.env` and `.env.example`
+- `orchestrator/tests/test_chat_gateway_migration.py`
+- `orchestrator/tests/test_chat_timing.py`
+- `orchestrator/tests/test_recommendation_gateway_migration.py`
+- `services/teeth_analyzer/tests/test_calibration_and_negatives.py`
+- `docs/architecture.md`
+- `docs/third-party-usage.md`
+- `context.md`
+- `docs/phase-log.md`
+
+### Verification
+
+- Orchestrator test suite: 375 passed, 1 skipped, 0 failures (including 42 new Central Dentist and HF removal tests).
+- Teeth Analyzer test suite: 108 passed, 0 failures.
+- Zero Hugging Face / FAISS runtime references confirmed via AST scan and import guards.
+
+---
+
+## Phase 12B — Central Dentist Live Latency, Deadlock & Chat Request Lifecycle Fix
+
+**Date:** September 2026  
+**Status:** COMPLETE
+
+### Summary
+
+- Diagnosed and fixed the live chat latency issues, UI deadlocks, and `asyncpg` connection hangs (`EAUTHTIMEOUT`).
+- Added strict connection and socket timeouts to async SQLAlchemy engine (`pool_timeout=3.0`, `connect_args={"timeout": 3.0, "command_timeout": 3.0, "server_settings": {"statement_timeout": "3000"}}`).
+- Reused a single request-scoped `AsyncSession` across authentication, patient data retrieval, and persistence, eliminating redundant queries and connection overhead.
+- Implemented hard latency budgets:
+  - Auth DB lookup: 2.0s
+  - Structured patient retrieval: 2.0s
+  - Persistence: 2.0s
+  - Qwen generation: 8.0s (cancels provider call without multi-minute retry chains)
+  - Global backend chat deadline: 12.0s (aborts and rolls back on timeout)
+- Grounded deterministic fallback returning verified clinical scan/appointment data when provider calls time out.
+- Generated unique `request_id` (e.g. `chat_7f92...`) and logged stage telemetry across the entire graph.
+- Rewrote frontend chat UX (`ChatInterface.tsx`):
+  - Instant input clearing and optimistic user message append on send.
+  - Textarea remains editable for subsequent messages.
+  - Functional Stop button (`⏹ Stop`) backed by `AbortController.abort()`.
+  - Comprehensive `try / catch / finally` cleanup ensuring loading spinner never freezes.
+  - Deduped submissions with submission ref guards.
+
+### Files Created
+
+- `orchestrator/tests/test_phase12b_latency_and_timeouts.py`
+
+### Files Modified
+
+- `orchestrator/src/orchestrator/config.py`
+- `orchestrator/src/orchestrator/db/session.py`
+- `orchestrator/src/orchestrator/dentist_portal/auth.py`
+- `orchestrator/src/orchestrator/main.py`
+- `orchestrator/src/orchestrator/central_dentist/graph.py`
+- `orchestrator/src/orchestrator/chat_service.py`
+- `apps/web/lib/chat-api.ts`
+- `apps/web/components/ChatInterface.tsx`
+- `apps/web/i18n/en.ts`
+- `apps/web/i18n/ur.ts`
+- `context.md`
+- `docs/phase-log.md`
+
+### Verification
+
+- Full orchestrator test suite: 380 passed, 1 skipped, 0 failures (including all 5 new Phase 12B latency/timeout tests).
+- Teeth Analyzer test suite: 108 passed, 0 failures.
+- Frontend Next.js production build: 28/28 routes compiled cleanly, 0 TypeScript errors.
+- Fast paths ("Hi", "What was the confidence?") verified to run in milliseconds without calling LLMs.
+
+---
+
+## Phase 12D — Urgent Auth & Session Resilience Fix
+
+**Date:** September 2026  
+**Status:** COMPLETE  
+
+### Summary
+
+Resolved intermittent Supabase/PostgreSQL connection timeouts that were triggering false invalid-credential errors and immediate frontend logouts:
+- **Root Cause Resolution**:
+  - Direct diagnostic testing confirmed that the initial TCP/TLS handshake from local machines to Supabase pooler (`aws-0-ap-northeast-2.pooler.supabase.com:5432`) takes between 6.2s and 11.4s. Aggressive connection timeouts (2-3s) caused `asyncpg` to abort with `TimeoutError`.
+  - In `login_user`, unhandled DB timeouts returned HTTP 500, which the login UI misreported as `auth.invalid_credentials` ("Invalid email or password."). Password and credentials were never the issue.
+  - On page load / dashboard mount, `fetchPortalProfile` called `/portal/auth/me`. When transient DB timeouts occurred, `fetchPortalProfile` threw `new Error("Session expired")`, causing `PortalDashboard` to redirect to `/patient/login` ~5 seconds after login.
+- **Engine & Pool Optimization**:
+  - `PostgresSettings`: `db_pool_size=5`, `db_max_overflow=10`, `db_pool_recycle_seconds=300` (proactive 5-minute recycling before Supavisor drops idle connections), `db_pool_timeout_seconds=15.0`, `db_connect_timeout_seconds=15.0`, `db_command_timeout_seconds=15.0`.
+  - Single application engine with `pool_pre_ping=True` detecting stale pooled connections prior to query execution.
+- **Transient DB Single Retry**:
+  - Built `execute_with_single_retry(operation, *, op_name, backoff_seconds=0.2)` in `auth_utils.py`:
+    - Catches `TimeoutError`, `OperationalError`, `DBAPIError`, and connection errors.
+    - Waits 200ms and retries once. If failure persists, cleanly raises `HTTPException(503)`.
+    - Never retries wrong passwords, invalid JWTs, or revoked refresh tokens.
+  - Integrated across: `login_user`, `rotate_refresh_token`, `get_current_user`, and `get_user_profile`.
+- **Refresh & /auth/me Resilience**:
+  - A transient DB timeout during `/portal/auth/refresh` returns 503 and never deletes or revokes the client refresh cookie.
+  - `/portal/auth/me` returns 503 on DB timeout instead of 401.
+  - Frontend `refreshPortalSession`: on 503/network error, logs warning and returns `null` while preserving `activeUser` and suppressing `REFRESH_FAILED` broadcasts.
+  - Frontend `authorizedFetch`: enforced single-refresh guard on 401 with in-flight deduplication across concurrent calls (zero recursion).
+  - Frontend `fetchPortalProfile`: on 503/network error, preserves and returns current authenticated user snapshot so the user is never logged out.
+  - `PortalDashboard`: only redirects to `/login` on genuine `SessionExpiredError`. Renders friendly retry UI if cold profile fetch encounters 503.
+- **Login UI Error Classification**:
+  - 401 -> `t("auth.invalid_credentials")` ("Invalid email or password.")
+  - 503 -> `t("auth.service_unavailable")` ("Service is temporarily unavailable. Please try again in a moment.")
+  - 500 / other -> `t("auth.server_error")` ("Unable to sign in right now. Please try again.")
+  - 100% key parity across `en.ts` and `ur.ts`.
+- **Observability Logging**:
+  - Added sanitized telemetry: `[AUTH] login_attempt`, `[AUTH] login_db_timeout`, `[AUTH] login_invalid_credentials`, `[AUTH] login_success`, `[AUTH] refresh_success`, `[AUTH] refresh_invalid`, `[AUTH] refresh_db_unavailable`, `[AUTH] auth_me_db_unavailable`.
+  - Zero passwords, raw tokens, or cookies exposed.
+- **Token TTL Verification**:
+  - Access token TTL: 30 minutes (`access_token_expire_minutes: 30`).
+  - Refresh token TTL: 7 days (`refresh_token_expire_days: 7`, 604800s cookie max-age).
+
+### Files Created
+
+- `orchestrator/src/orchestrator/dentist_portal/auth_utils.py`
+- `orchestrator/tests/test_auth_resilience.py`
+- `apps/web/lib/__tests__/portal-auth-resilience.test.ts`
+
+### Files Modified
+
+- `orchestrator/src/orchestrator/config.py`
+- `orchestrator/src/orchestrator/dentist_portal/auth.py`
+- `orchestrator/src/orchestrator/dentist_portal/routes_auth.py`
+- `orchestrator/src/orchestrator/dentist_portal/user_service.py`
+- `apps/web/lib/portal-auth.ts`
+- `apps/web/components/portal/LoginPage.tsx`
+- `apps/web/components/portal/PortalDashboard.tsx`
+- `apps/web/i18n/en.ts`
+- `apps/web/i18n/ur.ts`
+- `context.md`
+- `docs/phase-log.md`
+
+### Verification
+
+- Backend resilience suite (`tests/test_auth_resilience.py`): 10 passed, 0 failed.
+- Auth & security suite (`tests/test_auth_security.py` + `tests/test_phase10_5_portal_security_and_ops.py`): 20 passed, 0 failed.
+- Latency & dashboard suites (`test_phase10_7_dashboards.py` + `test_phase12b_latency_and_timeouts.py`): 17 passed, 0 failed.
+- Frontend auth resilience suite (`apps/web/lib/__tests__/portal-auth-resilience.test.ts`): 6 passed, 0 failed.
+- Cross-tab auth suite (`apps/web/lib/__tests__/cross-tab-auth.test.ts`): 7 passed, 0 failed.
+- TypeScript typecheck (`npx tsc --noEmit`): Exit code 0, 0 errors.
+- Next.js production build (`npm run build`): 28/28 routes compiled successfully.
+
+---
+
+## Phase 12C — Qwen Live Latency & Provider Reliability Fix
+
+**Date:** September 2026
+**Status:** COMPLETE
+
+### Summary
+
+Investigated and resolved Central Dentist live latency and timeouts (15.0s hang with robotic `"I am currently having trouble reaching the AI assistant service..."` fallback):
+- **Root Cause:**
+  - `QwenProvider` and `GeminiProvider` instantiated a fresh `httpx.AsyncClient` per request, incurring recurring DNS, TCP 3-way handshake, and TLS 1.3 overhead across Singapore Model Studio endpoints.
+  - Central Dentist prompt bloat (~1,850 chars) and empty placeholder sections dumped into context for general oral health queries.
+  - Lack of a hard `asyncio.timeout` wrapper inside provider network requests.
+  - Missing direct fast paths for high-frequency oral hygiene questions.
+  - Fallback message exposed internal provider nomenclature to patients.
+- **Provider Connection Pooling & Lifecycle:**
+  - Implemented persistent, long-lived `httpx.AsyncClient` instances in `QwenProvider` and `GeminiProvider` with connection pooling (`Limits(max_keepalive_connections=10, max_connections=20, keepalive_expiry=30.0)`).
+  - Added clean shutdown hooks (`aclose()`) in providers and `AIGateway`, wired into FastAPI `lifespan`.
+- **Latency & Timeout Budget:**
+  - Enforced `chat_qwen_timeout_seconds=8.0` and `chat_request_timeout_seconds=12.0`.
+  - Added hard `asyncio.timeout` guard in `QwenProvider` request execution.
+  - Added remaining-budget awareness in `AIGateway`: skips secondary fallback if primary took $\ge 6.5\text{s}$, and bounds fallback timeout to remaining budget.
+- **Prompt & Token Reductions:**
+  - Central Dentist system prompt streamlined to core identity, grounding, screening vs diagnosis boundaries, and conciseness.
+  - Context builder omits empty patient sections on general hygiene queries. Context window capped at 4 turns.
+  - Output token ceiling capped at `max_tokens=300`.
+- **Direct Fast-Paths & Curated Knowledge Fallbacks:**
+  - Common hygiene questions (e.g. brushing, flossing) routed to instant (<1ms) deterministic fast paths.
+  - Safe, curated knowledge fallback dictionary for high-frequency topics (brushing, flossing, mouthwash, checkups, sensitivity, bleeding gums, staining, bad breath).
+  - Patient questions fall back to structured scan/appointment records.
+  - Eradicated robotic "AI service" language; fallback returns natural, helpful phrasing.
+- **Instrumentation & Telemetry:**
+  - Granular timing metrics: `client_ready_ms`, `time_to_headers_ms`, `parse_ms`, `total_ms`.
+  - Sanitized logging (`[QWEN][%s] request_started`, `prompt_chars=%d messages=%d approx_tokens=%d`). Zero prompts or secrets logged.
+
+### Files Created
+
+- `orchestrator/tests/test_phase12c_qwen_latency.py`
+
+### Files Modified
+
+- `orchestrator/src/orchestrator/config.py`
+- `orchestrator/src/orchestrator/ai/schemas.py`
+- `orchestrator/src/orchestrator/ai/qwen.py`
+- `orchestrator/src/orchestrator/ai/gemini.py`
+- `orchestrator/src/orchestrator/ai/gateway.py`
+- `orchestrator/src/orchestrator/ai/factory.py`
+- `orchestrator/src/orchestrator/main.py`
+- `orchestrator/src/orchestrator/central_dentist/prompts.py`
+- `orchestrator/src/orchestrator/central_dentist/nlp.py`
+- `orchestrator/src/orchestrator/central_dentist/fast_path.py`
+- `orchestrator/src/orchestrator/central_dentist/knowledge.py`
+- `orchestrator/src/orchestrator/central_dentist/graph.py`
+- `context.md`
+- `docs/phase-log.md`
+
+### Verification
+
+- Phase 12C latency & provider unit suite (`orchestrator/tests/test_phase12c_qwen_latency.py`): 9 passed, 0 failed in 4.16s.
+- Core AI & Phase 12B/12C suite (`test_no_huggingface.py`, `test_phase12b_latency_and_timeouts.py`, `test_phase12c_qwen_latency.py`, `test_qwen_provider.py`, `test_ai_gateway.py`, `test_ai_gateway_factory.py`, `test_gemini_provider.py`): 90 passed, 0 failed in 9.36s.
+- Central Dentist suite (`fast_path`, `nlp`, `graph`, `grounding`, `data_isolation`, `quality`, `query_aware_retrieval`): 29 passed, 0 failed in 10.99s.
+- Teeth Analyzer & DentalTensor Vision v1.0 suite (`services/teeth_analyzer/tests`): 105 passed, 0 failed in 17.86s.
+- Diagnosis suite (`services/diagnosis/tests`): 27 passed, 0 failed in 1.60s.
 
 
 

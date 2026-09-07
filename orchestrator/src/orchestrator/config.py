@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     live_max_duration_seconds: int = 120
     live_stable_frames_for_partial: int = 2
 
+    # Phase 12C: Hard latency budgets for interactive chat
+    chat_request_timeout_seconds: float = 12.0
+    chat_auth_timeout_seconds: float = 2.0
+    chat_retrieval_timeout_seconds: float = 2.0
+    chat_persistence_timeout_seconds: float = 2.0
+    chat_qwen_timeout_seconds: float = 8.0
+
     def get_cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
@@ -46,7 +53,10 @@ class PostgresSettings(BaseSettings):
     database_migration_url: str = ""
     db_pool_size: int = 5
     db_max_overflow: int = 10
-    db_pool_recycle_seconds: int = 1800
+    db_pool_recycle_seconds: int = 300
+    db_pool_timeout_seconds: float = 30.0
+    db_connect_timeout_seconds: float = 30.0
+    db_command_timeout_seconds: float = 30.0
 
     def get_migration_url(self) -> str:
         """Return DATABASE_MIGRATION_URL, falling back to DATABASE_URL."""

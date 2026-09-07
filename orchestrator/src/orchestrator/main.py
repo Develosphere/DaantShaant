@@ -1,16 +1,19 @@
+import logging
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI, HTTPException, WebSocket
-from fastapi import Depends
+from fastapi import Depends, FastAPI, HTTPException, WebSocket, status
 from fastapi.middleware.cors import CORSMiddleware
 from uuid import UUID
 
 from orchestrator.config import settings
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from orchestrator.db.session import engine, get_db_session
 from orchestrator.dentist_portal.auth import decode_access_token, get_current_patient
+
+logger = logging.getLogger(__name__)
 from orchestrator.live_session import handle_live_websocket
 from orchestrator.pipeline import (
     AuthenticatedTeethAnalyzeRequest,
@@ -33,7 +36,6 @@ from orchestrator.chat_service import (
     get_conversation_messages,
     send_message,
 )
-from orchestrator.rag_endpoints import router as rag_router
 from orchestrator.dentist_portal.routes_auth import router as portal_auth_router
 from orchestrator.dentist_portal.routes_products import router as portal_products_router
 from orchestrator.dentist_portal.routes_dashboard import router as portal_dashboard_router
@@ -45,15 +47,12 @@ from orchestrator.dentist_recommendation.routes_geocode import router as geocode
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.settings = settings
-    # Initialize RAG system
-    try:
-        from orchestrator.rag.vector_store import vector_store
-        vector_store.load()
-        print("[RAG] RAG vector store loaded successfully")
-    except Exception as e:
-        print(f"[RAG] RAG vector store not available: {e}")
-    
     yield
+    try:
+        from orchestrator.ai.factory import close_ai_gateway
+        await close_ai_gateway()
+    except Exception as exc:
+        logger.warning("Error closing AI gateway: %s", exc)
     await engine.dispose()
 
 
@@ -72,9 +71,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Include RAG endpoints
-app.include_router(rag_router)
 
 # Include Dentist Portal endpoints
 app.include_router(portal_auth_router)
@@ -216,9 +212,18 @@ async def send_chat_message(
     """Send a message and get assistant response."""
     try:
         return await send_message(request, user["user_id"], session)
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    except (TimeoutError, SQLAlchemyError) as e:
+        logger.error("[CHAT] Database or timeout error in chat message: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Patient history service is temporarily unavailable. Please retry in a moment.",
+        ) from e
     except Exception as e:
+        logger.error("[CHAT] Unexpected error in chat message: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
