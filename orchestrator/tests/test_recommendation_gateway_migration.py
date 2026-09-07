@@ -181,7 +181,7 @@ def test_rank_prompt_context_reaches_gateway():
     request = gateway.requests[0]
     assert isinstance(request, TextRequest)
     assert [m.role for m in request.messages] == ["system", "user"]
-    assert request.messages[0].content == "You are a dental product ranking expert. Return only JSON."
+    assert request.messages[0].content == "You are a dental product ranking expert. Return only JSON array with product_id, rank, and recommendation_reason."
     assert "sensitive teeth" in request.messages[1].content
     assert "Sensi Toothpaste" in request.messages[1].content
     assert request.temperature == 0.2

@@ -1,7 +1,11 @@
 """Unified patient, dentist, and admin authentication routes."""
 
+import logging
+
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from orchestrator.config import settings
 from orchestrator.db.session import get_db_session
@@ -130,6 +134,7 @@ async def refresh_session(
     session: AsyncSession = Depends(get_db_session),
 ):
     if not refresh_token:
+        logger.warning("[AUTH] refresh_invalid missing_cookie")
         raise HTTPException(status_code=401, detail="Refresh cookie is missing")
     token_response, rotated = await rotate_refresh_token(
         refresh_token, session, user_agent=request.headers.get("user-agent")
@@ -147,7 +152,10 @@ async def logout(
     session: AsyncSession = Depends(get_db_session),
 ):
     if refresh_token:
-        await revoke_refresh_token(refresh_token, session)
+        try:
+            await revoke_refresh_token(refresh_token, session)
+        except Exception as exc:
+            logger.warning("[AUTH] revoke_failed_during_logout: %s", exc)
     _clear_refresh_cookie(response)
 
 

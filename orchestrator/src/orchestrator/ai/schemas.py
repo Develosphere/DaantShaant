@@ -37,6 +37,8 @@ class TextRequest(BaseModel):
     """Optional explicit model id; providers fall back to their configured default."""
     metadata: dict[str, Any] = Field(default_factory=dict)
     """Optional request tracking metadata (e.g. request_id)."""
+    extra_body: dict[str, Any] | None = None
+    """Optional provider-specific extra parameters merged into the request payload (e.g. enable_thinking)."""
 
 
 class VisionRequest(BaseModel):

@@ -103,44 +103,98 @@ KNOWLEDGE_TOPICS: dict[str, dict[str, str]] = {
 }
 
 
-def lookup_dental_knowledge(query_text: str, finding_key: Optional[str] = None) -> Optional[str]:
-    """Retrieve relevant curated oral health snippet based on query keywords or active finding."""
-    query_lower = query_text.lower()
+import re
 
-    if finding_key:
-        if finding_key in ("discoloration",):
-            return KNOWLEDGE_TOPICS["discoloration"]["content"]
-        if finding_key in ("tartar", "plaque"):
-            return KNOWLEDGE_TOPICS["tartar"]["content"]
-        if finding_key in ("cavity_suspect", "cavity_advanced"):
-            return KNOWLEDGE_TOPICS["cavity"]["content"]
-        if finding_key in ("gingivitis_signs", "gum_disease_severe"):
-            return KNOWLEDGE_TOPICS["bleeding_gums"]["content"]
-        if finding_key in ("oral_ulcer",):
-            return KNOWLEDGE_TOPICS["ulcer"]["content"]
+# Deterministic word-boundary matchers for curated guidelines
+KNOWLEDGE_TOPIC_MATCHERS: dict[str, list[str]] = {
+    "brushing": [
+        r"\b(brush|brushing|toothbrush|toothbrushes)\b",
+        r"\bhow to brush\b",
+        r"\bproper brushing\b",
+    ],
+    "flossing": [
+        r"\b(floss|flossing|dental floss)\b",
+        r"\bhow to floss\b",
+    ],
+    "bleeding_gums": [
+        r"\b(bleeding gums?|gums? bleed(ing)?|gum inflammation)\b",
+        r"\bgingivitis\b",
+    ],
+    "sensitivity": [
+        r"\b(tooth sensitivity|teeth sensitivity|sensitive to (cold|hot)|cold sensitivity|hot sensitivity)\b",
+        r"\bsensitive teeth\b",
+    ],
+    "discoloration": [
+        r"\b(discoloration|discolouration|yellow teeth|stained teeth|teeth stains?|extrinsic stain|intrinsic stain|tooth whitening)\b",
+    ],
+    "tartar": [
+        r"\b(tartar|dental calculus|calculus buildup|hardened plaque|plaque mineralization|ultrasonic scaling)\b",
+    ],
+    "cavity": [
+        r"\b(cavity|cavities|tooth decay|dental caries|enamel demineralization)\b",
+    ],
+    "ulcer": [
+        r"\b(canker sores?|mouth ulcers?|aphthous ulcers?|oral sores?)\b",
+    ],
+    "bad_breath": [
+        r"\b(bad breath|halitosis|breath odor|tongue scraper)\b",
+    ],
+    "mouthwash": [
+        r"\b(mouthwash|oral rinse|mouth rinse|antibacterial rinse)\b",
+    ],
+    "checkup": [
+        r"\b(routine checkup|dental checkup|checkup frequency|routine cleaning|every 6 months)\b",
+    ],
+}
 
-    if any(w in query_lower for w in ("brush", "brushing", "toothbrush", "paste")):
-        return KNOWLEDGE_TOPICS["brushing"]["content"]
-    if any(w in query_lower for w in ("floss", "flossing")):
-        return KNOWLEDGE_TOPICS["flossing"]["content"]
-    if any(w in query_lower for w in ("mouthwash", "rinse", "mouth wash")):
-        return KNOWLEDGE_TOPICS["mouthwash"]["content"]
-    if any(w in query_lower for w in ("checkup", "check-up", "routine visit", "how often should i see a dentist", "frequency")):
-        return KNOWLEDGE_TOPICS["checkup"]["content"]
-    if any(w in query_lower for w in ("bleed", "bleeding", "gums bleed", "gingivitis")):
-        return KNOWLEDGE_TOPICS["bleeding_gums"]["content"]
-    if any(w in query_lower for w in ("sensitive", "sensitivity", "cold water", "cold drink")):
-        return KNOWLEDGE_TOPICS["sensitivity"]["content"]
-    if any(w in query_lower for w in ("yellow", "stain", "color", "discoloration")):
-        return KNOWLEDGE_TOPICS["discoloration"]["content"]
-    if any(w in query_lower for w in ("tartar", "calculus", "hard buildup")):
-        return KNOWLEDGE_TOPICS["tartar"]["content"]
-    if any(w in query_lower for w in ("cavity", "cavities", "decay", "caries")):
-        return KNOWLEDGE_TOPICS["cavity"]["content"]
-    if any(w in query_lower for w in ("ulcer", "canker", "sore", "blister")):
-        return KNOWLEDGE_TOPICS["ulcer"]["content"]
-    if any(w in query_lower for w in ("breath", "halitosis", "odor")):
-        return KNOWLEDGE_TOPICS["bad_breath"]["content"]
+# Finding key to topic mapping (only used when query or follow-up explicitly matches)
+FINDING_TOPIC_MAP: dict[str, str] = {
+    "discoloration": "discoloration",
+    "tartar": "tartar",
+    "plaque": "tartar",
+    "cavity_suspect": "cavity",
+    "cavity_advanced": "cavity",
+    "gingivitis_signs": "bleeding_gums",
+    "gum_disease_severe": "bleeding_gums",
+    "oral_ulcer": "ulcer",
+}
+
+
+def lookup_dental_knowledge(
+    query_text: str,
+    finding_key: Optional[str] = None,
+    allow_finding_fallback: bool = False,
+) -> Optional[str]:
+    """Retrieve relevant curated oral health snippet based on strict query relevance.
+
+    If query relevance is below threshold, returns None so LLM answers dynamically.
+    Never forces an unrelated guideline into the prompt.
+    """
+    if not query_text:
+        return None
+
+    query_lower = query_text.lower().strip()
+
+    # 1. First, check direct keyword/phrase match against curated topics
+    best_topic: Optional[str] = None
+    best_score = 0
+
+    for topic_name, patterns in KNOWLEDGE_TOPIC_MATCHERS.items():
+        score = sum(1 for p in patterns if re.search(p, query_lower))
+        if score > best_score:
+            best_score = score
+            best_topic = topic_name
+
+    # Topic match requires at least 1 explicit word-boundary match
+    if best_topic and best_score >= 1:
+        return KNOWLEDGE_TOPICS[best_topic]["content"]
+
+    # 2. Only consider finding_key if caller explicitly allows finding fallback
+    # AND the query is an anaphoric follow-up (e.g. "what is that?", "why did it flag it?")
+    if allow_finding_fallback and finding_key and finding_key in FINDING_TOPIC_MAP:
+        topic_key = FINDING_TOPIC_MAP[finding_key]
+        if topic_key in KNOWLEDGE_TOPICS:
+            return KNOWLEDGE_TOPICS[topic_key]["content"]
 
     return None
 

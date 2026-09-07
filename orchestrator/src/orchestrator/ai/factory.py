@@ -132,9 +132,79 @@ def create_ai_gateway(settings: "AISettings | None" = None) -> AIGateway:
 
 
 # ---------------------------------------------------------------------------
-# Lazy process-wide instance
+# Chat-Specific AI Gateway (Phase 12D)
+# ---------------------------------------------------------------------------
+
+def _build_chat_qwen(settings: "AISettings") -> AIProvider:
+    from orchestrator.ai.qwen import QwenProvider
+
+    chat_model = getattr(settings, "chat_qwen_model", "qwen3.7-flash")
+    enable_thinking = getattr(settings, "chat_qwen_enable_thinking", False)
+    return QwenProvider(
+        settings=settings,
+        chat_model=chat_model,
+        default_model=chat_model,
+        enable_thinking=enable_thinking,
+    )
+
+
+def _build_chat_gemini(settings: "AISettings") -> AIProvider:
+    from orchestrator.ai.gemini import GeminiProvider
+
+    chat_model = getattr(settings, "chat_gemini_model", "gemini-flash-lite-latest")
+    return GeminiProvider(settings=settings, default_model=chat_model)
+
+
+_CHAT_PROVIDER_BUILDERS: dict[str, Callable[["AISettings"], AIProvider]] = {
+    "qwen": _build_chat_qwen,
+    "gemini": _build_chat_gemini,
+}
+
+
+def create_chat_ai_gateway(settings: "AISettings | None" = None) -> AIGateway:
+    """Compose the chat-specific AI gateway (Phase 12D).
+
+    Reads ``CHAT_LLM_PROVIDER`` / ``CHAT_FALLBACK_PROVIDER`` from settings.
+    Configures Qwen with ``CHAT_QWEN_MODEL`` and ``CHAT_QWEN_ENABLE_THINKING``.
+    Configures Gemini with ``CHAT_GEMINI_MODEL``.
+    Enforces chat latency timeouts.
+    """
+    from orchestrator.config import settings as app_settings
+
+    cfg: "AISettings" = settings if settings is not None else app_settings
+
+    primary_name = _normalize_provider_name(
+        getattr(cfg, "chat_llm_provider", "qwen"), "CHAT_LLM_PROVIDER", allow_empty=False
+    )
+    fallback_name = _normalize_provider_name(
+        getattr(cfg, "chat_fallback_provider", "gemini"), "CHAT_FALLBACK_PROVIDER", allow_empty=True
+    )
+    if fallback_name == primary_name:
+        raise ProviderConfigurationError(
+            "CHAT_LLM_PROVIDER and CHAT_FALLBACK_PROVIDER must differ "
+            f"(both are {primary_name!r}). Leave CHAT_FALLBACK_PROVIDER empty to run without fallback."
+        )
+
+    primary = _CHAT_PROVIDER_BUILDERS[primary_name](cfg)
+    fallback = _CHAT_PROVIDER_BUILDERS[fallback_name](cfg) if fallback_name else None
+    timeout = getattr(cfg, "chat_qwen_timeout_seconds", 12.0)
+
+    gateway = AIGateway(primary=primary, fallback=fallback, timeout_seconds=timeout)
+    logger.info(
+        "Chat AI gateway ready: primary=%s (%s) fallback=%s timeout_s=%s",
+        primary.name,
+        primary.default_model,
+        f"{fallback.name} ({fallback.default_model})" if fallback else "none",
+        gateway.timeout_seconds,
+    )
+    return gateway
+
+
+# ---------------------------------------------------------------------------
+# Lazy process-wide instances
 # ---------------------------------------------------------------------------
 _gateway: AIGateway | None = None
+_chat_gateway: AIGateway | None = None
 
 
 def get_ai_gateway() -> AIGateway:
@@ -145,17 +215,30 @@ def get_ai_gateway() -> AIGateway:
     return _gateway
 
 
+def get_chat_ai_gateway() -> AIGateway:
+    """Return the shared chat gateway, composing it on first use."""
+    global _chat_gateway
+    if _chat_gateway is None:
+        _chat_gateway = create_chat_ai_gateway()
+    return _chat_gateway
+
+
 async def close_ai_gateway() -> None:
     """Cleanly close persistent provider resources on shutdown."""
-    global _gateway
+    global _gateway, _chat_gateway
     if _gateway is not None:
         await _gateway.aclose()
         _gateway = None
+    if _chat_gateway is not None:
+        await _chat_gateway.aclose()
+        _chat_gateway = None
 
 
 __all__ = [
     "SUPPORTED_AI_PROVIDERS",
     "create_ai_gateway",
     "get_ai_gateway",
+    "create_chat_ai_gateway",
+    "get_chat_ai_gateway",
     "close_ai_gateway",
 ]

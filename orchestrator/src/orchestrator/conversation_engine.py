@@ -13,8 +13,15 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from orchestrator.chat_schemas import AnalysisHistoryContext, MessageContext
-from orchestrator.rag.retrieval_service import retrieval_service
+from orchestrator.central_dentist.knowledge import lookup_dental_knowledge
 from orchestrator import conversation_state as cs
+
+
+def _enhance_prompt_with_knowledge(query: str, prompt: str, active_issue: Optional[str] = None) -> str:
+    snippet = lookup_dental_knowledge(query, finding_key=active_issue)
+    if snippet:
+        return f"{prompt}\n\n[DENTAL GUIDELINE CONTEXT]\n{snippet}"
+    return prompt
 
 if TYPE_CHECKING:  # pragma: no cover - typing only, keeps runtime import cheap
     from orchestrator.ai.gateway import AIGateway
@@ -87,9 +94,9 @@ class ConversationEngine:
     @property
     def gateway(self) -> "AIGateway":
         if self._gateway is None:
-            from orchestrator.ai.factory import get_ai_gateway
+            from orchestrator.ai.factory import get_chat_ai_gateway
 
-            self._gateway = get_ai_gateway()
+            self._gateway = get_chat_ai_gateway()
         return self._gateway
 
     async def _generate_text(
@@ -443,14 +450,7 @@ Respond naturally in 2-4 sentences. Stay on the active topic. Reference what the
         # Enhance with RAG only if not a summary request and RAG not skipped
         if not is_summary_request and not skip_rag:
             _rag_t0 = time.perf_counter()
-            try:
-                enhanced_prompt = await retrieval_service.get_enhanced_prompt(
-                    display_message, prompt, conversation_id
-                )
-                logger.info("[RAG] Enhanced prompt with context")
-            except Exception as e:
-                logger.warning(f"[RAG] Failed to enhance prompt: {e}")
-                enhanced_prompt = prompt
+            enhanced_prompt = _enhance_prompt_with_knowledge(display_message, prompt, active_issue=None)
             _rag_retrieval_ms = (time.perf_counter() - _rag_t0) * 1000
             logger.info("[CHAT_TIMING] rag_retrieval_ms=%.1f", _rag_retrieval_ms)
         else:
@@ -534,16 +534,9 @@ CRITICAL: Your FIRST 1-3 sentences MUST explain what causes this symptom and giv
 After your explanation, you may optionally ask ONE brief follow-up question at the end if it would help you give better advice.
 Respond with empathy in 3-5 sentences. Be conversational and supportive. Plain text only."""
         
-        # Enhance with RAG context (lowest priority) — skip if requested
         _rag_t0 = time.perf_counter()
         if not skip_rag:
-            try:
-                enhanced_prompt = await retrieval_service.get_enhanced_prompt(
-                    display_message, prompt, conversation_id
-                )
-            except Exception as e:
-                logger.warning(f"[RAG] Failed to enhance prompt: {e}")
-                enhanced_prompt = prompt
+            enhanced_prompt = _enhance_prompt_with_knowledge(display_message, prompt, active_issue=None)
         else:
             logger.info("[RAG] Skipped for this intent")
             enhanced_prompt = prompt

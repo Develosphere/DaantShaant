@@ -95,6 +95,9 @@ LOW_CONFIDENCE_LIMITATION = (
 LOW_QUALITY_FLOOR = 0.60
 LOW_CONFIDENCE_FLOOR = 0.45
 LIMITED_VISIBILITY_VALUES = frozenset({"limited"})
+DISCOLORATION_LIMITATION = (
+    "This visual screening cannot determine the underlying cause of tooth discoloration."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -264,10 +267,10 @@ RULES: dict[str, TriageRule] = {
             ),
             urgency=UrgencyLevel.ROUTINE,
             condition_summary="Possible tooth discoloration",
-            possible_concerns=("Tooth discoloration",),
+            possible_concerns=("Possible tooth discoloration",),
             recommended_actions=(
                 "Maintain oral hygiene and monitor the discoloration",
-                "Arrange a dental evaluation if it persists, worsens, or becomes symptomatic",
+                "Arrange a dental evaluation if persistent, changing, or concerning",
             ),
             specialist="general dentist",
             condition_label=ConditionLabel.DISCOLORATION,
@@ -293,6 +296,27 @@ RULES: dict[str, TriageRule] = {
             recommended_actions=("Arrange a restorative dental evaluation",),
             specialist="general dentist / restorative dentist",
             condition_label=ConditionLabel.MISSING_OR_DAMAGED_TOOTH,
+            severity=Severity.MODERATE,
+            action_trigger=ActionTrigger.PRODUCT_DENTIST_2_WEEKS,
+        ),
+        # Phase 11A: visible oral ulcer / sore
+        TriageRule(
+            rule_id="TRIAGE-ULCER-001",
+            finding_code="oral_ulcer",
+            rationale=(
+                "Visible oral ulcer / sore is a visual screening finding; cautious "
+                "monitoring and evaluation if persistent or worsening, without implying "
+                "cancer or systemic disease."
+            ),
+            urgency=UrgencyLevel.SOON,
+            condition_summary="Possible visible oral ulcer / sore",
+            possible_concerns=("Visible oral ulcer / sore",),
+            recommended_actions=(
+                "Arrange a dental evaluation if persistent beyond 10-14 days, worsening, or causing discomfort",
+                "Avoid touching, irritating, or applying harsh unprescribed substances to the area",
+            ),
+            specialist="general dentist / oral medicine",
+            condition_label=ConditionLabel.ORAL_ULCER,
             severity=Severity.MODERATE,
             action_trigger=ActionTrigger.PRODUCT_DENTIST_2_WEEKS,
         ),
@@ -333,6 +357,11 @@ FINDING_ALIASES: dict[str, str] = {
     "gum_disease": "gum_disease_severe",
     "staining": "discoloration",
     "yellow_teeth": "discoloration",
+    "tooth_discoloration": "discoloration",
+    "ulcer": "oral_ulcer",
+    "oral_ulcer": "oral_ulcer",
+    "canker_sore": "oral_ulcer",
+    "mouth_ulcer": "oral_ulcer",
     # Safety fix: broken/missing teeth are structural damage, NOT advanced caries.
     "broken_teeth": "missing_or_damaged_teeth",
     "missing_teeth": "missing_or_damaged_teeth",
@@ -390,6 +419,8 @@ def _limitations(
         limitations.append(LIMITED_VISIBILITY_LIMITATION)
     if any(finding.confidence < LOW_CONFIDENCE_FLOOR for finding in findings):
         limitations.append(LOW_CONFIDENCE_LIMITATION)
+    if any(canonical_code(finding.label) == "discoloration" for finding in findings):
+        limitations.append(DISCOLORATION_LIMITATION)
     return _dedup(limitations)
 
 
@@ -512,6 +543,7 @@ def triage_findings(
 
 __all__ = [
     "BASE_LIMITATION",
+    "DISCOLORATION_LIMITATION",
     "FINDING_ALIASES",
     "HEALTHY_VERDICT",
     "INCONCLUSIVE_VERDICT",

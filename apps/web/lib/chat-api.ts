@@ -8,11 +8,13 @@ export async function sendChatMessage(
   text: string,
   conversationId?: string,
   imageBase64?: string,
-  imageMimeType = "image/jpeg"
+  imageMimeType = "image/jpeg",
+  signal?: AbortSignal
 ): Promise<SendMessageResponse> {
   const res = await authorizedFetch("patient", `${API_BASE}/v1/chat/message`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    signal,
     body: JSON.stringify({
       conversation_id: conversationId || null,
       text,
@@ -21,7 +23,7 @@ export async function sendChatMessage(
       locale: "en",
     }),
   });
-  
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(
@@ -30,7 +32,7 @@ export async function sendChatMessage(
         : JSON.stringify(err.detail ?? res.statusText)
     );
   }
-  
+
   return res.json();
 }
 
@@ -39,11 +41,11 @@ export async function getUserConversations(): Promise<ConversationSummary[]> {
     method: "GET",
     headers: { "Content-Type": "application/json" },
   });
-  
+
   if (!res.ok) {
     throw new Error(`Failed to fetch conversations: ${res.statusText}`);
   }
-  
+
   return res.json();
 }
 
@@ -54,11 +56,11 @@ export async function getConversationMessages(
     method: "GET",
     headers: { "Content-Type": "application/json" },
   });
-  
+
   if (!res.ok) {
     throw new Error(`Failed to fetch messages: ${res.statusText}`);
   }
-  
+
   const data = await res.json();
   return data.messages;
 }
@@ -71,11 +73,11 @@ export async function createConversation(title?: string): Promise<string> {
       title: title || "New Conversation",
     }),
   });
-  
+
   if (!res.ok) {
     throw new Error(`Failed to create conversation: ${res.statusText}`);
   }
-  
+
   const data = await res.json();
   return data.conversation_id;
 }

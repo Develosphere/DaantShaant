@@ -20,6 +20,7 @@ class ScanRepository:
         analysis: object,
         diagnosis: object,
         relevance: object | None = None,
+        report_text: dict | None = None,
     ) -> tuple[Scan, ClinicalReport]:
         scan = Scan(
             patient_user_id=patient_user_id,
@@ -60,22 +61,37 @@ class ScanRepository:
         if not urgency:
             urgency = getattr(diagnosis.severity, "value", str(diagnosis.severity))
 
+        summary_text = (
+            report_text.get("summary")
+            if (report_text and report_text.get("summary"))
+            else f"AI screening observed {diagnosis.condition_label.value} with {diagnosis.confidence:.0%} confidence."
+        )
+
+        concerns_dict: dict = {
+            "findings": [finding.model_dump(mode="json") for finding in analysis.findings]
+        }
+        if report_text and report_text.get("finding_explanations"):
+            concerns_dict["explanations"] = report_text["finding_explanations"]
+
+        actions_dict: dict = {"action_trigger": diagnosis.action_trigger.value}
+        if report_text and report_text.get("recommended_steps"):
+            actions_dict["steps"] = report_text["recommended_steps"]
+
+        trace_summary: dict = {"confidence": diagnosis.confidence}
+        if report_text and report_text.get("source"):
+            trace_summary["report_source"] = report_text["source"]
+
         report = ClinicalReport(
             scan_id=scan.id,
             patient_user_id=patient_user_id,
             verdict=diagnosis.condition_label.value,
             urgency_level=urgency,
-            summary=(
-                f"AI screening observed {diagnosis.condition_label.value} "
-                f"with {diagnosis.confidence:.0%} confidence."
-            ),
-            possible_concerns={
-                "findings": [finding.model_dump(mode="json") for finding in analysis.findings]
-            },
-            recommended_actions={"action_trigger": diagnosis.action_trigger.value},
+            summary=summary_text,
+            possible_concerns=concerns_dict,
+            recommended_actions=actions_dict,
             recommended_specialist=recommended_specialist or "General Dentist",
             limitations={"disclaimer": diagnosis.disclaimer},
-            agent_trace_summary={"confidence": diagnosis.confidence},
+            agent_trace_summary=trace_summary,
         )
         self.session.add(report)
         await self.session.flush()

@@ -1,6 +1,6 @@
-"""Unified PostgreSQL-backed access and refresh authentication."""
-
+import asyncio
 import hashlib
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -12,12 +12,16 @@ from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatc
 from argon2.low_level import Type
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from orchestrator.config import settings
 from orchestrator.db.session import get_db_session
+from orchestrator.dentist_portal.auth_utils import execute_with_single_retry
 from orchestrator.dentist_portal.models import UserRole
 from orchestrator.repositories import UserRepository
+
+logger = logging.getLogger(__name__)
 
 _password_hasher = PasswordHasher(type=Type.ID)
 security = HTTPBearer(auto_error=False)
@@ -85,7 +89,16 @@ async def get_current_user(
     except (jwt.InvalidTokenError, KeyError, ValueError) as exc:
         raise HTTPException(status_code=401, detail="Invalid token") from exc
 
-    user = await UserRepository(session).get(user_id)
+    try:
+        user = await execute_with_single_retry(
+            lambda: UserRepository(session).get(user_id),
+            op_name="get_current_user",
+        )
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_503_SERVICE_UNAVAILABLE:
+            logger.error("[AUTH] auth_me_db_unavailable")
+        raise
+
     if not user:
         raise HTTPException(status_code=401, detail="Account not found")
     if user.status != "active":

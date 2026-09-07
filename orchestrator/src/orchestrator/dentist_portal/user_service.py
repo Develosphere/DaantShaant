@@ -19,6 +19,7 @@ from orchestrator.dentist_portal.auth import (
     hash_refresh_token,
     verify_password,
 )
+from orchestrator.dentist_portal.auth_utils import execute_with_single_retry
 from orchestrator.dentist_portal.constants import DEFAULT_PROFILE_IMAGE
 from orchestrator.dentist_portal.models import (
     DentistRegisterRequest,
@@ -92,16 +93,23 @@ async def _issue_tokens(
     user_agent: str | None = None,
 ) -> tuple[TokenResponse, str]:
     refresh_token = generate_refresh_token()
-    await AuthSessionRepository(session).add(
-        AuthSession(
-            user_id=user.id,
-            refresh_token_hash=hash_refresh_token(refresh_token),
-            expires_at=datetime.now(timezone.utc)
-            + timedelta(days=settings.refresh_token_expire_days),
-            user_agent=user_agent,
-        )
+    auth_repo = AuthSessionRepository(session)
+    await execute_with_single_retry(
+        lambda: auth_repo.add(
+            AuthSession(
+                user_id=user.id,
+                refresh_token_hash=hash_refresh_token(refresh_token),
+                expires_at=datetime.now(timezone.utc)
+                + timedelta(days=settings.refresh_token_expire_days),
+                user_agent=user_agent,
+            )
+        ),
+        op_name="issue_tokens_add_session",
     )
-    profile = await _profile(session, user)
+    profile = await execute_with_single_retry(
+        lambda: _profile(session, user),
+        op_name="issue_tokens_profile",
+    )
     response = TokenResponse(
         access_token=create_access_token(user.id, user.email, user.role),
         role=profile.role,
@@ -189,21 +197,44 @@ async def login_user(
     *,
     user_agent: str | None = None,
 ) -> tuple[TokenResponse, str]:
-    user = await UserRepository(session).get_by_email(req.email)
+    domain = req.email.split("@")[-1] if "@" in req.email else "unknown"
+    logger.info("[AUTH] login_attempt domain=%s role=%s", domain, expected_role.value)
+
+    user_repo = UserRepository(session)
+    try:
+        user = await execute_with_single_retry(
+            lambda: user_repo.get_by_email(req.email),
+            op_name="login_user_lookup",
+        )
+    except HTTPException as exc:
+        if exc.status_code == 503:
+            logger.error("[AUTH] login_db_timeout")
+        raise
+
     if not user or not verify_password(req.password, user.password_hash):
+        logger.warning("[AUTH] login_invalid_credentials")
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if user.role != expected_role.value:
         logger.warning(
-            "Role mismatch during login for user %s (expected %s, got %s)",
+            "[AUTH] login_invalid_credentials role mismatch for user %s (expected %s, got %s)",
             user.id,
             expected_role.value,
             user.role,
         )
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if user.status != "active":
-        logger.warning("Login attempt on inactive/disabled user %s", user.id)
+        logger.warning("[AUTH] login_invalid_credentials inactive/disabled user %s", user.id)
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    return await _issue_tokens(session, user, user_agent=user_agent)
+
+    try:
+        token_response, refresh = await _issue_tokens(session, user, user_agent=user_agent)
+    except HTTPException as exc:
+        if exc.status_code == 503:
+            logger.error("[AUTH] login_db_timeout")
+        raise
+
+    logger.info("[AUTH] login_success user_id=%s role=%s", user.id, user.role)
+    return token_response, refresh
 
 
 async def rotate_refresh_token(
@@ -214,30 +245,101 @@ async def rotate_refresh_token(
 ) -> tuple[TokenResponse, str]:
     now = datetime.now(timezone.utc)
     auth_repo = AuthSessionRepository(session)
-    old = await auth_repo.get_active_by_hash(
-        hash_refresh_token(raw_token), now, lock=True
-    )
+    user_repo = UserRepository(session)
+
+    try:
+        old = await execute_with_single_retry(
+            lambda: auth_repo.get_active_by_hash(
+                hash_refresh_token(raw_token), now, lock=True
+            ),
+            op_name="rotate_refresh_lookup",
+        )
+    except HTTPException as exc:
+        if exc.status_code == 503:
+            logger.error("[AUTH] refresh_db_unavailable")
+        raise
+
     if not old:
+        logger.warning("[AUTH] refresh_invalid")
         raise HTTPException(status_code=401, detail="Invalid refresh session")
-    user = await UserRepository(session).get(old.user_id)
+
+    try:
+        user = await execute_with_single_retry(
+            lambda: user_repo.get(old.user_id),
+            op_name="rotate_refresh_user_lookup",
+        )
+    except HTTPException as exc:
+        if exc.status_code == 503:
+            logger.error("[AUTH] refresh_db_unavailable")
+        raise
+
     if not user or user.status != "active":
-        await auth_repo.revoke(old, now)
+        try:
+            await execute_with_single_retry(
+                lambda: auth_repo.revoke(old, now),
+                op_name="rotate_refresh_revoke_disabled",
+            )
+        except Exception:
+            pass
+        logger.warning("[AUTH] refresh_invalid disabled_account user_id=%s", old.user_id)
         raise HTTPException(status_code=403, detail="Account is disabled")
-    await auth_repo.revoke(old, now)
-    return await _issue_tokens(session, user, user_agent=user_agent)
+
+    try:
+        await execute_with_single_retry(
+            lambda: auth_repo.revoke(old, now),
+            op_name="rotate_refresh_revoke_old",
+        )
+        token_response, rotated = await _issue_tokens(
+            session, user, user_agent=user_agent
+        )
+    except HTTPException as exc:
+        if exc.status_code == 503:
+            logger.error("[AUTH] refresh_db_unavailable")
+        raise
+
+    logger.info("[AUTH] refresh_success user_id=%s", user.id)
+    return token_response, rotated
 
 
 async def revoke_refresh_token(raw_token: str, session: AsyncSession) -> None:
     now = datetime.now(timezone.utc)
-    auth_session = await AuthSessionRepository(session).get_active_by_hash(
-        hash_refresh_token(raw_token), now, lock=True
-    )
-    if auth_session:
-        await AuthSessionRepository(session).revoke(auth_session, now)
+    auth_repo = AuthSessionRepository(session)
+    try:
+        auth_session = await execute_with_single_retry(
+            lambda: auth_repo.get_active_by_hash(
+                hash_refresh_token(raw_token), now, lock=True
+            ),
+            op_name="revoke_refresh_lookup",
+        )
+        if auth_session:
+            await execute_with_single_retry(
+                lambda: auth_repo.revoke(auth_session, now),
+                op_name="revoke_refresh_revoke",
+            )
+    except Exception as exc:
+        logger.warning("[AUTH] revoke_token_failed_during_logout: %s", exc)
 
 
 async def get_user_profile(user_id: UUID, session: AsyncSession) -> UserProfileResponse:
-    user = await UserRepository(session).get(user_id)
+    try:
+        user = await execute_with_single_retry(
+            lambda: UserRepository(session).get(user_id),
+            op_name="get_user_profile_user",
+        )
+    except HTTPException as exc:
+        if exc.status_code == 503:
+            logger.error("[AUTH] auth_me_db_unavailable")
+        raise
+
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return await _profile(session, user)
+
+    try:
+        return await execute_with_single_retry(
+            lambda: _profile(session, user),
+            op_name="get_user_profile_details",
+        )
+    except HTTPException as exc:
+        if exc.status_code == 503:
+            logger.error("[AUTH] auth_me_db_unavailable")
+        raise

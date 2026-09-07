@@ -154,7 +154,7 @@ export function ChatMessageBubble({ message }: ChatMessageProps) {
     <div className={`chat-message ${isUser ? "chat-message--user" : "chat-message--assistant"}`}>
       <div className="chat-message-header">
         <span className="chat-message-sender">
-          {isUser ? t("chat.you") : t("chat.assistant_name")}
+          {isUser ? t("chat.you", "YOU") : t("chat.assistant_name", "DaantShaant")}
         </span>
         <span className="chat-message-time">
           {new Date(message.timestamp).toLocaleTimeString([], {

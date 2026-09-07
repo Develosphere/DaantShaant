@@ -16,6 +16,9 @@ class VisualFinding(BaseModel):
     # Phase 3B-lite (additive/optional): how clearly the area was visible,
     # "clear" | "partial" | "limited". Used only to state screening limitations.
     visibility: str | None = None
+    # Phase 11A (additive/optional): YOLO spatial aggregation metadata
+    distribution: str | None = None  # "localized" | "multiple" | "generalized"
+    detection_count: int | None = None
 
 
 # --- Teeth Analyzer (specs/teeth_analyzer.openapi.yaml) ---
@@ -52,6 +55,8 @@ class ConditionLabel(str, Enum):
     # Phase 3B-lite (additive): a missing/broken tooth is structural damage and
     # must NOT be reported as an advanced cavity.
     MISSING_OR_DAMAGED_TOOTH = "Missing / Damaged Tooth"
+    # Phase 11A (additive): visible oral ulcer / sore
+    ORAL_ULCER = "Oral Ulcer"
     UNKNOWN = "Unknown"
 
 

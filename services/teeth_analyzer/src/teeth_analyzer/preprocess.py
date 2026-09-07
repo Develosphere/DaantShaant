@@ -61,6 +61,7 @@ class PreprocessResult:
     hint: str | None
     blur_variance: float
     brightness: float
+    image_bgr: Any = None
 
 
 def _decode_base64_image(image_base64: str) -> Any:
@@ -94,6 +95,7 @@ def _preprocess_passthrough(image_base64: str) -> PreprocessResult:
         hint=None,
         blur_variance=100.0,
         brightness=130.0,
+        image_bgr=None,
     )
 
 
@@ -142,11 +144,7 @@ def normalize_image(image: Any) -> Any:
             image = _cv2.resize(
                 image, (int(w * scale), int(h * scale)), interpolation=_cv2.INTER_AREA
             )
-        lab = _cv2.cvtColor(image, _cv2.COLOR_BGR2LAB)
-        l, a, b = _cv2.split(lab)
-        clahe = _cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        l = clahe.apply(l)
-        return _cv2.cvtColor(_cv2.merge([l, a, b]), _cv2.COLOR_LAB2BGR)
+        return image
     from PIL import Image
 
     img = Image.fromarray(image[:, :, ::-1])
@@ -157,7 +155,7 @@ def normalize_image(image: Any) -> Any:
 
 def _encode_jpeg(image: Any) -> bytes:
     if _cv2_ready():
-        ok, buf = _cv2.imencode(".jpg", image, [int(_cv2.IMWRITE_JPEG_QUALITY), 85])
+        ok, buf = _cv2.imencode(".jpg", image, [int(_cv2.IMWRITE_JPEG_QUALITY), 95])
         if not ok:
             raise ValueError("Failed to encode processed image")
         return buf.tobytes()
@@ -165,7 +163,7 @@ def _encode_jpeg(image: Any) -> bytes:
 
     img = Image.fromarray(image[:, :, ::-1])
     out = io.BytesIO()
-    img.save(out, format="JPEG", quality=85)
+    img.save(out, format="JPEG", quality=95)
     return out.getvalue()
 
 
@@ -184,6 +182,7 @@ def preprocess_frame(image_base64: str) -> PreprocessResult:
         hint=hint,
         blur_variance=blur_var,
         brightness=brightness,
+        image_bgr=image,
     )
 
 

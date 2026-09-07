@@ -12,6 +12,7 @@ Phase 12B: Hard latency budgets, stage telemetry, request trace IDs, and fail-fa
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import time
 from typing import Any, Optional, TypedDict
@@ -24,11 +25,18 @@ from orchestrator.central_dentist.fast_path import (
     format_fast_path_response,
 )
 from orchestrator.central_dentist.knowledge import lookup_dental_knowledge
-from orchestrator.central_dentist.nlp import CentralDentistIntent, analyze_message
+from orchestrator.central_dentist.nlp import (
+    CentralDentistIntent,
+    analyze_message,
+    has_personal_record_reference,
+    is_conversational_follow_up,
+)
 from orchestrator.central_dentist.prompts import (
     CENTRAL_DENTIST_SYSTEM_PROMPT,
+    audit_chat_prompt_size,
     build_grounded_context,
     clean_response,
+    get_context_sources,
 )
 from orchestrator.central_dentist.retrieval import (
     AppointmentSummary,
@@ -79,6 +87,7 @@ class CentralDentistState(TypedDict, total=False):
     dentist_info: Optional[dict[str, Any]]
     knowledge_context: Optional[str]
     recent_turns: list[dict[str, str]]
+    context_sources: list[str]
 
     # --- Generation & Validation ---
     grounded_context: str
@@ -236,7 +245,7 @@ def nlp_understanding(state: CentralDentistState) -> dict[str, Any]:
     t0 = time.perf_counter()
     raw_message = state.get("message", "")
     active_finding = state.get("active_finding")
-    has_recent_scan = bool(state.get("latest_scan"))
+    has_recent_scan = bool(state.get("latest_scan") or state.get("recent_turns"))
 
     nlp_res = analyze_message(
         raw_message,
@@ -268,6 +277,8 @@ def nlp_understanding(state: CentralDentistState) -> dict[str, Any]:
 def plan_retrieval(state: CentralDentistState) -> dict[str, Any]:
     """Formulate query-aware retrieval plan to fetch only required domain data."""
     intent_val = state.get("intent", CentralDentistIntent.UNKNOWN.value)
+    user_msg = state.get("message", "")
+    has_record_ref = has_personal_record_reference(user_msg)
 
     plan = {
         "need_latest_scan": False,
@@ -298,10 +309,16 @@ def plan_retrieval(state: CentralDentistState) -> dict[str, Any]:
     elif intent_val == CentralDentistIntent.REPORT_QUESTION.value:
         plan["need_latest_scan"] = True
     elif intent_val == CentralDentistIntent.SYMPTOM_QUESTION.value:
-        plan["need_latest_scan"] = True
+        if has_record_ref:
+            plan["need_latest_scan"] = True
         plan["need_knowledge"] = True
-    elif intent_val == CentralDentistIntent.GENERAL_ORAL_HEALTH.value:
+    elif intent_val in (
+        CentralDentistIntent.GENERAL_ORAL_HEALTH.value,
+        CentralDentistIntent.DENTAL_KNOWLEDGE.value,
+    ):
         plan["need_knowledge"] = True
+        if has_record_ref:
+            plan["need_latest_scan"] = True
     elif intent_val == CentralDentistIntent.FOLLOW_UP_REFERENCE.value:
         plan["need_latest_scan"] = True
         plan["need_knowledge"] = True
@@ -309,8 +326,9 @@ def plan_retrieval(state: CentralDentistState) -> dict[str, Any]:
         # Greetings do not need heavy DB retrieval
         pass
     else:
-        # Default unknown: grab latest scan context if available
-        plan["need_latest_scan"] = True
+        # Default unknown: ONLY grab latest scan if user explicitly asked about their records/scans!
+        if has_record_ref:
+            plan["need_latest_scan"] = True
 
     return {"retrieval_plan": plan}
 
@@ -423,11 +441,54 @@ async def retrieve_conversation_context(state: CentralDentistState) -> dict[str,
                 "[CENTRAL_DENTIST][%s] Conversation history retrieval failed: %s", req_id, exc
             )
 
-    # If no active finding in current message, resolve from prior turn
-    if not active_finding and recent_turns:
-        for turn in reversed(recent_turns):
-            if turn.get("role") == "assistant":
-                content = (turn.get("content") or "").lower()
+    # If no active finding in current message, resolve from prior turn only for follow-ups
+    user_msg = state.get("message", "")
+    intent_val = state.get("intent")
+    if not intent_val and user_msg:
+        from orchestrator.central_dentist.nlp import classify_intent
+        inferred_intent, _ = classify_intent(
+            user_msg,
+            active_finding=active_finding,
+            has_recent_scan_context=bool(state.get("latest_scan") or recent_turns),
+        )
+        intent_val = inferred_intent.value
+    elif not intent_val:
+        intent_val = CentralDentistIntent.UNKNOWN.value
+
+    is_followup = (
+        intent_val == CentralDentistIntent.FOLLOW_UP_REFERENCE.value
+        or is_conversational_follow_up(user_msg)
+    )
+    is_standalone_dental = intent_val in (
+        CentralDentistIntent.GENERAL_ORAL_HEALTH.value,
+        CentralDentistIntent.DENTAL_KNOWLEDGE.value,
+    )
+
+    if not is_standalone_dental and is_followup:
+        if not active_finding and recent_turns:
+            for turn in reversed(recent_turns):
+                if turn.get("role") == "assistant":
+                    content = (turn.get("content") or "").lower()
+                    for f_key in (
+                        "discoloration",
+                        "tartar",
+                        "cavity_suspect",
+                        "gingivitis_signs",
+                        "oral_ulcer",
+                    ):
+                        if f_key.replace("_", " ") in content or f_key.split("_")[0] in content:
+                            active_finding = f_key
+                            break
+                    if active_finding:
+                        break
+
+        # Resolve from latest scan findings or verdict only for contextual follow-ups
+        if not active_finding and state.get("latest_scan"):
+            l_scan = state.get("latest_scan")
+            if l_scan and l_scan.findings:
+                active_finding = l_scan.findings[0].finding_code
+            elif l_scan and l_scan.verdict:
+                verdict_lower = l_scan.verdict.lower()
                 for f_key in (
                     "discoloration",
                     "tartar",
@@ -435,11 +496,12 @@ async def retrieve_conversation_context(state: CentralDentistState) -> dict[str,
                     "gingivitis_signs",
                     "oral_ulcer",
                 ):
-                    if f_key.replace("_", " ") in content or f_key.split("_")[0] in content:
+                    if f_key.replace("_", " ") in verdict_lower or f_key.split("_")[0] in verdict_lower:
                         active_finding = f_key
                         break
-                if active_finding:
-                    break
+    elif is_standalone_dental:
+        # Standalone questions start clean without inheriting previous findings
+        active_finding = None
 
     history_ms = (time.perf_counter() - t0) * 1000.0
     latency = dict(state.get("latency_metadata", {}))
@@ -464,8 +526,14 @@ def retrieve_optional_knowledge(state: CentralDentistState) -> dict[str, Any]:
 
     raw_msg = state.get("message", "")
     active_finding = state.get("active_finding")
+    intent_val = state.get("intent")
+    allow_finding = intent_val == CentralDentistIntent.FOLLOW_UP_REFERENCE.value
 
-    snippet = lookup_dental_knowledge(raw_msg, finding_key=active_finding)
+    snippet = lookup_dental_knowledge(
+        raw_msg,
+        finding_key=active_finding,
+        allow_finding_fallback=allow_finding,
+    )
     return {"knowledge_context": snippet}
 
 
@@ -474,17 +542,75 @@ def retrieve_optional_knowledge(state: CentralDentistState) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def build_grounded_context_node(state: CentralDentistState) -> dict[str, Any]:
-    """Synthesize compact, grounded text for generation or fast-path check."""
+    """Synthesize compact, grounded text for generation with topic and history isolation."""
     t0 = time.perf_counter()
+    intent_val = state.get("intent", CentralDentistIntent.UNKNOWN.value)
+    user_msg = state.get("message", "")
+
+    is_standalone_dental = intent_val in (
+        CentralDentistIntent.GENERAL_ORAL_HEALTH.value,
+        CentralDentistIntent.DENTAL_KNOWLEDGE.value,
+    )
+    is_followup = (
+        intent_val == CentralDentistIntent.FOLLOW_UP_REFERENCE.value
+        or is_conversational_follow_up(user_msg)
+    )
+    has_record_ref = has_personal_record_reference(user_msg)
+    is_patient_specific = intent_val in (
+        CentralDentistIntent.SCAN_LATEST.value,
+        CentralDentistIntent.SCAN_COMPARE.value,
+        CentralDentistIntent.SCAN_HISTORY.value,
+        CentralDentistIntent.REPORT_QUESTION.value,
+        CentralDentistIntent.APPOINTMENT_STATUS.value,
+        CentralDentistIntent.DENTIST_INFORMATION.value,
+        CentralDentistIntent.EXPLAIN_CONFIDENCE.value,
+    )
+
+    # 1. History policy:
+    # Standalone dental knowledge receives NO previous conversation history.
+    # Follow-ups receive recent turns.
+    recent_turns = None
+    if is_followup:
+        recent_turns = state.get("recent_turns")
+
+    # 2. Patient data policy:
+    # Only include patient clinical records if the question is patient-specific,
+    # or explicitly references personal records, or is a scan follow-up.
+    include_patient_records = is_patient_specific or has_record_ref or (is_followup and bool(state.get("latest_scan")))
+
+    if include_patient_records:
+        l_scan = state.get("latest_scan")
+        p_scan = state.get("previous_scan")
+        s_hist = state.get("scan_history")
+        appts = state.get("appointments")
+        d_info = state.get("dentist_info")
+    else:
+        l_scan = None
+        p_scan = None
+        s_hist = None
+        appts = None
+        d_info = None
+
+    knowledge_snippet = state.get("knowledge_context")
 
     grounded = build_grounded_context(
-        latest_scan=state.get("latest_scan"),
-        previous_scan=state.get("previous_scan"),
-        scan_history=state.get("scan_history"),
-        appointments=state.get("appointments"),
-        dentist_info=state.get("dentist_info"),
-        knowledge_snippet=state.get("knowledge_context"),
-        recent_turns=state.get("recent_turns"),
+        latest_scan=l_scan,
+        previous_scan=p_scan,
+        scan_history=s_hist,
+        appointments=appts,
+        dentist_info=d_info,
+        knowledge_snippet=knowledge_snippet,
+        recent_turns=recent_turns,
+    )
+
+    context_sources = get_context_sources(
+        latest_scan=l_scan,
+        previous_scan=p_scan,
+        scan_history=s_hist,
+        appointments=appts,
+        dentist_info=d_info,
+        knowledge_snippet=knowledge_snippet,
+        recent_turns=recent_turns,
     )
 
     ctx_ms = (time.perf_counter() - t0) * 1000.0
@@ -493,6 +619,7 @@ def build_grounded_context_node(state: CentralDentistState) -> dict[str, Any]:
 
     return {
         "grounded_context": grounded,
+        "context_sources": context_sources,
         "latency_metadata": latency,
     }
 
@@ -528,13 +655,12 @@ async def qwen_or_direct_answer(state: CentralDentistState) -> dict[str, Any]:
                 "latency_metadata": latency,
             }
 
-    # QWEN GENERATION PATH
-    logger.info("[CENTRAL_DENTIST][%s] qwen_started", req_id)
+    # CHAT GENERATION PATH
     gateway = state.get("_gateway")
     if gateway is None:
-        from orchestrator.ai.factory import get_ai_gateway
+        from orchestrator.ai.factory import get_chat_ai_gateway
 
-        gateway = get_ai_gateway()
+        gateway = get_chat_ai_gateway()
 
     from orchestrator.ai.exceptions import AllProvidersFailedError, ProviderTimeoutError
     from orchestrator.ai.schemas import ChatMessage, TextRequest
@@ -542,47 +668,113 @@ async def qwen_or_direct_answer(state: CentralDentistState) -> dict[str, Any]:
 
     user_query = state.get("message", "")
     grounded_ctx = state.get("grounded_context", "")
+    context_sources = state.get("context_sources", [])
 
-    user_prompt = f"PATIENT QUESTION: {user_query}\n\n{grounded_ctx}".strip()
+    if grounded_ctx:
+        user_prompt = f"PATIENT QUESTION: {user_query}\n\n{grounded_ctx}".strip()
+    else:
+        user_prompt = f"PATIENT QUESTION: {user_query}".strip()
+
+    prompt_sha256 = hashlib.sha256(user_prompt.encode("utf-8")).hexdigest()[:12]
+
+    prompt_audit = audit_chat_prompt_size(
+        system_prompt=CENTRAL_DENTIST_SYSTEM_PROMPT,
+        grounded_context=grounded_ctx,
+        user_message=user_query,
+        recent_turns=state.get("recent_turns") if ("conversation_history" in context_sources) else None,
+        knowledge_snippet=state.get("knowledge_context") if ("knowledge_guideline" in context_sources) else None,
+        has_patient_context=any(s in context_sources for s in ("latest_scan", "scan_history", "appointments", "dentist_info")),
+    )
+
+    primary_obj = getattr(gateway, "primary", None)
+    primary_name = getattr(primary_obj, "name", "qwen") if primary_obj is not None else getattr(settings, "chat_llm_provider", "qwen")
+    primary_model = getattr(primary_obj, "default_model", getattr(settings, "chat_qwen_model", "qwen3.7-flash")) if primary_obj is not None else getattr(settings, "chat_qwen_model", "qwen3.7-flash")
+    logger.info(
+        "[CENTRAL_DENTIST][%s] chat_started provider=%s model=%s messages=%d prompt_chars=%d max_tokens=200",
+        req_id,
+        primary_name,
+        primary_model,
+        prompt_audit["messages"],
+        prompt_audit["total_chars"],
+    )
+    logger.info(
+        "[CENTRAL_DENTIST][%s] prompt_telemetry prompt_sha256=%s intent=%s messages=%d system_chars=%d history_chars=%d patient_chars=%d knowledge_chars=%d total_chars=%d context_sources=%s",
+        req_id,
+        prompt_sha256,
+        state.get("intent"),
+        prompt_audit["messages"],
+        prompt_audit["system_chars"],
+        prompt_audit.get("history_chars", 0),
+        prompt_audit.get("patient_context_chars", 0),
+        prompt_audit.get("knowledge_context_chars", 0),
+        prompt_audit["total_chars"],
+        context_sources,
+    )
+
+    extra_body = None
+    enable_thinking = getattr(settings, "chat_qwen_enable_thinking", False)
+    if not enable_thinking:
+        extra_body = {"enable_thinking": False}
 
     request = TextRequest(
         messages=[
             ChatMessage(role="system", content=CENTRAL_DENTIST_SYSTEM_PROMPT),
             ChatMessage(role="user", content=user_prompt),
         ],
-        temperature=0.7,
-        max_tokens=300,
+        temperature=0.25,
+        max_tokens=200,
+        extra_body=extra_body,
         metadata={"request_id": req_id},
     )
 
-    qwen_deadline = settings.chat_qwen_timeout_seconds  # 8.0s
+    qwen_deadline = settings.chat_qwen_timeout_seconds
+    fallback_used = False
     try:
         async with asyncio.timeout(qwen_deadline):
             res = await gateway.generate_text(request)
             draft = res.content or ""
     except (TimeoutError, ProviderTimeoutError) as exc:
+        fallback_used = True
+        qwen_ms = (time.perf_counter() - t0) * 1000.0
         logger.warning(
-            "[CENTRAL_DENTIST][%s] Qwen generation timed out after %.1fs: %s",
+            "[CENTRAL_DENTIST][%s] qwen_timeout qwen_ms=%.1f fallback=true (%s)",
             req_id,
-            qwen_deadline,
+            qwen_ms,
             exc,
         )
-        logger.info("[CENTRAL_DENTIST][%s] deterministic_fallback=true", req_id)
         draft = _build_deterministic_fallback(state)
     except AllProvidersFailedError as exc:
-        logger.warning("[CENTRAL_DENTIST][%s] Both AI providers failed: %s", req_id, exc)
-        logger.info("[CENTRAL_DENTIST][%s] deterministic_fallback=true", req_id)
+        fallback_used = True
+        qwen_ms = (time.perf_counter() - t0) * 1000.0
+        logger.warning(
+            "[CENTRAL_DENTIST][%s] qwen_failed qwen_ms=%.1f fallback=true (%s)",
+            req_id,
+            qwen_ms,
+            exc,
+        )
         draft = _build_deterministic_fallback(state)
     except Exception as exc:
+        fallback_used = True
+        qwen_ms = (time.perf_counter() - t0) * 1000.0
         logger.error(
-            "[CENTRAL_DENTIST][%s] Unexpected generation error: %s", req_id, exc, exc_info=True
+            "[CENTRAL_DENTIST][%s] qwen_error qwen_ms=%.1f fallback=true (%s)",
+            req_id,
+            qwen_ms,
+            exc,
+            exc_info=True,
         )
-        logger.info("[CENTRAL_DENTIST][%s] deterministic_fallback=true", req_id)
         draft = _build_deterministic_fallback(state)
 
     qwen_ms = (time.perf_counter() - t0) * 1000.0
     latency["chat.qwen_ms"] = round(qwen_ms, 2)
-    logger.info("[CENTRAL_DENTIST][%s] qwen_done ms=%.1f", req_id, round(qwen_ms, 2))
+    latency["chat.generation_ms"] = round(qwen_ms, 2)
+    if not fallback_used:
+        logger.info(
+            "[CENTRAL_DENTIST][%s] qwen_success qwen_ms=%.1f total_ms=%.1f",
+            req_id,
+            round(qwen_ms, 1),
+            round(qwen_ms, 1),
+        )
 
     return {
         "draft_response": draft,

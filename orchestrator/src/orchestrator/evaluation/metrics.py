@@ -353,3 +353,74 @@ def evaluate_dentist_ranking_benchmark() -> RankingBenchmarkResult:
         accuracy=round(accuracy, 4),
         scenario_details=details,
     )
+
+
+def compute_yolo_evaluation_metrics(
+    cases: list[DatasetCase], results: list[CaseResult]
+) -> dict[str, Any]:
+    """Compute Phase 11A YOLO finding evaluation metrics and critical confusion tracking.
+
+    Metrics:
+    - Per-class precision, recall, F1 across YOLO classes (tartar, cavity_suspect,
+      gingivitis_signs, discoloration, oral_ulcer)
+    - Critical confusion case: tartar vs discoloration
+    - Total detection counts
+    """
+    case_map = {c.id: c for c in cases}
+    classes = ("tartar", "cavity_suspect", "gingivitis_signs", "discoloration", "oral_ulcer")
+    stats: dict[str, dict[str, int]] = {cls: {"tp": 0, "fp": 0, "fn": 0} for cls in classes}
+
+    tartar_as_discoloration = 0
+    discoloration_as_tartar = 0
+    total_evaluated = 0
+
+    for res in results:
+        case = case_map.get(res.case_id)
+        if not case or case.expected_findings is None:
+            continue
+
+        total_evaluated += 1
+        exp_set = {f.lower().strip() for f in case.expected_findings}
+        pred_set = {f.lower().strip() for f in res.predicted_findings}
+
+        for cls in classes:
+            in_exp = cls in exp_set
+            in_pred = cls in pred_set
+            if in_exp and in_pred:
+                stats[cls]["tp"] += 1
+            elif not in_exp and in_pred:
+                stats[cls]["fp"] += 1
+            elif in_exp and not in_pred:
+                stats[cls]["fn"] += 1
+
+        if "tartar" in exp_set and "discoloration" in pred_set and "tartar" not in pred_set:
+            tartar_as_discoloration += 1
+        if "discoloration" in exp_set and "tartar" in pred_set and "discoloration" not in pred_set:
+            discoloration_as_tartar += 1
+
+    per_class_metrics: dict[str, dict[str, float]] = {}
+    for cls in classes:
+        tp = stats[cls]["tp"]
+        fp = stats[cls]["fp"]
+        fn = stats[cls]["fn"]
+        prec = (tp / (tp + fp)) if (tp + fp) > 0 else (1.0 if fn == 0 else 0.0)
+        rec = (tp / (tp + fn)) if (tp + fn) > 0 else 1.0
+        f1 = (2 * prec * rec / (prec + rec)) if (prec + rec) > 0 else 0.0
+        per_class_metrics[cls] = {
+            "precision": round(prec, 4),
+            "recall": round(rec, 4),
+            "f1": round(f1, 4),
+            "tp": tp,
+            "fp": fp,
+            "fn": fn,
+        }
+
+    return {
+        "total_evaluated": total_evaluated,
+        "per_class": per_class_metrics,
+        "critical_confusion": {
+            "tartar_confused_as_discoloration": tartar_as_discoloration,
+            "discoloration_confused_as_tartar": discoloration_as_tartar,
+            "target": "zero cross-contamination between yellow teeth and tartar",
+        },
+    }

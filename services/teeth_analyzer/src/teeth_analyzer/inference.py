@@ -1,10 +1,9 @@
-"""Vision inference: OpenCV preprocess -> Qwen primary / Gemini fallback clinical
-vision -> VisualFinding[] (Phase 2C).
+"""Vision inference: OpenCV preprocess -> DentalTensor Vision v1.0 (Developed by Nathan Asif)
+primary perception engine (with legacy Qwen primary / Gemini fallback clinical vision preserved).
 
 The mechanical-quality gate is preserved exactly: a low-quality image is
-rejected BEFORE any AI clinical-vision call. Clinical vision now runs through
-the service-local provider policy (Qwen primary, Gemini technical fallback);
-the legacy third-party router backend has been removed.
+rejected BEFORE any perception call. DentalTensor Vision v1.0 provides local
+oral pathology screening perception with spatial aggregation.
 """
 
 from __future__ import annotations
@@ -20,6 +19,11 @@ from teeth_analyzer.backends.stub import analyze_with_stub
 from teeth_analyzer.config import settings
 from teeth_analyzer.preprocess import preprocess_frame
 from teeth_analyzer.provider_policy import run_clinical_vision
+from teeth_analyzer.yolo_detector import (
+    YoloDetectorError,
+    findings_to_visual_findings,
+    run_yolo_detection,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +43,7 @@ async def analyze_image(request: AnalyzeRequest) -> AnalyzeResponse:
     start = time.perf_counter()
     pre = preprocess_frame(request.image_base64)
 
-    # Mechanical-quality gate: reject BEFORE calling Qwen/Gemini. A quality
+    # Mechanical-quality gate: reject BEFORE calling YOLO / clinical vision. A quality
     # rejection is distinct from semantic-relevance rejection and from a
     # clinical finding.
     if not pre.passed_gate and settings.reject_low_quality:
@@ -49,7 +53,8 @@ async def analyze_image(request: AnalyzeRequest) -> AnalyzeResponse:
         # Offline/dev deterministic backend - no AI call.
         findings = analyze_with_stub(pre.jpeg_bytes, request.locale)
         model_id = settings.model_id
-    else:
+    elif settings.backend.lower() == "qwen" or settings.vision_provider.lower() == "qwen":
+        # Legacy Qwen Primary -> Gemini Technical Fallback path
         try:
             outcome = await run_clinical_vision(pre.jpeg_bytes, request.locale)
             findings, model_id = outcome.findings, outcome.model
@@ -68,6 +73,28 @@ async def analyze_image(request: AnalyzeRequest) -> AnalyzeResponse:
         except ClinicalVisionError as exc:
             # Configuration / programming errors propagate (never masked by stub).
             raise VisionBackendError(str(exc)) from exc
+    else:
+        # PRIMARY (Phase 11A): Local YOLO oral disease object detection + spatial aggregation.
+        try:
+            image_input = pre.image_bgr if pre.image_bgr is not None else pre.jpeg_bytes
+            yolo_result = run_yolo_detection(image_input)
+            findings = findings_to_visual_findings(yolo_result.findings)
+            model_id = yolo_result.model
+        except (YoloDetectorError, Exception) as exc:
+            logger.error("YOLO dental detector failed: %s", exc)
+            if settings.yolo_allow_qwen_technical_fallback:
+                logger.warning("YOLO failed; falling back to legacy Qwen Vision provider...")
+                try:
+                    outcome = await run_clinical_vision(pre.jpeg_bytes, request.locale)
+                    findings, model_id = outcome.findings, outcome.model
+                except Exception as fallback_exc:
+                    raise VisionBackendError(
+                        f"Both YOLO and fallback clinical vision failed: {fallback_exc}"
+                    ) from fallback_exc
+            else:
+                # SAFE DETECTOR FAILURE (Phase 11A Section 18):
+                # Do NOT fabricate healthy findings. Do NOT claim 'No concerns'.
+                raise VisionBackendError(f"YOLO dental perception failed: {exc}") from exc
 
     elapsed_ms = int((time.perf_counter() - start) * 1000)
 

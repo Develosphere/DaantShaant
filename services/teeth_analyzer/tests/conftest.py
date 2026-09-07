@@ -9,6 +9,15 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-_SRC = Path(__file__).resolve().parents[1] / "src"
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
+_ROOT = Path(__file__).resolve().parents[3]
+_PATHS = [
+    _ROOT / "services" / "teeth_analyzer" / "src",
+    _ROOT / "services" / "diagnosis" / "src",
+    _ROOT / "packages" / "dantshaant_common" / "src",
+    _ROOT / "orchestrator" / "src",
+    _ROOT,
+]
+for p in _PATHS:
+    if p.is_dir() and str(p) not in sys.path:
+        sys.path.insert(0, str(p))
+

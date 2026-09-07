@@ -93,8 +93,8 @@ class AIGateway:
                 raise
             primary_error = exc
 
-            # Skip fallback if primary elapsed time consumed safe request budget
-            if primary_elapsed >= 6.5:
+            # Skip fallback if primary elapsed time consumed safe request budget (15.0s global ceiling)
+            if primary_elapsed >= 10.0:
                 logger.warning(
                     "Skipping fallback provider %s: primary elapsed %.2fs exceeds safe fallback budget",
                     self.fallback.name,
@@ -114,11 +114,18 @@ class AIGateway:
                 self.fallback.name,
             )
 
-        # Fallback attempt with bounded budget
+        # Fallback attempt with bounded budget (never exceed 15.0s total)
         started_fb = time.perf_counter()
-        fb_timeout = min(self.timeout_seconds, max(2.0, 10.0 - primary_elapsed))
+        fb_timeout = min(self.timeout_seconds, max(2.0, 13.0 - primary_elapsed))
+        fb_request = request
+        if getattr(request, "model", None):
+            req_model_lower = str(request.model).lower()
+            if (self.fallback.name == "gemini" and "qwen" in req_model_lower) or (
+                self.fallback.name == "qwen" and "gemini" in req_model_lower
+            ):
+                fb_request = request.model_copy(update={"model": None})
         try:
-            result = await self._call(self.fallback, method, request, timeout_override=fb_timeout)
+            result = await self._call(self.fallback, method, fb_request, timeout_override=fb_timeout)
             return self._normalize(result, self.fallback, started_fb, fallback_used=True)
         except AIGatewayError as exc:
             if not exc.fallback_eligible:

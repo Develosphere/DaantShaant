@@ -29,6 +29,7 @@ function conditionIcon(label: string): string {
   if (l.includes("plaque") || l.includes("tartar")) return "◎";
   if (l.includes("gingivitis") || l.includes("gum")) return "▲";
   if (l.includes("discolor")) return "◐";
+  if (l.includes("ulcer")) return "✧";
   return "?";
 }
 
@@ -316,9 +317,11 @@ export function DiagnosisReport({
         </div>
       )}
 
-      {diagnosis.meets_threshold === false && (
+      {diagnosis.action_trigger === "REQUEST_CLEARER_PHOTO" || (analysis && analysis.overall_quality_score < 0.5) ? (
         <p className="alert alert-warn">{t("report.low_clarity_alert")}</p>
-      )}
+      ) : diagnosis.meets_threshold === false ? (
+        <p className="alert alert-warn">{t("report.moderate_confidence_alert")}</p>
+      ) : null}
 
       {!loading && result && !liveActive && (
         <div style={{ marginTop: "1.25rem" }}>

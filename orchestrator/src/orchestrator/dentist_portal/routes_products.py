@@ -43,39 +43,6 @@ def _product_to_out(product: Product) -> ProductOut:
     )
 
 
-async def _embed_product_in_faiss(product: Product) -> None:
-    try:
-        import numpy as np
-        from orchestrator.rag.embeddings import embedding_service
-        from orchestrator.rag.vector_store import vector_store
-
-        text_to_embed = (
-            f"Product: {product.name}. Category: {product.category}. "
-            f"Price: ${float(product.price or 0):.2f}. "
-            f"Description: {product.ai_description or ''}. "
-            f"Problems solved: {', '.join(product.problems_solved or [])}."
-        )
-        embedding = embedding_service.generate_embedding(text_to_embed)
-        if embedding is not None:
-            vector_store.load()
-            vector_store.add_chunks(
-                [{
-                    "source_file": "portal_products",
-                    "text": text_to_embed,
-                    "metadata": {
-                        "product_id": str(product.id),
-                        "name": product.name,
-                        "category": product.category,
-                        "price": float(product.price or 0),
-                    },
-                }],
-                np.array([embedding]),
-            )
-            vector_store.save()
-    except Exception as exc:
-        logger.warning("[RAG SYNC] Product embedding sync failed: %s", exc)
-
-
 @router.post("/upload", response_model=dict)
 async def upload_product(
     product: ProductUpload,
@@ -106,7 +73,6 @@ async def upload_product(
             status="active",
         )
     )
-    await _embed_product_in_faiss(row)
     return {
         "product_id": str(row.id),
         "ai_description": row.ai_description,
@@ -333,7 +299,6 @@ async def update_product(
     for key, value in changes.items():
         setattr(product, key, value)
     await session.flush()
-    await _embed_product_in_faiss(product)
     return {"updated": True}
 
 
@@ -364,5 +329,4 @@ async def webhook_embed_product(
     product = await ProductRepository(session).get_owned(product_id, dentist["user_id"])
     if not product:
         raise HTTPException(status_code=404, detail="Product not found or not yours")
-    await _embed_product_in_faiss(product)
     return {"embedded": True, "product_id": str(product.id)}

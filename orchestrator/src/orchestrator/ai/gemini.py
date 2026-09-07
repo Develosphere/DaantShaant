@@ -22,6 +22,7 @@ Design rules (identical policy to the Qwen adapter):
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -95,10 +96,20 @@ class GeminiProvider(AIProvider):
             raise ProviderConfigurationError("AI_REQUEST_TIMEOUT_SECONDS must be a positive number")
 
         self._client: httpx.AsyncClient | None = None
+        self._client_loop: asyncio.AbstractEventLoop | None = None
 
     def _get_client(self) -> httpx.AsyncClient:
         """Return existing persistent client or initialize a new one with connection pooling."""
-        if self._client is None or self._client.is_closed:
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+
+        if (
+            self._client is None
+            or self._client.is_closed
+            or (self._client_loop is not None and (self._client_loop.is_closed() or self._client_loop is not current_loop))
+        ):
             kwargs: dict[str, Any] = {
                 "timeout": httpx.Timeout(self._timeout, connect=5.0),
                 "limits": httpx.Limits(
@@ -110,6 +121,7 @@ class GeminiProvider(AIProvider):
             if self._transport is not None:
                 kwargs["transport"] = self._transport
             self._client = httpx.AsyncClient(**kwargs)
+            self._client_loop = current_loop
         return self._client
 
     async def aclose(self) -> None:
@@ -117,6 +129,7 @@ class GeminiProvider(AIProvider):
         if self._client is not None and not self._client.is_closed:
             await self._client.aclose()
             self._client = None
+            self._client_loop = None
 
     # ------------------------------------------------------------------
     # AIProvider implementation

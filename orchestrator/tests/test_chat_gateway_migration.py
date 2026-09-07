@@ -73,14 +73,14 @@ def _reply(text: str) -> AIResult:
 
 
 def _stub_rag(monkeypatch) -> None:
-    """Keep the existing RAG boundary, but never touch FAISS/embeddings."""
+    """Keep knowledge enhancement simple during tests."""
     from orchestrator import conversation_engine as engine_module
 
-    async def _fake_enhance(query, prompt, conversation_id=None):
+    def _fake_enhance(query, prompt, active_issue=None):
         return f"{prompt}\n\n{RAG_MARKER}"
 
     monkeypatch.setattr(
-        engine_module.retrieval_service, "get_enhanced_prompt", _fake_enhance
+        engine_module, "_enhance_prompt_with_knowledge", _fake_enhance
     )
 
 
@@ -228,6 +228,7 @@ def test_engine_resolves_gateway_lazily_not_at_import(monkeypatch):
     from orchestrator.ai import factory
 
     monkeypatch.setattr(factory, "_gateway", None)
+    monkeypatch.setattr(factory, "_chat_gateway", None)
     engine = ConversationEngine()
 
     assert engine._gateway is None
@@ -235,6 +236,7 @@ def test_engine_resolves_gateway_lazily_not_at_import(monkeypatch):
     def _boom(*args, **kwargs):  # pragma: no cover - guard must not be reached
         raise AssertionError("Gateway composition must stay lazy and offline")
 
+    monkeypatch.setattr("orchestrator.ai.factory.create_chat_ai_gateway", _boom)
     monkeypatch.setattr("orchestrator.ai.factory.create_ai_gateway", _boom)
     with pytest.raises(AssertionError):
         engine.gateway

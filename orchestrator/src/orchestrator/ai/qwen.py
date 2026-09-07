@@ -70,6 +70,7 @@ class QwenProvider(AIProvider):
         chat_model: str | None = None,
         vision_model: str | None = None,
         timeout_seconds: float | None = None,
+        enable_thinking: bool | None = None,
         settings: AISettings | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
@@ -87,6 +88,7 @@ class QwenProvider(AIProvider):
         self._timeout = (
             timeout_seconds if timeout_seconds is not None else cfg.ai_request_timeout_seconds
         )
+        self._enable_thinking = enable_thinking
         self._transport = transport
         self.default_model = self._default_model
 
@@ -101,10 +103,20 @@ class QwenProvider(AIProvider):
 
         self._endpoint = self._base_url.rstrip("/") + "/chat/completions"
         self._client: httpx.AsyncClient | None = None
+        self._client_loop: asyncio.AbstractEventLoop | None = None
 
     def _get_client(self) -> httpx.AsyncClient:
         """Return existing persistent client or initialize a new one with connection pooling."""
-        if self._client is None or self._client.is_closed:
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+
+        if (
+            self._client is None
+            or self._client.is_closed
+            or (self._client_loop is not None and (self._client_loop.is_closed() or self._client_loop is not current_loop))
+        ):
             kwargs: dict[str, Any] = {
                 "timeout": httpx.Timeout(self._timeout, connect=5.0),
                 "limits": httpx.Limits(
@@ -116,6 +128,7 @@ class QwenProvider(AIProvider):
             if self._transport is not None:
                 kwargs["transport"] = self._transport
             self._client = httpx.AsyncClient(**kwargs)
+            self._client_loop = current_loop
         return self._client
 
     async def aclose(self) -> None:
@@ -123,6 +136,7 @@ class QwenProvider(AIProvider):
         if self._client is not None and not self._client.is_closed:
             await self._client.aclose()
             self._client = None
+            self._client_loop = None
 
     # ------------------------------------------------------------------
     # AIProvider implementation
@@ -130,6 +144,9 @@ class QwenProvider(AIProvider):
     async def generate_text(self, request: TextRequest) -> AIResult:
         messages = self._plain_messages(request.messages, request.prompt)
         req_id = request.metadata.get("request_id") if request.metadata else None
+        extra_body = dict(request.extra_body) if request.extra_body else {}
+        if "enable_thinking" not in extra_body and self._enable_thinking is not None:
+            extra_body["enable_thinking"] = self._enable_thinking
         return await self._chat(
             messages,
             # Plain text generation is conversational generation: it defaults to
@@ -138,6 +155,7 @@ class QwenProvider(AIProvider):
             model=request.model or self._chat_model or self._default_model,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
+            extra_body=extra_body or None,
             request_id=req_id,
         )
 
@@ -202,6 +220,7 @@ class QwenProvider(AIProvider):
         temperature: float | None,
         max_tokens: int | None,
         json_mode: bool = False,
+        extra_body: dict[str, Any] | None = None,
         request_id: str | None = None,
     ) -> AIResult:
         req_id = request_id or "qwen_req"
@@ -229,6 +248,8 @@ class QwenProvider(AIProvider):
         if json_mode:
             # Conservative JSON mode: object-level enforcement only.
             payload["response_format"] = {"type": "json_object"}
+        if extra_body:
+            payload.update(extra_body)
 
         started = time.perf_counter()
         request_headers = {
@@ -325,19 +346,31 @@ class QwenProvider(AIProvider):
         if not isinstance(content, str):
             raise InvalidProviderResponseError("Qwen message content is missing or not a string")
 
+        raw_metadata: dict[str, Any] = {}
+        response_id = payload.get("id")
+        if isinstance(response_id, str) and response_id:
+            raw_metadata["response_id"] = response_id
+
+        # Detect reasoning_content if thinking mode is active
+        reasoning_content = message.get("reasoning_content")
+        if reasoning_content:
+            raw_metadata["reasoning_content"] = reasoning_content
+
         usage: UsageMetadata | None = None
         raw_usage = payload.get("usage")
         if isinstance(raw_usage, dict):
+            reasoning_tokens = (
+                raw_usage.get("reasoning_tokens")
+                or (raw_usage.get("completion_tokens_details", {}) or {}).get("reasoning_tokens")
+            )
+            if reasoning_tokens is not None:
+                raw_metadata["reasoning_tokens"] = reasoning_tokens
+
             usage = UsageMetadata(
                 prompt_tokens=raw_usage.get("prompt_tokens"),
                 completion_tokens=raw_usage.get("completion_tokens"),
                 total_tokens=raw_usage.get("total_tokens"),
             )
-
-        raw_metadata: dict[str, Any] | None = None
-        response_id = payload.get("id")
-        if isinstance(response_id, str) and response_id:
-            raw_metadata = {"response_id": response_id}
 
         return AIResult(
             content=content,
@@ -348,7 +381,7 @@ class QwenProvider(AIProvider):
             finish_reason=first.get("finish_reason")
             if isinstance(first.get("finish_reason"), str)
             else None,
-            raw_metadata=raw_metadata,
+            raw_metadata=raw_metadata or None,
         )
 
     # ------------------------------------------------------------------

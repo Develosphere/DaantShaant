@@ -1,0 +1,74 @@
+name: Deploy DaantShaant Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: daantshaant-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to Production VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to VPS via Secure SSH
+        env:
+          VPS_HOST: ${{ secrets.DAANTSHAANT_VPS_HOST }}
+          VPS_PORT: ${{ secrets.DAANTSHAANT_VPS_PORT }}
+          VPS_USER: ${{ secrets.DAANTSHAANT_VPS_USER }}
+          APP_DIR: ${{ secrets.DAANTSHAANT_VPS_APP_DIR }}
+          SSH_KEY: ${{ secrets.DAANTSHAANT_VPS_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DAANTSHAANT_VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+
+          # 1. Setup SSH client environment securely
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          # 2. Populate known_hosts strictly from secret
+          echo "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+          # 3. Write temporary SSH key with 600 permissions
+          KEY_PATH=~/.ssh/daantshaant_deploy
+          echo "$SSH_KEY" > "$KEY_PATH"
+          chmod 600 "$KEY_PATH"
+
+          # Ensure key cleanup on step completion or failure
+          trap 'rm -f "$KEY_PATH"; echo "[DEPLOY] SSH private key cleaned up."' EXIT
+
+          echo "[DEPLOY] Initiating SSH connection to production VPS..."
+
+          # 4. Connect to VPS, sync repository (clone or fetch/reset), and run deployment
+          ssh -i "$KEY_PATH" -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "APP_DIR='$APP_DIR' bash -s" << 'EOF'
+            set -euo pipefail
+
+            REPO_URL="https://github.com/Develosphere/DaantShaant.git"
+
+            echo "[DEPLOY] Target application directory: $APP_DIR"
+
+            # Support first deployment (clone) and subsequent deployments (fetch/reset)
+            if [ ! -d "$APP_DIR/.git" ]; then
+              echo "[DEPLOY] First deployment detected: cloning repository..."
+              mkdir -p "$APP_DIR"
+              git clone "$REPO_URL" "$APP_DIR"
+              cd "$APP_DIR"
+              git checkout main
+            else
+              echo "[DEPLOY] Existing repository detected: fetching latest main..."
+              cd "$APP_DIR"
+              git fetch origin main
+              git reset --hard origin/main
+            fi
+
+            # Execute production deployment script
+            chmod +x "$APP_DIR/scripts/deploy-production.sh"
+            chmod +x "$APP_DIR/scripts/check-production-ports.sh"
+            bash "$APP_DIR/scripts/deploy-production.sh"
+          EOF

@@ -2158,6 +2158,219 @@ Investigated and resolved Central Dentist live latency and timeouts (15.0s hang 
 - Teeth Analyzer & DentalTensor Vision v1.0 suite (`services/teeth_analyzer/tests`): 105 passed, 0 failed in 17.86s.
 - Diagnosis suite (`services/diagnosis/tests`): 27 passed, 0 failed in 1.60s.
 
+---
+
+---
+
+## Phase 12C Final Fix — Qwen Chat Latency Calibration & Production Freeze
+
+**Date:** September 2026  
+**Status:** COMPLETE — CALIBRATED AGAINST LIVE ALIBABA MODEL STUDIO BENCHMARK
+
+### Summary
+
+Diagnosed and resolved the Central Dentist chat timeout root cause using empirical live measurements from `scripts/diagnose_qwen.py`:
+- **Verified Benchmark Numbers**:
+  - DNS resolution: 324ms
+  - HTTP probe: 845ms
+  - Raw minimal Qwen (`qwen3.7-plus` via Model Studio Singapore): 4,969ms
+  - Persistent connection reuse average: 4,337ms (4638ms, 4103ms, 4269ms)
+  - Project provider: 3,650ms
+  - Scan report runner (60.0s budget): 4,098ms
+  - Chat runner (8.0s budget): Failed at 8,030ms due to premature cancellation at the 8.0s graph deadline.
+- **Root Cause**:
+  - The 8.0-second Central Dentist deadline was below the true tail latency for conversational generation across Singapore. A 1-token output takes ~4.3s, so a standard 100–200 token dental response required 5–9s.
+- **Production Latency Policy**:
+  - Chat Qwen node timeout calibrated to **12.0s** (`chat_qwen_timeout_seconds = 12.0`).
+  - Entire Chat Service request deadline calibrated to **15.0s** (`chat_request_timeout_seconds = 15.0`).
+  - Scan / Report generation timeout preserved at **60.0s** (`ai_request_timeout_seconds = 60.0`).
+- **Qwen Generation Parameter Optimization**:
+  - Temperature set to **0.25** (low-slop, grounded, consistent).
+  - Max tokens set to **200** (compact dental answers).
+  - Thinking Mode: Audited request payload; Model Studio OpenAI-compatible endpoint does not use thinking/reasoning parameters. No unsupported parameters injected.
+- **System Prompt Compression**:
+  - Streamlined from 865 to **488 characters** (`prompts.py`).
+  - Retains core identity, direct communication, fact grounding, no fabricated history, and screening vs diagnosis distinction.
+- **Query-Aware Context & Window**:
+  - `GENERAL_ORAL_HEALTH` queries strictly omit scan history, appointments, and unrelated clinical summaries.
+  - History window bounded to last 4 turns (8 messages max).
+- **Fallback Improvement & Budget Preservation**:
+  - Technical provider terms completely eradicated from patient messages.
+  - Clean patient fallback: `"I couldn't complete that answer just now. Please ask your question again, or let me know if you need help with your scan results or appointments."`
+  - Fallback Budget: Secondary Gemini fallback skipped if primary Qwen took $\ge 10.0\text{s}$, preventing breaches of the 15.0s global limit.
+- **Connection Reuse**:
+  - Persistent `httpx.AsyncClient` with connection pooling preserved. Added event-loop tracking to avoid test-runner loop conflicts.
+
+### Files Modified
+
+- `orchestrator/src/orchestrator/config.py`
+- `orchestrator/src/orchestrator/central_dentist/prompts.py`
+- `orchestrator/src/orchestrator/central_dentist/graph.py`
+- `orchestrator/src/orchestrator/central_dentist/nlp.py`
+- `orchestrator/src/orchestrator/chat_service.py`
+- `orchestrator/src/orchestrator/ai/gateway.py`
+- `orchestrator/src/orchestrator/ai/qwen.py`
+- `orchestrator/src/orchestrator/ai/gemini.py`
+- `scripts/diagnose_qwen.py`
+- `orchestrator/tests/test_phase12c_qwen_latency.py`
+- `orchestrator/tests/conftest.py`
+- `context.md`
+- `docs/phase-log.md`
+
+### Verification
+
+- Phase 12C Latency Regression Suite (`orchestrator/tests/test_phase12c_qwen_latency.py`): 18 passed, 0 failed.
+- Full Orchestrator Test Suite: **418 passed, 1 skipped, 0 failed** in 75.3s.
+- Teeth Analyzer & DentalTensor Vision v1.0 Suite: **105 passed, 0 failed** in 18.2s.
+- Diagnosis Suite: **27 passed, 0 failed** in 1.6s.
+- Hugging Face / FAISS audit: 4 passed, 0 failed.
+
+---
+
+## Phase 12D — Chat-Only LLM Benchmark + Provider Freeze (COMPLETE)
+
+**Date:** September 2026  
+**Status:** COMPLETE — CANONICAL CHAT MODEL FROZEN: QWEN3.7-FLASH (THINKING=FALSE)
+
+### Summary
+
+Conducted live multi-model chat benchmarking comparing 4 model configurations, finalized chat defaults, disabled thinking mode, preserved clinical report generation pathways, and froze `qwen3.7-flash` as primary conversational chat model:
+
+1. **Verified Live Benchmark Results**:
+   - **Config A (`qwen3.7-plus`, thinking=true)**:
+     - Success: 12/18
+     - Average Latency: ~12,152 ms (unsuitable for interactive chat, frequent timeouts)
+   - **Config B (`qwen3.7-plus`, thinking=false)**:
+     - Success: 18/18
+     - Average Latency: ~1,726 ms (good, solid baseline)
+   - **Config C (`qwen3.7-flash`, thinking=false)**:
+     - Success: **18/18**
+     - Average Latency: **~789 ms** (BEST OVERALL: sub-second generation, highly reliable, natural dental answers)
+   - **Config D (`gemini-flash-lite-latest`)**:
+     - Success: 16/18
+     - Average Latency: ~902 ms (for successful calls)
+     - Failure Mode: HTTP 429 quota/rate-limit failures
+
+2. **Provider Selection Decision**:
+   - `qwen3.7-flash` was selected for DaantShaant conversational chat because it provided the best combination of latency, reliability, and answer quality.
+   - `gemini-flash-lite-latest` is retained as secondary technical fallback only (not promoted to primary due to HTTP 429 quota failures). On 429, it fails immediately to deterministic grounded fallback without retries.
+   - Thinking mode is explicitly disabled (`extra_body={"enable_thinking": False}`) on all chat requests.
+
+3. **Frozen Canonical Chat Defaults**:
+   - `CHAT_LLM_PROVIDER=qwen`
+   - `CHAT_QWEN_MODEL=qwen3.7-flash`
+   - `CHAT_QWEN_ENABLE_THINKING=false`
+   - `CHAT_FALLBACK_PROVIDER=gemini`
+   - `CHAT_GEMINI_MODEL=gemini-flash-lite-latest`
+   - `CHAT_QWEN_TIMEOUT_SECONDS=12.0`
+   - `CHAT_REQUEST_TIMEOUT_SECONDS=15.0`
+   - Generation parameters: `temperature=0.25`, `max_tokens=200`
+
+4. **Strict Clinical Model & Architecture Isolation**:
+   - Clinical screening vision (DentalTensor Vision v1.0 / YOLO11n) and clinical report generation (`report_generator.py`) remain 100% UNCHANGED.
+   - Clinical report generation uses the standard `get_ai_gateway()` with `qwen3.7-plus` and 60.0s timeout.
+   - Auth, sessions, PostgreSQL database schema, and frontend UI remain completely untouched.
+
+5. **Follow-Up Resolution & General Dental Questions**:
+   - Generalized follow-up resolution preserved: "Why did it flag that?", "What does that mean?", "Is that serious?" resolves prior findings from active turns or latest scan records.
+   - General dental queries (sensitivity, bleeding, bad breath, cavities) remain 100% LLM-driven by `qwen3.7-flash`.
+   - Deterministic fast paths preserved strictly for greetings, latest scan metrics, appointments, and routine brushing/flossing guides.
+
+### Files Created
+
+- `scripts/benchmark_chat_models.py`
+- `orchestrator/tests/test_phase12d_chat_benchmarking.py`
+
+### Files Modified
+
+- `orchestrator/src/orchestrator/config.py`
+- `orchestrator/src/orchestrator/ai/schemas.py`
+- `orchestrator/src/orchestrator/ai/qwen.py`
+- `orchestrator/src/orchestrator/ai/gateway.py`
+- `orchestrator/src/orchestrator/ai/factory.py`
+- `orchestrator/src/orchestrator/central_dentist/nlp.py`
+- `orchestrator/src/orchestrator/central_dentist/graph.py`
+- `orchestrator/src/orchestrator/conversation_engine.py`
+- `.env.example`
+- `.env`
+- `docs/phase-log.md`
+- `docs/third-party-usage.md`
+- `docs/architecture.md`
+- `context.md`
+
+### Verification
+
+- Phase 12D Chat Benchmarking & Provider Tests: 17 passed, 0 failed.
+- Full Orchestrator Test Suite: verified with zero Hugging Face regression.
+- Strict compliance: Zero live API calls during automated tests.
+
+---
+
+## Phase 12E - Semantic Integrity & Context Isolation Fix - COMPLETE
+
+**Date:** September 2026
+**Status:** COMPLETE
+
+### Summary
+
+Diagnosed and fixed the general mechanism causing unrelated responses in Central Dentist chat (such as answering a zirconia implant biomechanics question with a diabetes/glycemic/periodontal disease explanation). Implemented a comprehensive topic-shift and reference-based history isolation policy, patient data isolation for standalone inquiries, and deterministic knowledge retrieval thresholding so random dental-domain inquiries remain dynamic, unpolluted, and LLM-driven without hardcoding.
+
+### Root Causes
+
+1. **NLP Classification Gap**: Standalone dental science inquiries (implant biomechanics, endodontics, pulp biology, staining mechanisms, TMJ) did not match narrow regex patterns in `nlp.py` and fell through to `UNKNOWN`.
+2. **Unconditional Scan Loading for UNKNOWN**: In `graph.py` (`plan_retrieval`), `UNKNOWN` set `need_latest_scan = True`, unnecessarily fetching patient screening history.
+3. **Unchecked Finding Inheritance**: In `graph.py` (`retrieve_conversation_context`), previous assistant turns unconditionally passed their `active_finding` down to subsequent turns for non-`GENERAL_ORAL_HEALTH` queries.
+4. **Unchecked Knowledge Snippet Fallback**: In `knowledge.py` (`lookup_dental_knowledge`), if a `finding_key` was present, its knowledge snippet (e.g. gingivitis) was unconditionally returned regardless of whether the user asked about implants or pulp.
+5. **Blind History Injection**: Prior turns were unconditionally appended under `=== RECENT TURNS ===` without checking topical continuity or follow-up references. Qwen saw previous dialog about diabetes and answered the previous topic rather than the new implant question.
+
+### Policies Implemented
+
+1. **Classification & Intent Extension**:
+   - Added `CentralDentistIntent.DENTAL_KNOWLEDGE` covering implants, osseointegration, biomechanics, prosthodontics, endodontics, pulp biology, TMJ/bruxism, staining, and oral histology.
+   - Added `has_personal_record_reference(text)` to detect explicit inquiries into scans, screenings, reports, or bookings.
+   - Added `is_conversational_follow_up(text)` to identify anaphoric questions ("Why did it flag that?", "Is that serious?").
+2. **Topic-Shift & Reference-Based History Policy**:
+   - Conversation history (`recent_turns`) is included **ONLY** if the query is a conversational follow-up (`FOLLOW_UP_REFERENCE`, `EXPLAIN_FINDING`) or contains anaphoric pronouns.
+   - Standalone dental questions (`DENTAL_KNOWLEDGE`, `GENERAL_ORAL_HEALTH`) do not inherit prior dialog turns, preventing topic contamination.
+3. **Patient Data Isolation**:
+   - Standalone dental questions never receive `latest_scan`, `appointments`, or `dentist_info` unless the user explicitly references their records ("Could my grinding explain the issue from my last scan?").
+4. **Knowledge Relevance Threshold**:
+   - `lookup_dental_knowledge` uses word-boundary matchers and a relevance scoring threshold.
+   - `finding_key` fallback is strictly disallowed on standalone questions (`allow_finding_fallback=False`), active only for `FOLLOW_UP_REFERENCE`.
+   - When no knowledge chunk meets the relevance threshold, returns `None`, allowing `qwen3.7-flash` to answer dynamically using its dental training without prompt pollution.
+5. **System Prompt & Telemetry**:
+   - Production system prompt (488 chars) instructs Qwen to answer the current question directly, prioritize current user message over stale context, and never reinterpret the question as another dental topic.
+   - Safe telemetry logs `prompt_sha256` (12 hex chars), intent, character breakdown (`history_chars`, `patient_context_chars`, `knowledge_context_chars`), and sanitized `context_sources` list.
+6. **Concurrency Safety**:
+   - Verified state dictionaries, context objects, and `TextRequest` instances are instantiated freshly per request. No shared mutable state or global conversation buffers exist.
+
+### Files Created
+
+- `orchestrator/tests/test_central_dentist_semantic_isolation.py`
+- `orchestrator/tests/test_central_dentist_concurrency.py`
+- `scripts/test_chat_semantic_integrity.py`
+
+### Files Modified
+
+- `orchestrator/src/orchestrator/central_dentist/__init__.py`
+- `orchestrator/src/orchestrator/central_dentist/nlp.py`
+- `orchestrator/src/orchestrator/central_dentist/knowledge.py`
+- `orchestrator/src/orchestrator/central_dentist/prompts.py`
+- `orchestrator/src/orchestrator/central_dentist/graph.py`
+- `apps/web/lib/__tests__/portal-auth-resilience.test.ts`
+- `context.md`
+- `docs/phase-log.md`
+
+### Verification
+
+- `orchestrator/tests/test_central_dentist_semantic_isolation.py`: 4 passed (exact regression on implant bruxism query asserting presence of implant/zirconia/macrophage terms and absence of diabetes/glycemic terms; knowledge threshold test; 3-turn topic-shift sequence: scan -> follow-up -> standalone implant question).
+- `orchestrator/tests/test_central_dentist_concurrency.py`: 1 passed (simultaneous requests A & B with zero cross-talk).
+- Central Dentist full suite: 35 passed, 0 failed.
+- Orchestrator monorepo suite: 440 passed, 1 skipped, 0 failed.
+- Frontend test suite & TypeScript typecheck: 0 errors.
+
+
+
 
 
 

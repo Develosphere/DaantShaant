@@ -31,6 +31,7 @@ CONDITION_THRESHOLDS: dict[ConditionLabel, float] = {
     ConditionLabel.SEVERE_GUM_DISEASE: 0.72,
     ConditionLabel.DISCOLORATION: 0.82,
     ConditionLabel.MISSING_OR_DAMAGED_TOOTH: 0.75,
+    ConditionLabel.ORAL_ULCER: 0.75,
     ConditionLabel.UNKNOWN: 0.0,
 }
 
@@ -38,8 +39,8 @@ CONDITION_THRESHOLDS: dict[ConditionLabel, float] = {
 MIN_QUALITY_SCORE = 0.5
 
 BELOW_THRESHOLD_LIMITATION = (
-    "Model confidence for the driving visual finding was below the internal review "
-    "threshold; a clearer, well-lit photo may improve this screening."
+    "Moderate screening confidence (below internal review threshold) — "
+    "professional confirmation is recommended."
 )
 
 

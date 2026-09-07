@@ -35,14 +35,14 @@ class SpyGateway:
 
 
 def _stub_rag(monkeypatch) -> None:
-    """Stub RAG to avoid FAISS/embedding loads in tests."""
+    """Stub knowledge enhancement to keep tests offline."""
     from orchestrator import conversation_engine as engine_module
 
-    async def _fake_enhance(query, prompt, conversation_id=None):
+    def _fake_enhance(query, prompt, active_issue=None):
         return prompt
 
     monkeypatch.setattr(
-        engine_module.retrieval_service, "get_enhanced_prompt", _fake_enhance
+        engine_module, "_enhance_prompt_with_knowledge", _fake_enhance
     )
 
 
@@ -237,33 +237,17 @@ def test_timing_instrumentation_preserves_fallback_behavior():
     assert response == "Fallback response."
 
 
-def test_empty_vector_store_skips_embedding(monkeypatch):
-    """When vector store metadata is empty, retrieve_relevant_chunks must NOT
-    call generate_embedding — saving the SentenceTransformer encode cost."""
-    from orchestrator.rag.retrieval_service import RetrievalService
-    from orchestrator.rag import retrieval_service as rs_module
+def test_dental_knowledge_lookup_has_no_huggingface_or_embedding():
+    """Knowledge lookup uses fast keyword matching with zero embeddings or HF downloads."""
+    from orchestrator.central_dentist.knowledge import find_relevant_knowledge
 
-    # Ensure vector_store.metadata is empty
-    monkeypatch.setattr(rs_module.vector_store, "metadata", [])
-
-    embedding_called = False
-
-    def _fake_embedding(text):
-        nonlocal embedding_called
-        embedding_called = True
-        return None
-
-    monkeypatch.setattr(rs_module.embedding_service, "generate_embedding", _fake_embedding)
-
-    service = RetrievalService()
-    chunks = asyncio.run(service.retrieve_relevant_chunks("why do gums bleed?"))
-
-    assert chunks == []
-    assert not embedding_called, "generate_embedding must NOT be called when vector store is empty"
+    entries = find_relevant_knowledge("bleeding gums and plaque")
+    assert len(entries) > 0
+    assert any("gingivitis" in e.lower() or "plaque" in e.lower() for e in entries)
 
 
 def test_follow_up_skips_rag(monkeypatch, caplog):
-    """Follow-up intent must skip RAG retrieval entirely."""
+    """When skip_rag=True, _enhance_prompt_with_knowledge must NOT be called."""
     import logging
 
     gateway = SpyGateway(content="Sure, I can elaborate on that.")
@@ -272,18 +256,18 @@ def test_follow_up_skips_rag(monkeypatch, caplog):
     rag_called = False
     from orchestrator import conversation_engine as engine_module
 
-    async def _tracking_enhance(query, prompt, conversation_id=None):
+    def _tracking_enhance(query, prompt, active_issue=None):
         nonlocal rag_called
         rag_called = True
         return prompt
 
     monkeypatch.setattr(
-        engine_module.retrieval_service, "get_enhanced_prompt", _tracking_enhance
+        engine_module, "_enhance_prompt_with_knowledge", _tracking_enhance
     )
 
     with caplog.at_level(logging.INFO):
         response = asyncio.run(
-            engine.generate_follow_up_response(
+            engine.generate_conversational_response(
                 "thanks",
                 recent_messages=[],
                 conversation_id=None,
@@ -291,25 +275,25 @@ def test_follow_up_skips_rag(monkeypatch, caplog):
             )
         )
 
-    assert not rag_called, "RAG must NOT be called for follow-up with skip_rag=True"
+    assert not rag_called, "Knowledge enhancement must NOT be called with skip_rag=True"
     assert response == "Sure, I can elaborate on that."
 
 
 def test_dental_question_retains_rag(monkeypatch):
-    """A dental question with skip_rag=False must still call RAG."""
+    """A dental question with skip_rag=False must call knowledge enhancement."""
     gateway = SpyGateway(content="Plaque causes gum irritation.")
     engine = ConversationEngine(gateway=gateway)
 
     rag_called = False
     from orchestrator import conversation_engine as engine_module
 
-    async def _tracking_enhance(query, prompt, conversation_id=None):
+    def _tracking_enhance(query, prompt, active_issue=None):
         nonlocal rag_called
         rag_called = True
         return prompt
 
     monkeypatch.setattr(
-        engine_module.retrieval_service, "get_enhanced_prompt", _tracking_enhance
+        engine_module, "_enhance_prompt_with_knowledge", _tracking_enhance
     )
 
     asyncio.run(
@@ -321,7 +305,7 @@ def test_dental_question_retains_rag(monkeypatch):
         )
     )
 
-    assert rag_called, "RAG must still be called for dental questions with skip_rag=False"
+    assert rag_called, "Knowledge enhancement must be called for dental questions with skip_rag=False"
 
 
 def test_tail_completion_timing_logged(caplog):

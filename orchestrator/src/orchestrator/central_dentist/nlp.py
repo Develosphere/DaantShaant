@@ -24,6 +24,7 @@ class CentralDentistIntent(str, Enum):
     DENTIST_INFORMATION = "DENTIST_INFORMATION"
     REPORT_QUESTION = "REPORT_QUESTION"
     GENERAL_ORAL_HEALTH = "GENERAL_ORAL_HEALTH"
+    DENTAL_KNOWLEDGE = "DENTAL_KNOWLEDGE"
     SYMPTOM_QUESTION = "SYMPTOM_QUESTION"
     FOLLOW_UP_REFERENCE = "FOLLOW_UP_REFERENCE"
     UNKNOWN = "UNKNOWN"
@@ -251,22 +252,43 @@ def classify_intent(
     if any(re.search(p, norm) for p in report_patterns):
         return CentralDentistIntent.REPORT_QUESTION, entities
 
-    # 10. FOLLOW-UP REFERENCE (e.g. "is that serious?", "will it go away?", "is it bad?")
+    # 10. FOLLOW-UP REFERENCE (e.g. "Why did it flag that?", "What does that mean?", "Is that serious?")
     follow_up_patterns = [
         r"^(is|will|does|can)\s+(that|it|this)\s+",
         r"\b(is that|is it|is this)\s+(serious|bad|dangerous|normal|urgent|harmful|permanent|curable)\b",
         r"\bwhat should i do about (it|that|this)\b",
         r"\bwhy (is that|is it|is this)\b",
+        r"\bwhy did (it|my scan|you|the scan|they)\s+flag\s+(that|this|it)?\b",
+        r"\bwhy (was|is)\s+(that|this|it)\s+flagged\b",
+        r"\bwhat does (that|this|it)\s+mean\b",
+        r"\bwhat did (it|that|the scan)\s+mean\b",
+        r"\bwhy does it say (that|this|it)\b",
         r"\bhow do i fix (it|that|this)\b",
         r"\bdoes (it|that) hurt\b",
     ]
     if any(re.search(p, norm) for p in follow_up_patterns):
-        if active_finding or has_recent_scan_context:
+        scan_referenced = bool(re.search(r"\b(scan|flag|report)\b", norm))
+        if active_finding or has_recent_scan_context or scan_referenced:
             if active_finding and "finding" not in entities:
                 entities["finding"] = active_finding
             return CentralDentistIntent.FOLLOW_UP_REFERENCE, entities
 
-    # 11. SYMPTOM QUESTION
+    # 11. DENTAL KNOWLEDGE & SCIENCE (standalone topics: implants, materials, biomechanics, endodontics, etc.)
+    dental_science_patterns = [
+        r"\b(implant|implants|zirconia|titanium|osseointegration|abutment|prosthesis|prosthetic|crown|bridge|denture|dentures|veneer|veneers)\b",
+        r"\b(bruxism|teeth grinding|grinding teeth|clenching|occlusal|occlusion|tmj|temporomandibular|jaw joint|masticat|micro-motion|micromotion|fatigue limit|elastic modulus|tetragonal|monoclinic|phase transformation|low-temperature degradation)\b",
+        r"\b(root canal|endodontic|pulpectomy|pulpitis|tooth pulp|infected pulp|periapical|dental pulp)\b",
+        r"\b(enamel|dentin|cementum|periodont|periodontium|alveolar bone|osteoclast|osteoclastogenesis|macrophage|osteoblast|bone resorption|collagen synthesis)\b",
+        r"\b(intrinsic|extrinsic|discoloration|staining|teeth stain|tooth stain|teeth whitening|bleaching)\b",
+        r"\b(diabetes|glycemic|systemic)\b.*\b(gum|periodont|teeth|oral|dental)\b",
+        r"\b(gum|periodont|teeth|oral|dental)\b.*\b(diabetes|glycemic|systemic)\b",
+        r"\b(orthodontic|braces|aligner|aligners|invisalign|malocclusion|crowding)\b",
+        r"\b(fluoride|remineraliz|demineraliz|saliva|xerostomia|oral microbiome)\b",
+    ]
+    if any(re.search(p, norm) for p in dental_science_patterns):
+        return CentralDentistIntent.DENTAL_KNOWLEDGE, entities
+
+    # 12. SYMPTOM QUESTION (personal current symptoms)
     symptom_patterns = [
         r"\b(pain|hurts?|aching|sore|sensitive|sensitivity|bleeding|bleed|swollen|swelling|throbbing)\b",
         r"\b(toothache|jaw pain|cold water|hot drinks?|sweet foods?)\b",
@@ -276,13 +298,15 @@ def classify_intent(
     if any(re.search(p, norm) for p in symptom_patterns):
         return CentralDentistIntent.SYMPTOM_QUESTION, entities
 
-    # 12. GENERAL ORAL HEALTH
+    # 13. GENERAL ORAL HEALTH (hygiene routines, brushing, flossing)
     oral_health_patterns = [
-        r"\b(how (to|should i)|when to|best way to)\b.*\b(brush|floss|clean teeth|mouthwash|rinse)\b",
+        r"\b(how (to|should i|can i|do i)|when to|best way to)\b.*\b(brush|floss|clean|take care of|care for|maintain|protect)\b",
+        r"\b(take care of|care for|protect|clean|maintain)\s+(my\s+)?(teeth|mouth|gums|oral)\b",
+        r"\b(keep|make)\s+(my\s+)?teeth\s+(healthy|clean|white)\b",
         r"\bwhich (toothpaste|toothbrush|brush)\b",
         r"\bprevent\b.*\b(cavities|plaque|decay)\b",
         r"\bwhitening\b",
-        r"\boral hygiene\b",
+        r"\b(oral|dental)\s+(health|hygiene|care|tips)\b",
     ]
     if any(re.search(p, norm) for p in oral_health_patterns):
         return CentralDentistIntent.GENERAL_ORAL_HEALTH, entities
@@ -292,6 +316,40 @@ def classify_intent(
         return CentralDentistIntent.EXPLAIN_FINDING, entities
 
     return CentralDentistIntent.UNKNOWN, entities
+
+
+def has_personal_record_reference(text: str) -> bool:
+    """Check if message explicitly references personal scans, reports, or appointments."""
+    norm = normalize_text(text)
+    patterns = [
+        r"\b(my|our)\s+(scan|scans|screening|screenings|report|reports|result|results|photo|photos|image|images|appointment|appointments|dentist|doctor|booking)\b",
+        r"\b(did|does|was)\s+(my|the)\s+(scan|report|screening)\b",
+        r"\bwhat did (you|the scan|it|my scan)\s+(flag|find|show|say)\b",
+        r"\bfrom my (last|latest|previous|recent) scan\b",
+        r"\bmy (records?|findings?|teeth in the (photo|scan|image))\b",
+        r"\bwhy did (it|you|the scan)\s+flag\b",
+    ]
+    return any(re.search(p, norm) for p in patterns)
+
+
+def is_conversational_follow_up(text: str) -> bool:
+    """Check if message is an anaphoric or contextual follow-up to previous turns."""
+    norm = normalize_text(text)
+    follow_up_patterns = [
+        r"^(is|will|does|can|what about|how about|and|why is|why does)\s+(that|it|this)\b",
+        r"\b(is that|is it|is this|about that|about it|about this)\b",
+        r"\bwhat did you mean by\b",
+        r"\byou (mentioned|said|told me)\b",
+        r"\b(what about|how about) (the|my|that|this)\b",
+        r"\bwhat should i do about (it|that|this)\b",
+        r"\bwhy (is that|is it|is this|was that flagged|does it say)\b",
+        r"\bwhy did (it|my scan|you|the scan|they)\s+flag\b",
+    ]
+    if any(re.search(p, norm) for p in follow_up_patterns):
+        return True
+    if len(norm.split()) <= 4 and any(w in norm for w in ("why", "serious", "bad", "normal", "urgent", "fix", "hurt")):
+        return True
+    return False
 
 
 def detect_fast_path(

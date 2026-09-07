@@ -30,12 +30,12 @@ class Settings(BaseSettings):
     live_max_duration_seconds: int = 120
     live_stable_frames_for_partial: int = 2
 
-    # Phase 12C: Hard latency budgets for interactive chat
-    chat_request_timeout_seconds: float = 12.0
+    # Phase 12C: Hard latency budgets for interactive chat calibrated against live Model Studio latency
+    chat_request_timeout_seconds: float = 15.0
     chat_auth_timeout_seconds: float = 2.0
     chat_retrieval_timeout_seconds: float = 2.0
     chat_persistence_timeout_seconds: float = 2.0
-    chat_qwen_timeout_seconds: float = 8.0
+    chat_qwen_timeout_seconds: float = 12.0
 
     def get_cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
@@ -151,6 +151,13 @@ class AISettings(BaseSettings):
     gemini_model: str = "gemini-flash-lite-latest"
     # Optional override; the Gemini adapter defaults to Google's v1beta base URL.
     gemini_base_url: str = ""
+
+    # Phase 12D: Chat-only LLM provider separation & thinking control
+    chat_llm_provider: str = "qwen"
+    chat_fallback_provider: str = "gemini"
+    chat_qwen_model: str = "qwen3.7-flash"
+    chat_qwen_enable_thinking: bool = False
+    chat_gemini_model: str = "gemini-flash-lite-latest"
 
 
 # Combine service, PostgreSQL, authentication, AI gateway, and map settings.

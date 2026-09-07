@@ -74,6 +74,7 @@ class ClinicalGraphState(TypedDict, total=False):
     analysis_result: dict[str, Any] | None
     diagnosis_result: dict[str, Any] | None
     triage_result: dict[str, Any] | None
+    report_text: dict[str, Any] | None
 
     # --- Output ---
     status: str  # "analyzed" | "retake" | "rejected" | "error"
@@ -209,14 +210,41 @@ def triage_node(state: ClinicalGraphState) -> dict[str, Any]:
     }
 
 
-def report_node(state: ClinicalGraphState) -> dict[str, Any]:
-    """Assemble the final analyzed status."""
+async def report_node(state: ClinicalGraphState) -> dict[str, Any]:
+    """Generate patient-friendly clinical report text from structured evidence (Phase 11A).
+
+    Qwen receives NO raw image: only pre-validated structured findings,
+    deterministic triage, and limitations.
+    """
     started = time.perf_counter()
     trace = list(state.get("trace") or [])
+
+    from orchestrator.clinical.report_generator import generate_clinical_report_text
+
+    analysis_data = state.get("analysis_result") or {}
+    diagnosis_data = state.get("diagnosis_result") or {}
+    triage_data = state.get("triage_result") or diagnosis_data.get("triage") or {}
+    findings = analysis_data.get("findings", [])
+    limitations = triage_data.get("limitations", [])
+
+    report_text = await generate_clinical_report_text(
+        findings=findings,
+        triage=triage_data,
+        limitations=limitations,
+        gateway=state.get("_gateway"),
+    )
+
     trace.append(_trace_entry("report", "completed", started))
 
     return {
         "status": "analyzed",
+        "report_text": {
+            "summary": report_text.summary,
+            "finding_explanations": report_text.finding_explanations,
+            "recommended_steps": report_text.recommended_steps,
+            "professional_notes": report_text.professional_notes,
+            "source": report_text.source,
+        },
         "trace": trace,
     }
 
@@ -239,6 +267,7 @@ async def persist_node(state: ClinicalGraphState) -> dict[str, Any]:
     diagnosis = DiagnoseResponse.model_validate(state["diagnosis_result"])
     relevance_data = state.get("relevance_result")
     relevance_info = RelevanceInfo.model_validate(relevance_data) if relevance_data else None
+    report_text = state.get("report_text")
 
     scan, _report = await ScanRepository(db_session).add_result(
         patient_user_id=UUID(state["user_id"]),
@@ -246,6 +275,7 @@ async def persist_node(state: ClinicalGraphState) -> dict[str, Any]:
         analysis=analysis,
         diagnosis=diagnosis,
         relevance=relevance_info,
+        report_text=report_text,
     )
 
     trace.append(_trace_entry("persist", "completed", started))

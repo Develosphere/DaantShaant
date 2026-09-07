@@ -15,15 +15,12 @@ from orchestrator.central_dentist.retrieval import (
     ScanSummary,
 )
 
-CENTRAL_DENTIST_SYSTEM_PROMPT = """You are DaantShaant, the central oral-health assistant for the DaantShaant platform.
-You communicate as the central dental intelligence inside DaantShaant, helping patients understand screening findings, reports, urgency levels, appointments, and general oral care.
+CENTRAL_DENTIST_SYSTEM_PROMPT = """You are DaantShaant, a professional oral-health assistant.
+Answer the user's current question directly in calm, concise natural sentences (2-3 sentences max). Output clean plain text without markdown headers, asterisks, bullet points, or filler.
+Prioritize the current user message over stale conversational context. Do not reinterpret the user's question as an unrelated dental topic.
+Supplied patient records are ground truth only when relevant to the question. Never invent patient history.
+Distinguish AI visual screening from confirmed clinical diagnoses. For general dental questions, answer directly with accurate dental science and practical guidance."""
 
-Essential rules:
-1. Answer directly in the very first sentence with calm, professional clarity. Never begin with conversational filler or preamble.
-2. Ground all patient-specific statements strictly in the provided patient records. Distinguish AI visual screening from clinical diagnoses (e.g. "flagged possible cavity" rather than "you have a cavity"). Never fabricate missing records.
-3. Keep answers concise (2 to 4 sentences).
-4. Output clean plain text without asterisks (**), markdown headers (#), bullet points, or robotic AI phrases ("As an AI...", "Based on the provided information...").
-"""
 
 BANNED_SLOP_PATTERNS = [
     r"as an ai (language model|assistant|system)",
@@ -149,3 +146,63 @@ def build_grounded_context(
                 parts.append(f"{role}: {content}")
 
     return "\n".join(parts)
+
+
+def get_context_sources(
+    latest_scan: Optional[ScanSummary] = None,
+    previous_scan: Optional[ScanSummary] = None,
+    scan_history: Optional[list[ScanSummary]] = None,
+    appointments: Optional[list[AppointmentSummary]] = None,
+    dentist_info: Optional[dict[str, Any]] = None,
+    knowledge_snippet: Optional[str] = None,
+    recent_turns: Optional[list[dict[str, str]]] = None,
+) -> list[str]:
+    """Return sanitized list of context source identifiers used in prompt."""
+    sources: list[str] = []
+    if latest_scan:
+        sources.append("latest_scan")
+    if previous_scan or (scan_history and len(scan_history) > 1):
+        sources.append("scan_history")
+    if appointments:
+        sources.append("appointments")
+    if dentist_info:
+        sources.append("dentist_info")
+    if knowledge_snippet:
+        sources.append("knowledge_guideline")
+    if recent_turns:
+        sources.append("conversation_history")
+    return sources
+
+
+def audit_chat_prompt_size(
+    *,
+    system_prompt: str,
+    grounded_context: str,
+    user_message: str,
+    recent_turns: Optional[list[dict[str, str]]] = None,
+    knowledge_snippet: Optional[str] = None,
+    has_patient_context: bool = False,
+) -> dict[str, int]:
+    """Calculate sanitized character and message metrics for Central Dentist prompts.
+
+    Never echoes or logs raw text, patient records, or sensitive conversation data.
+    """
+    system_chars = len(system_prompt)
+    context_chars = len(grounded_context)
+    history_chars = sum(len(t.get("content", "")) for t in (recent_turns or []))
+    knowledge_chars = len(knowledge_snippet) if knowledge_snippet else 0
+    patient_chars = max(0, context_chars - history_chars - knowledge_chars) if has_patient_context else 0
+    conv_chars = len(user_message) + history_chars
+    total_chars = system_chars + context_chars + len(user_message)
+    messages_count = 1 + len(recent_turns or []) + 1
+
+    return {
+        "messages": messages_count,
+        "system_chars": system_chars,
+        "context_chars": context_chars,
+        "history_chars": history_chars,
+        "patient_context_chars": patient_chars,
+        "knowledge_context_chars": knowledge_chars,
+        "conversation_chars": conv_chars,
+        "total_chars": total_chars,
+    }

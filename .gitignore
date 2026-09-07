@@ -1,47 +1,96 @@
+# Byte-compiled / optimized / Python
 __pycache__/
 *.py[cod]
+*$py.class
+*.pyc
 *.egg-info/
 .eggs/
 dist/
 build/
-.venv/
-venv/
-# Environment files
-.env
-.env.local
-.env.*
-!.env.example
-
-# Node modules
-node_modules/
-apps/web/node_modules/
-
-# Archived docs
-docs/archive/
-.idea/
-.vscode/
-*.log
+.coverage
+htmlcov/
+.tox/
+.cache/
 .pytest_cache/
 .mypy_cache/
-data/
-models/
+
+# Python virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Environment files and secrets
+.env
+.env.local
+.env.production
+.env.*.local
+.env.*
+!.env.example
+!apps/web/.env.local.example
+!apps/web/.env.production.example
+
+# Node modules and build output
+node_modules/
+apps/web/node_modules/
+.next/
 apps/web/.next/
-*.pt
-*.safetensors
-*.pyc
+*.tsbuildinfo
+
+# Deployment caches and PM2 state
+.deploy-cache/
+.pm2/
+logs/
+*.log
+*.pid
+*.pid.lock
+*.seed
+
+# SSH keys and security certificates
+*.pem
+*.key
+*.crt
+*.cert
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+daantshaant_github_actions
+daantshaant_github_actions.pub
+*deploy_key*
+
+# IDE and OS metadata
+.idea/
+.vscode/
 .DS_Store
 Thumbs.db
 *.swp
 *.swo
 *~
-.coverage
-htmlcov/
-.tox/
-.cache/
 
+# Application runtime data
+data/
 
-# Datasets
+# Model weights and safetensors
+models/
+*.pt
+*.safetensors
+best.pt
+
+# Whitelist: Canonical DentalTensor production model checkpoint
+!services/teeth_analyzer/models/
+!services/teeth_analyzer/models/oral_disease/
+!services/teeth_analyzer/models/oral_disease/dentaltensor_nathan_asif_v1.pt
+
+# Datasets and training artifacts (keep external to git)
 dataset/oral-disease.yolov11/
 dataset/oral-disease.yolov11.zip
-best.pt
-*.pt
+dataset/*.zip
+dataset/*.yolov11/
+dataset/Test Images/
+dataset/*candidates/
+dataset/hard-negatives/
+dataset/*.csv
+
+# Archived documentation
+docs/archive/

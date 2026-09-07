@@ -27,8 +27,14 @@ export function LoginPage({ role }: Props) {
     try {
       await loginPortal(role, email.trim(), password);
       router.push(`/${role}/dashboard`);
-    } catch (err) {
-      setError(t("auth.invalid_credentials"));
+    } catch (err: any) {
+      if (err?.status === 401) {
+        setError(t("auth.invalid_credentials"));
+      } else if (err?.status === 503) {
+        setError(t("auth.service_unavailable"));
+      } else {
+        setError(t("auth.server_error"));
+      }
     } finally {
       setLoading(false);
     }

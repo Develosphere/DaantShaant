@@ -9,6 +9,23 @@ const API_BASE = process.env.NEXT_PUBLIC_ORCHESTRATOR_URL ?? "http://127.0.0.1:8
 
 let activeUser: PortalUser | null = null;
 
+export class SessionExpiredError extends Error {
+  isSessionExpired = true;
+  constructor(message: string = "Session expired") {
+    super(message);
+    this.name = "SessionExpiredError";
+  }
+}
+
+export class AuthApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "AuthApiError";
+    this.status = status;
+  }
+}
+
 // Listen for cross-tab auth events (e.g. logout in another tab)
 if (typeof window !== "undefined") {
   subscribeToAuthEvents((msg) => {
@@ -49,7 +66,7 @@ export function clearPortalUser(role: PortalRole) {
 async function readUserResponse(res: Response): Promise<PortalUser> {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(formatApiError(err));
+    throw new AuthApiError(formatApiError(err), res.status);
   }
   return (await res.json()) as PortalUser;
 }
@@ -59,7 +76,8 @@ let refreshPromise: Promise<PortalUser | null> | null = null;
 export async function refreshPortalSession(
   expectedRole?: PortalRole
 ): Promise<PortalUser | null> {
-  // Deduplicate concurrent refresh calls within the same tab
+  // Deduplicate concurrent refresh calls within the same tab:
+  // other callers await the exact same in-flight refresh promise
   if (refreshPromise) {
     const user = await refreshPromise;
     if (expectedRole && user && user.role !== expectedRole) {
@@ -97,7 +115,7 @@ export async function refreshPortalSession(
             return null;
           }
 
-          // Temporary backend failure (5xx) - do not destroy session prematurely
+          // Temporary backend failure (503 / 5xx) - do not destroy session prematurely
           console.warn(`Auth refresh received HTTP ${res.status}; preserving session`);
           return null;
         } catch (netErr) {
@@ -123,8 +141,13 @@ export async function authorizedFetch(
   input: RequestInfo | URL,
   init: RequestInit = {}
 ): Promise<Response> {
-  let user = getStoredUser(role) ?? (await refreshPortalSession(role));
-  if (!user) throw new Error(`Please sign in as a ${role}`);
+  let user = getStoredUser(role);
+  if (!user) {
+    user = await refreshPortalSession(role);
+  }
+  if (!user) {
+    throw new SessionExpiredError(`Please sign in as a ${role}`);
+  }
 
   const makeRequest = (token: string) => {
     const headers = new Headers(init.headers);
@@ -133,9 +156,12 @@ export async function authorizedFetch(
   };
 
   let response = await makeRequest(user.access_token);
+  // Single-refresh-per-request guard: only attempt ONE refresh on 401
   if (response.status === 401) {
-    user = await refreshPortalSession(role);
-    if (user) response = await makeRequest(user.access_token);
+    const refreshedUser = await refreshPortalSession(role);
+    if (refreshedUser) {
+      response = await makeRequest(refreshedUser.access_token);
+    }
   }
   return response;
 }
@@ -145,12 +171,17 @@ export async function loginPortal(
   email: string,
   password: string
 ): Promise<PortalUser> {
-  const res = await fetch(`${API_BASE}/portal/auth/${role}/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ email, password }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/portal/auth/${role}/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ email, password }),
+    });
+  } catch (netErr) {
+    throw new AuthApiError("Network connection error", 503);
+  }
   const user = await readUserResponse(res);
   savePortalUser(role, user);
   broadcastAuthEvent("SESSION_UPDATED", { role });
@@ -162,12 +193,17 @@ export async function registerPortal(
   payload: RegisterPayload
 ): Promise<PortalUser> {
   if (role === "admin") throw new Error("Public admin registration is disabled");
-  const res = await fetch(`${API_BASE}/portal/auth/${role}/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify(payload),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/portal/auth/${role}/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(payload),
+    });
+  } catch (netErr) {
+    throw new AuthApiError("Network connection error", 503);
+  }
   const user = await readUserResponse(res);
   savePortalUser(role, user);
   broadcastAuthEvent("SESSION_UPDATED", { role });
@@ -175,23 +211,89 @@ export async function registerPortal(
 }
 
 export async function fetchPortalProfile(role: PortalRole): Promise<PortalUser> {
-  const user = getStoredUser(role) ?? (await refreshPortalSession(role));
-  if (!user) throw new Error("Session expired");
-  const res = await authorizedFetch(role, `${API_BASE}/portal/auth/me`);
-  if (!res.ok) throw new Error("Session expired");
-  const profile = await res.json();
-  const updated = {
-    ...user,
-    role: profile.role,
-    user_id: profile.user_id,
-    name: profile.name,
-    email: profile.email,
-    first_name: profile.first_name,
-    last_name: profile.last_name,
-    profile_image: profile.profile_image,
-  } as PortalUser;
-  activeUser = updated;
-  return updated;
+  let user = getStoredUser(role);
+  if (!user) {
+    user = await refreshPortalSession(role);
+  }
+  if (!user) {
+    throw new SessionExpiredError("Session expired");
+  }
+
+  let res: Response;
+  try {
+    res = await authorizedFetch(role, `${API_BASE}/portal/auth/me`);
+  } catch (err: any) {
+    if (err instanceof SessionExpiredError || err?.isSessionExpired) {
+      throw err;
+    }
+    // Temporary network or fetch error: preserve current user state
+    console.warn("authorizedFetch failed for /auth/me; retaining current session:", err);
+    return user;
+  }
+
+  if (res.status === 200) {
+    const profile = await res.json();
+    const updated: PortalUser = {
+      ...user,
+      role: profile.role,
+      user_id: profile.user_id,
+      name: profile.name,
+      email: profile.email,
+      first_name: profile.first_name,
+      last_name: profile.last_name,
+      profile_image: profile.profile_image,
+    };
+    activeUser = updated;
+    return updated;
+  }
+
+  if (res.status === 401) {
+    // Attempt ONE refresh
+    const refreshed = await refreshPortalSession(role);
+    if (!refreshed) {
+      clearPortalUser(role);
+      throw new SessionExpiredError("Session expired");
+    }
+    // Retry /auth/me once with refreshed token
+    try {
+      const retryRes = await fetch(`${API_BASE}/portal/auth/me`, {
+        headers: { Authorization: `Bearer ${refreshed.access_token}` },
+        credentials: "include",
+      });
+      if (retryRes.status === 200) {
+        const profile = await retryRes.json();
+        const updated: PortalUser = {
+          ...refreshed,
+          role: profile.role,
+          user_id: profile.user_id,
+          name: profile.name,
+          email: profile.email,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          profile_image: profile.profile_image,
+        };
+        activeUser = updated;
+        return updated;
+      }
+      if (retryRes.status === 401) {
+        clearPortalUser(role);
+        throw new SessionExpiredError("Session expired");
+      }
+      // If retry is 503 or transient failure, keep refreshed user
+      return refreshed;
+    } catch {
+      return refreshed;
+    }
+  }
+
+  if (res.status === 503 || res.status >= 500) {
+    // DB or backend temporarily unavailable: DO NOT logout, keep current authenticated client state
+    console.warn(`Portal profile /auth/me returned HTTP ${res.status}; retaining active session`);
+    return user;
+  }
+
+  // Any other status: if we have stored user, return it rather than destroying session
+  return user;
 }
 
 export async function logoutPortal(role: PortalRole): Promise<void> {

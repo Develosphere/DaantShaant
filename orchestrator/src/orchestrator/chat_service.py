@@ -1,11 +1,14 @@
-"""PostgreSQL-backed chat and conversation business logic."""
-
+import asyncio
 import logging
+import uuid
+from datetime import datetime, timezone
 from time import perf_counter
 from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from orchestrator.config import settings
 
 from orchestrator import conversation_state as cs
 from orchestrator.chat_schemas import (
@@ -20,6 +23,7 @@ from orchestrator.chat_schemas import (
     SendMessageRequest,
     SendMessageResponse,
 )
+from orchestrator.central_dentist import CentralDentistState, central_dentist_graph
 from orchestrator.conversation_engine import conversation_engine
 from orchestrator.intent_classifier import UserIntent, intent_classifier
 from orchestrator.pipeline import TeethAnalyzePipelineRequest, run_teeth_analysis_pipeline
@@ -180,45 +184,50 @@ async def generate_conversational_response(
 
 
 async def send_message(
-    request: SendMessageRequest, patient_user_id: UUID, session: AsyncSession
+    request: SendMessageRequest,
+    patient_user_id: UUID,
+    session: AsyncSession,
+    request_id: Optional[str] = None,
 ) -> SendMessageResponse:
+    if not request_id:
+        request_id = f"chat_{uuid.uuid4().hex[:8]}"
     _send_t0 = perf_counter()
-    logger.info("[CHAT_TIMING] route_start")
+    logger.info("[CENTRAL_DENTIST][%s] request_started", request_id)
+
     repository = ConversationRepository(session)
     conversation = None
-    if request.conversation_id:
-        conversation = await repository.get_owned(
-            request.conversation_id, patient_user_id
-        )
-        if not conversation:
-            raise ValueError("Conversation not found")
-    else:
-        title = request.text[:50] + ("..." if len(request.text) > 50 else "")
-        conversation = await repository.create(patient_user_id, title)
+    try:
+        async with asyncio.timeout(settings.chat_retrieval_timeout_seconds):
+            if request.conversation_id:
+                conversation = await repository.get_owned(
+                    request.conversation_id, patient_user_id
+                )
+                if not conversation:
+                    raise ValueError("Conversation not found")
+            else:
+                title = request.text[:50] + ("..." if len(request.text) > 50 else "")
+                conversation = await repository.create(patient_user_id, title)
 
-    _t0 = perf_counter()
-    recent_rows = await repository.list_messages(
-        conversation.id, newest_first=True, limit=10
-    )
-    _history_load_ms = (perf_counter() - _t0) * 1000
-    logger.info("[CHAT_TIMING] history_load_ms=%.1f", _history_load_ms)
-    recent_messages = [_message_context(row) for row in reversed(recent_rows)]
-    user_row = await repository.add_message(
-        conversation_id=conversation.id,
-        user_id=patient_user_id,
-        role=MessageSender.USER.value,
-        content=request.text,
-    )
+            recent_rows = await repository.list_messages(
+                conversation.id, newest_first=True, limit=10
+            )
+            recent_messages = [_message_context(row) for row in reversed(recent_rows)]
+            user_row = await repository.add_message(
+                conversation_id=conversation.id,
+                user_id=patient_user_id,
+                role=MessageSender.USER.value,
+                content=request.text,
+            )
+    except TimeoutError as exc:
+        logger.error("[CENTRAL_DENTIST][%s] DB initialization timed out", request_id)
+        raise
 
-    _t0 = perf_counter()
     intent, context_info = intent_classifier.classify(
         request.text,
         has_image=bool(request.image_base64),
         is_first_message=not recent_messages,
     )
     cs.update_from_message(str(conversation.id), request.text, intent.value)
-    _routing_ms = (perf_counter() - _t0) * 1000
-    logger.info("[CHAT_TIMING] routing_ms=%.1f", _routing_ms)
 
     analysis_result = None
     if request.image_base64:
@@ -246,32 +255,88 @@ async def send_message(
             "report_id": str(report.id),
         }
 
-    previous_analyses = await get_recent_analysis_history(patient_user_id, session)
-    _t0 = perf_counter()
-    assistant_text = await generate_conversational_response(
-        request.text,
-        intent,
-        conversation_id=conversation.id,
-        analysis_result=analysis_result,
-        recent_messages=recent_messages,
-        previous_analyses=previous_analyses,
-        context_info=context_info,
-    )
-    _response_gen_ms = (perf_counter() - _t0) * 1000
-    logger.info("[CHAT_TIMING] response_generation_ms=%.1f", _response_gen_ms)
-    _t0 = perf_counter()
-    assistant_row = await repository.add_message(
-        conversation_id=conversation.id,
-        user_id=None,
-        role=MessageSender.ASSISTANT.value,
-        content=assistant_text,
-        evidence_refs={"analysis_result": analysis_result} if analysis_result else None,
-    )
-    await repository.touch(conversation)
-    _persistence_ms = (perf_counter() - _t0) * 1000
-    logger.info("[CHAT_TIMING] persistence_ms=%.1f", _persistence_ms)
+    # Pass pre-loaded recent turns to avoid duplicate SQL queries in graph
+    recent_turns = [
+        {"role": row.role, "content": row.content} for row in reversed(recent_rows)
+    ]
+    state_input: CentralDentistState = {
+        "user_id": str(patient_user_id),
+        "conversation_id": str(conversation.id),
+        "message": request.text,
+        "locale": request.locale or "en",
+        "request_id": request_id,
+        "recent_turns": recent_turns,
+        "_db_session": session,
+    }
+
+    # Global cancellable timeout budget (15.0s max)
+    try:
+        async with asyncio.timeout(settings.chat_request_timeout_seconds):
+            graph_res = await central_dentist_graph.ainvoke(state_input)
+    except TimeoutError:
+        _timeout_ms = (perf_counter() - _send_t0) * 1000
+        logger.error(
+            "[CENTRAL_DENTIST][%s] Global chat deadline (%.1fs) exceeded after %.1f ms",
+            request_id,
+            settings.chat_request_timeout_seconds,
+            _timeout_ms,
+        )
+        try:
+            await session.rollback()
+        except Exception:
+            pass
+        assistant_text = (
+            "I couldn't complete that answer just now. Please ask your question again, "
+            "or let me know if you need help with your scan results or appointments."
+        )
+        graph_res = {
+            "final_response": assistant_text,
+            "latency_metadata": {"chat.total_ms": _timeout_ms},
+            "is_fast_path": False,
+        }
+
+    assistant_text = graph_res.get("final_response") or "I am reviewing your dental screening records."
+    assistant_row_id = graph_res.get("assistant_message_id")
+    assistant_created_at = graph_res.get("assistant_created_at")
+    if not assistant_row_id:
+        _t0 = perf_counter()
+        try:
+            async with asyncio.timeout(settings.chat_persistence_timeout_seconds):
+                assistant_row = await repository.add_message(
+                    conversation_id=conversation.id,
+                    user_id=None,
+                    role=MessageSender.ASSISTANT.value,
+                    content=assistant_text,
+                    evidence_refs={
+                        "intent": graph_res.get("intent"),
+                        "active_finding": graph_res.get("active_finding"),
+                        "is_fast_path": graph_res.get("is_fast_path", False),
+                        "analysis_result": analysis_result,
+                    } if (analysis_result or graph_res.get("intent")) else None,
+                )
+                conv = await repository.get_owned(conversation.id, patient_user_id)
+                if conv:
+                    await repository.touch(conv)
+                assistant_row_id = assistant_row.id
+                assistant_created_at = assistant_row.created_at
+                _persistence_ms = (perf_counter() - _t0) * 1000
+                logger.info("[CENTRAL_DENTIST][%s] persistence_done ms=%.1f", request_id, _persistence_ms)
+        except Exception as exc:
+            logger.warning("[CENTRAL_DENTIST][%s] Persistence fallback failed: %s", request_id, exc)
+            assistant_row_id = uuid.uuid4()
+            assistant_created_at = datetime.now(timezone.utc)
+
     _total_ms = (perf_counter() - _send_t0) * 1000
-    logger.info("[CHAT_TIMING] total_ms=%.1f", _total_ms)
+    latency = graph_res.get("latency_metadata", {})
+    logger.info(
+        "[CENTRAL_DENTIST][%s] request_complete total_ms=%.1f nlp_ms=%s retrieval_ms=%s qwen_ms=%s fast_path=%s",
+        request_id,
+        _total_ms,
+        latency.get("chat.nlp_ms"),
+        latency.get("chat.retrieval_ms"),
+        latency.get("chat.qwen_ms"),
+        graph_res.get("is_fast_path", False),
+    )
 
     return SendMessageResponse(
         conversation_id=conversation.id,
@@ -283,11 +348,11 @@ async def send_message(
             timestamp=user_row.created_at,
         ),
         assistant_message=MessageResponse(
-            message_id=assistant_row.id,
+            message_id=assistant_row_id,
             conversation_id=conversation.id,
             sender=MessageSender.ASSISTANT,
-            text=assistant_row.content,
+            text=assistant_text,
             analysis_result=analysis_result,
-            timestamp=assistant_row.created_at,
+            timestamp=assistant_created_at,
         ),
     )

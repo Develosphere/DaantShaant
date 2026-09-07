@@ -8,6 +8,7 @@ import {
   fetchPortalProfile,
   getStoredUser,
   logoutPortal,
+  SessionExpiredError,
 } from "@/lib/portal-auth";
 import { subscribeToAuthEvents } from "@/lib/cross-tab-auth";
 import { PortalHeader } from "./PortalHeader";
@@ -28,8 +29,12 @@ export function PortalDashboard({ role, children, maxWidth = 960 }: Props) {
   useEffect(() => {
     fetchPortalProfile(role)
       .then(setUser)
-      .catch(() => {
-        router.replace(`/${role}/login`);
+      .catch((err: any) => {
+        if (err instanceof SessionExpiredError || err?.isSessionExpired) {
+          router.replace(`/${role}/login`);
+        } else {
+          console.warn("Retaining active user session despite background profile failure:", err);
+        }
       })
       .finally(() => setLoading(false));
 
@@ -60,7 +65,33 @@ export function PortalDashboard({ role, children, maxWidth = 960 }: Props) {
         <div className={styles.orbB} aria-hidden />
         <PortalHeader role={role} />
         <main className={styles.layout} style={{ gridTemplateColumns: "1fr", placeItems: "center" }}>
-          <p style={{ color: "#8b9bb8" }}>Loading dashboard…</p>
+          {loading ? (
+            <p style={{ color: "#8b9bb8" }}>Loading dashboard…</p>
+          ) : (
+            <div style={{ textAlign: "center", padding: "2rem" }}>
+              <p style={{ color: "#ef4444", marginBottom: "1rem" }}>
+                Authentication service is temporarily unavailable.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoading(true);
+                  fetchPortalProfile(role)
+                    .then(setUser)
+                    .catch((err: any) => {
+                      if (err instanceof SessionExpiredError || err?.isSessionExpired) {
+                        router.replace(`/${role}/login`);
+                      }
+                    })
+                    .finally(() => setLoading(false));
+                }}
+                className={styles.submitBtn}
+                style={{ width: "auto", padding: "0.5rem 1.5rem" }}
+              >
+                Retry
+              </button>
+            </div>
+          )}
         </main>
       </div>
     );
