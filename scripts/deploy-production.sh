@@ -5,6 +5,11 @@
 # Production domain:  https://daantshaant.codemelodies.com
 # Candidate ports:    Next.js (3107), Orchestrator (8107),
 #                     Teeth Analyzer (8108), Diagnosis (8109)
+#
+# Runtime Architecture:
+#   - Python: Standard python3 -m venv (.venv) + pip editable installs + Uvicorn
+#   - Node.js: Next.js 14 SSR + npm ci (cached)
+#   - PM2: Process management (zero-downtime reloads)
 # ==============================================================================
 
 set -euo pipefail
@@ -56,6 +61,7 @@ echo "[DEPLOY] DentalTensor checkpoint verified ($(du -h "$MODEL_CHECKPOINT" | c
 # ------------------------------------------------------------------------------
 echo "[DEPLOY] Inspecting VPS system runtime prerequisites..."
 
+# Node.js & npm inspection
 if ! command -v node >/dev/null 2>&1; then
   echo "[ERROR] Node.js is not installed or not available in PATH on this VPS."
   echo "[ERROR] Deployment aborted. Next.js cannot run without Node.js."
@@ -72,25 +78,23 @@ NODE_VERSION=$(node --version)
 NPM_VERSION=$(npm --version)
 echo "[DEPLOY] Node runtime found: $NODE_VERSION, npm: $NPM_VERSION"
 
-# Locate uv package manager
-UV_BIN=""
-if command -v uv >/dev/null 2>&1; then
-  UV_BIN="uv"
-elif [ -f "$HOME/.cargo/bin/uv" ]; then
-  UV_BIN="$HOME/.cargo/bin/uv"
-elif [ -f "$HOME/.local/bin/uv" ]; then
-  UV_BIN="$HOME/.local/bin/uv"
-elif [ -f "/usr/local/bin/uv" ]; then
-  UV_BIN="/usr/local/bin/uv"
-else
-  echo "[ERROR] 'uv' package manager was not found on this VPS."
-  echo "[ERROR] Please install uv on the server (curl -LsSf https://astral.sh/uv/install.sh | sh) or add it to PATH."
+# Python 3 & venv inspection
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "[ERROR] python3 is not installed or not available in PATH on this VPS."
+  echo "[ERROR] Deployment aborted. DaantShaant backend requires Python 3.11+."
   exit 1
 fi
 
-UV_VERSION=$("$UV_BIN" --version)
-echo "[DEPLOY] Python package manager found: $UV_VERSION"
+PYTHON_VERSION=$(python3 --version 2>&1)
+echo "[DEPLOY] Python runtime found: $PYTHON_VERSION"
 
+if ! python3 -m venv --help >/dev/null 2>&1; then
+  echo "[ERROR] python3-venv module is not available on this VPS."
+  echo "[ERROR] Deployment aborted. Install python3-venv on the VPS (e.g. sudo apt install python3-venv or python3.<version>-venv)."
+  exit 1
+fi
+
+# PM2 inspection
 if ! command -v pm2 >/dev/null 2>&1; then
   echo "[ERROR] PM2 is not installed or not available in PATH on this VPS."
   echo "[ERROR] Deployment aborted. DaantShaant process management requires PM2."
@@ -138,34 +142,54 @@ compute_hash() {
 }
 
 # ------------------------------------------------------------------------------
-# 6. Python Backend Dependency Synchronization
+# 6. Python Backend Dependency Synchronization (Standard venv + pip)
 # ------------------------------------------------------------------------------
-sync_python_service() {
-  local name="$1"
-  local sdir="$2"
-  local cache_file="$CACHE_DIR/${name}-deps.sha256"
+PYTHON_CACHE_FILE="$CACHE_DIR/python-deps.sha256"
+PYTHON_HASH=$(compute_hash \
+  "$APP_DIR/packages/dantshaant_common/pyproject.toml" \
+  "$APP_DIR/services/diagnosis/pyproject.toml" \
+  "$APP_DIR/services/diagnosis/uv.lock" \
+  "$APP_DIR/services/teeth_analyzer/pyproject.toml" \
+  "$APP_DIR/services/teeth_analyzer/uv.lock" \
+  "$APP_DIR/orchestrator/pyproject.toml" \
+  "$APP_DIR/orchestrator/uv.lock" \
+)
 
-  local current_hash
-  current_hash=$(compute_hash "$sdir/pyproject.toml" "$sdir/uv.lock" "$APP_DIR/packages/dantshaant_common/pyproject.toml")
+CACHED_PYTHON_HASH=""
+if [ -f "$PYTHON_CACHE_FILE" ]; then
+  CACHED_PYTHON_HASH=$(cat "$PYTHON_CACHE_FILE")
+fi
 
-  local cached_hash=""
-  if [ -f "$cache_file" ]; then
-    cached_hash=$(cat "$cache_file")
+VENV_DIR="$APP_DIR/.venv"
+VENV_PYTHON="$VENV_DIR/bin/python"
+VENV_PIP="$VENV_DIR/bin/pip"
+
+if [ ! -d "$VENV_DIR" ] || [ ! -f "$VENV_PYTHON" ] || [ ! -f "$VENV_PIP" ] || [ "$PYTHON_HASH" != "$CACHED_PYTHON_HASH" ]; then
+  if [ ! -d "$VENV_DIR" ] || [ ! -f "$VENV_PYTHON" ]; then
+    echo "[DEPLOY] Creating production Python virtual environment (.venv)..."
+    python3 -m venv "$VENV_DIR"
   fi
 
-  if [ ! -d "$sdir/.venv" ] || [ "$current_hash" != "$cached_hash" ]; then
-    echo "[DEPLOY] Syncing Python dependencies for $name..."
-    (cd "$sdir" && "$UV_BIN" sync --frozen)
-    echo "$current_hash" > "$cache_file"
-    echo "[DEPLOY] $name dependencies synchronized."
-  else
-    echo "[DEPLOY] Python dependencies unchanged — skipping sync for $name"
-  fi
-}
+  echo "[DEPLOY] Upgrading pip in production virtual environment..."
+  "$VENV_PYTHON" -m pip install --upgrade pip
 
-sync_python_service "orchestrator" "$APP_DIR/orchestrator"
-sync_python_service "teeth-analyzer" "$APP_DIR/services/teeth_analyzer"
-sync_python_service "diagnosis" "$APP_DIR/services/diagnosis"
+  echo "[DEPLOY] Installing dantshaant_common..."
+  "$VENV_PIP" install -e "$APP_DIR/packages/dantshaant_common"
+
+  echo "[DEPLOY] Installing diagnosis service..."
+  "$VENV_PIP" install -e "$APP_DIR/services/diagnosis"
+
+  echo "[DEPLOY] Installing teeth_analyzer service..."
+  "$VENV_PIP" install -e "$APP_DIR/services/teeth_analyzer"
+
+  echo "[DEPLOY] Installing orchestrator service..."
+  "$VENV_PIP" install -e "$APP_DIR/orchestrator"
+
+  echo "$PYTHON_HASH" > "$PYTHON_CACHE_FILE"
+  echo "[DEPLOY] Python backend dependencies installed successfully."
+else
+  echo "[DEPLOY] Python dependencies unchanged — skipping pip install"
+fi
 
 # ------------------------------------------------------------------------------
 # 7. Frontend Dependency Synchronization & Build

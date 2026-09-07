@@ -10,16 +10,12 @@
 const fs = require('fs');
 const path = require('path');
 
-function resolveUvicorn(preferredRelPath, fallbackRelPath = './orchestrator/.venv/bin/uvicorn') {
-  const preferred = path.resolve(__dirname, preferredRelPath);
-  if (fs.existsSync(preferred)) {
-    return preferred;
+function resolvePython() {
+  const venvPython = path.resolve(__dirname, '.venv/bin/python');
+  if (fs.existsSync(venvPython)) {
+    return venvPython;
   }
-  const fallback = path.resolve(__dirname, fallbackRelPath);
-  if (fs.existsSync(fallback)) {
-    return fallback;
-  }
-  return preferredRelPath;
+  return './.venv/bin/python';
 }
 
 module.exports = {
@@ -42,8 +38,8 @@ module.exports = {
     {
       name: 'daantshaant-orchestrator',
       cwd: '.',
-      script: resolveUvicorn('./orchestrator/.venv/bin/uvicorn'),
-      args: 'orchestrator.main:app --app-dir orchestrator/src --host 127.0.0.1 --port 8107',
+      script: resolvePython(),
+      args: '-m uvicorn orchestrator.main:app --app-dir orchestrator/src --host 127.0.0.1 --port 8107',
       interpreter: 'none',
       instances: 1,
       autorestart: true,
@@ -59,8 +55,8 @@ module.exports = {
     {
       name: 'daantshaant-teeth-analyzer',
       cwd: '.',
-      script: resolveUvicorn('./services/teeth_analyzer/.venv/bin/uvicorn'),
-      args: 'teeth_analyzer.main:app --app-dir services/teeth_analyzer/src --host 127.0.0.1 --port 8108',
+      script: resolvePython(),
+      args: '-m uvicorn teeth_analyzer.main:app --app-dir services/teeth_analyzer/src --host 127.0.0.1 --port 8108',
       interpreter: 'none',
       instances: 1,
       autorestart: true,
@@ -74,8 +70,8 @@ module.exports = {
     {
       name: 'daantshaant-diagnosis',
       cwd: '.',
-      script: resolveUvicorn('./services/diagnosis/.venv/bin/uvicorn'),
-      args: 'diagnosis.main:app --app-dir services/diagnosis/src --host 127.0.0.1 --port 8109',
+      script: resolvePython(),
+      args: '-m uvicorn diagnosis.main:app --app-dir services/diagnosis/src --host 127.0.0.1 --port 8109',
       interpreter: 'none',
       instances: 1,
       autorestart: true,

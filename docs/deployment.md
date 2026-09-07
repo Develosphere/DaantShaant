@@ -76,23 +76,28 @@ Paste the complete output directly into the `DAANTSHAANT_VPS_KNOWN_HOSTS` secret
 
 ## 4. VPS Prerequisites
 
-Ensure the following tools are installed and available in `webadmin`'s PATH:
+The production VPS uses standard Linux toolchains. Ensure the following tools are installed and available in `webadmin`'s PATH:
 
-1. **Node.js (v18.x or v20.x LTS) & npm:**
+1. **Python 3.11+, `python3-venv`, and `pip`:**
+   ```bash
+   python3 --version
+   python3 -m venv --help
+   ```
+   *(Note: Astral `uv` is optional for local development and is **NOT** required on the production server. Production uses standard `python3 -m venv` + `pip`.)*
+2. **Node.js (v18.x or v20.x LTS) & npm:**
    ```bash
    node -v
    npm -v
    ```
-2. **PM2 Process Manager:**
+3. **PM2 Process Manager:**
    ```bash
    npm install -g pm2
    pm2 startup
    ```
-3. **Python (3.11+) and `uv`:**
+4. **Git & Apache2:**
    ```bash
-   curl -LsSf https://astral.sh/uv/install.sh | sh
-   source ~/.cargo/env
-   uv --version
+   git --version
+   apache2 -v
    ```
 
 ---
@@ -219,12 +224,12 @@ sudo systemctl reload apache2
 Every `git push origin main` or manual `workflow_dispatch` executes:
 
 1. **SSH Connection & Authenticated Handshake:** Connects using `DAANTSHAANT_VPS_SSH_KEY` without interactive prompts.
-2. **Repository Synchronization:** Clones on first run; fetches and hard-resets to `origin/main` on subsequent deploys (preserving `.env`, venvs, and `.deploy-cache`).
+2. **Repository Synchronization:** Clones on first run; fetches and hard-resets to `origin/main` on subsequent deploys (preserving `.env`, `.venv`, and `.deploy-cache`).
 3. **Environment & Checkpoint Validation:** Verifies `.env`, `apps/web/.env.production`, and `dentaltensor_nathan_asif_v1.pt`.
 4. **Port Safety Inspection:** `ss` checks ports `3107`, `8107`, `8108`, `8109` to guarantee no third-party processes are disturbed.
 5. **SHA-256 Dependency Caching:**
    - Evaluates `apps/web/package.json` + `apps/web/package-lock.json` -> executes `npm ci` only if changed.
-   - Evaluates Python `pyproject.toml` + `uv.lock` for each service -> executes `uv sync --frozen` only if changed.
+   - Evaluates Python `pyproject.toml` and lockfile metadata -> executes `pip install -e` in persistent `$APP_DIR/.venv` only if changed.
 6. **Production Next.js Build:** Executes `npm run build` in `apps/web`.
 7. **PM2 Zero-Downtime Reload:** `pm2 startOrReload ecosystem.config.cjs --update-env && pm2 save`.
 8. **Health Check Probing:** 10 bounded retries across all 4 microservice endpoints.
