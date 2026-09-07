@@ -1,7 +1,7 @@
 # DaantShaant Context
 
 > Current implementation state. Read this first in every engineering chat.
-> Last updated: Phase 12A Final — DaantShaant Central Dentist Reconstruction & Complete Hugging Face Removal, September 2026.
+> Last updated: Phase 13 — Production Process Architecture Migration (PM2 for Next.js Only + systemd --user for FastAPI Services), September 2026.
 
 ## Product
 
@@ -317,6 +317,7 @@ Phase 10.1 implemented full bilingual capabilities, light/dark theme support, an
 | 12C | Final Chat Identity Cleanup (DaantShaant Public Identity Freeze) | COMPLETE |
 | 12D | Chat-Only LLM Benchmark + Provider Freeze (Qwen3.7-Flash Non-Thinking Primary) | COMPLETE |
 | 12E | Qwen Connectivity & Response Diagnostic Tooling | DIAGNOSTIC TOOLING READY — PENDING NATHAN LIVE RESULTS |
+| 13 | Production Process Architecture Migration (PM2 Next.js Only + systemd --user Python Services) | COMPLETE |
 
 ## Phase 10.7 Summary — Real Data-Driven Patient + Dentist Dashboards
 
@@ -843,5 +844,30 @@ Phase 10.1 implemented full bilingual capabilities, light/dark theme support, an
   - Orchestrator monorepo suite: 440 passed, 1 skipped, 0 failed.
   - Live smoke test script created: `scripts/test_chat_semantic_integrity.py`.
 
+## Phase 13 Summary — Production Process Architecture Migration (PM2 Next.js Only + systemd --user Python Microservices)
 
-
+- **Implementation Status**:
+  - PHASE 13 COMPLETE — PROCESS MANAGER MIGRATION READY FOR MANUAL REVIEW AND DEPLOYMENT
+- **Process Architecture Split**:
+  - **PM2**: Manages Next.js frontend (`daantshaant-web`) ONLY on `127.0.0.1:3107`.
+  - **systemd (`--user`)**: Manages all FastAPI / Uvicorn Python microservices on local loopback:
+    - `daantshaant-orchestrator.service` (`127.0.0.1:8107`)
+    - `daantshaant-teeth-analyzer.service` (`127.0.0.1:8108`)
+    - `daantshaant-diagnosis.service` (`127.0.0.1:8109`)
+  - **Apache 2**: Public SSL reverse proxy terminates port 443 and proxies `/` to Next.js (:3107) and `/backend/` to Orchestrator (:8107).
+- **User-Level systemd Compliance**:
+  - Service unit files created at `deploy/systemd/` and deployed to `~/.config/systemd/user/`.
+  - Allows `webadmin` in non-interactive CI/CD deployment to manage, enable, and restart services without `sudo`.
+  - Requires one-time setup: `sudo loginctl enable-linger webadmin`.
+  - Deployment verifies linger availability via `systemctl --user list-units` with `XDG_RUNTIME_DIR=/run/user/$(id -u)` and fails clearly if unavailable.
+- **PM2 Configuration & Legacy Migration**:
+  - `ecosystem.config.cjs` updated to retain ONLY `daantshaant-web`.
+  - `deploy-production.sh` safely stops, deletes, and saves ONLY legacy DaantShaant Python processes from PM2 (`daantshaant-orchestrator`, `daantshaant-teeth-analyzer`, `daantshaant-diagnosis`) before starting systemd services.
+  - Unrelated VPS applications running in PM2 are never touched. `pm2 delete all` and `pm2 kill` are strictly prohibited.
+- **Port Safety Checker Overhaul (`scripts/check-production-ports.sh`)**:
+  - Port 3107: Safe when free OR owned by `daantshaant-web` or its descendant processes (resolves the PM2 -> npm -> next-server child process false positive via process-tree ancestor tracking).
+  - Port 8107: Safe when free OR owned by active `daantshaant-orchestrator.service` (or legacy PM2 process awaiting migration).
+  - Port 8108: Safe when free OR owned by active `daantshaant-teeth-analyzer.service` (or legacy PM2 process awaiting migration).
+  - Port 8109: Safe when free OR owned by active `daantshaant-diagnosis.service` (or legacy PM2 process awaiting migration).
+- **Isolated Failure Diagnostics**:
+  - Health check failure runs isolated diagnostics: `pm2 describe`/`logs` for frontend; `systemctl --user status` and `journalctl --user-unit` for failing Python microservices.

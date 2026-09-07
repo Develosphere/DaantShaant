@@ -1,0 +1,18 @@
+[Unit]
+Description=DaantShaant Diagnosis Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/html/daantshaant.codemelodies.com
+EnvironmentFile=/var/www/html/daantshaant.codemelodies.com/.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/var/www/html/daantshaant.codemelodies.com/.venv/bin/python -m uvicorn diagnosis.main:app --app-dir services/diagnosis/src --host 127.0.0.1 --port 8109
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+KillSignal=SIGTERM
+MemoryMax=512M
+
+[Install]
+WantedBy=default.target

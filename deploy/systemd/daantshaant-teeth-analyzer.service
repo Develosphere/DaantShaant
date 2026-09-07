@@ -1,0 +1,18 @@
+[Unit]
+Description=DaantShaant Teeth Analyzer Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/html/daantshaant.codemelodies.com
+EnvironmentFile=/var/www/html/daantshaant.codemelodies.com/.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/var/www/html/daantshaant.codemelodies.com/.venv/bin/python -m uvicorn teeth_analyzer.main:app --app-dir services/teeth_analyzer/src --host 127.0.0.1 --port 8108
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+KillSignal=SIGTERM
+MemoryMax=1536M
+
+[Install]
+WantedBy=default.target

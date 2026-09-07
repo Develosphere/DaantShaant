@@ -49,6 +49,9 @@ jobs:
           ssh -i "$KEY_PATH" -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "APP_DIR='$APP_DIR' bash -s" << 'EOF'
             set -euo pipefail
 
+            export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+            export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"
+
             REPO_URL="https://github.com/Develosphere/DaantShaant.git"
 
             echo "[DEPLOY] Target application directory: $APP_DIR"

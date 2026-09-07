@@ -1,0 +1,18 @@
+[Unit]
+Description=DaantShaant Orchestrator Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/html/daantshaant.codemelodies.com
+EnvironmentFile=/var/www/html/daantshaant.codemelodies.com/.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/var/www/html/daantshaant.codemelodies.com/.venv/bin/python -m uvicorn orchestrator.main:app --app-dir orchestrator/src --host 127.0.0.1 --port 8107
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+KillSignal=SIGTERM
+MemoryMax=1G
+
+[Install]
+WantedBy=default.target

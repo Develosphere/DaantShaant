@@ -7,9 +7,13 @@
 #                     Teeth Analyzer (8108), Diagnosis (8109)
 #
 # Runtime Architecture:
+#   - Frontend (Next.js): PM2 (daantshaant-web ONLY) on 127.0.0.1:3107
+#   - Backend Python Services: systemd --user services
+#       * daantshaant-orchestrator.service   (127.0.0.1:8107)
+#       * daantshaant-teeth-analyzer.service (127.0.0.1:8108)
+#       * daantshaant-diagnosis.service      (127.0.0.1:8109)
 #   - Python: Standard python3 -m venv (.venv) + pip editable installs + Uvicorn
 #   - Node.js: Next.js 14 SSR + npm ci (cached)
-#   - PM2: Process management (zero-downtime reloads)
 # ==============================================================================
 
 set -euo pipefail
@@ -21,6 +25,7 @@ cd "$APP_DIR"
 echo "[DEPLOY] ======================================================"
 echo "[DEPLOY] Starting DaantShaant Production VPS Deployment"
 echo "[DEPLOY] Working directory: $APP_DIR"
+echo "[DEPLOY] User: $(whoami) (UID: $(id -u))"
 echo "[DEPLOY] ======================================================"
 
 # ------------------------------------------------------------------------------
@@ -90,16 +95,42 @@ echo "[DEPLOY] Python runtime found: $PYTHON_VERSION"
 
 if ! python3 -m venv --help >/dev/null 2>&1; then
   echo "[ERROR] python3-venv module is not available on this VPS."
-  echo "[ERROR] Deployment aborted. Install python3-venv on the VPS (e.g. sudo apt install python3-venv or python3.<version>-venv)."
+  echo "[ERROR] Deployment aborted. Install python3-venv on the VPS (e.g. sudo apt install python3-venv)."
   exit 1
 fi
 
-# PM2 inspection
+# PM2 inspection (used for daantshaant-web frontend ONLY)
 if ! command -v pm2 >/dev/null 2>&1; then
   echo "[ERROR] PM2 is not installed or not available in PATH on this VPS."
-  echo "[ERROR] Deployment aborted. DaantShaant process management requires PM2."
+  echo "[ERROR] Deployment aborted. DaantShaant frontend process management requires PM2."
   exit 1
 fi
+
+# systemd user manager verification
+echo "[DEPLOY] Inspecting user systemd environment..."
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+if [ -d "$XDG_RUNTIME_DIR" ] && [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+  if [ -S "$XDG_RUNTIME_DIR/bus" ]; then
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"
+  fi
+fi
+
+if ! command -v systemctl >/dev/null 2>&1; then
+  echo "[ERROR] systemctl is not available in PATH on this VPS."
+  echo "[ERROR] Deployment aborted. DaantShaant Python microservices require systemd."
+  exit 1
+fi
+
+if ! systemctl --user list-units >/dev/null 2>&1; then
+  echo "[ERROR] systemd user manager is not accessible for user $(whoami) (UID: $(id -u))."
+  echo "[ERROR] Possible causes: user lingering is not enabled or XDG_RUNTIME_DIR is not mounted."
+  echo "[ERROR] To enable lingering on the VPS, Nathan must execute once:"
+  echo "[ERROR]   sudo loginctl enable-linger $(whoami)"
+  echo "[ERROR] and verify that /run/user/$(id -u) is active."
+  echo "[ERROR] Deployment aborted."
+  exit 1
+fi
+echo "[DEPLOY] systemd user manager verified."
 
 # ------------------------------------------------------------------------------
 # 4. Port Safety Verification
@@ -217,15 +248,62 @@ echo "[DEPLOY] Building Next.js production application..."
 echo "[DEPLOY] Next.js production build complete."
 
 # ------------------------------------------------------------------------------
-# 8. PM2 Process Management
+# 8. Systemd User Services Installation & Daemon Reload
 # ------------------------------------------------------------------------------
-echo "[DEPLOY] Restarting DaantShaant PM2 services..."
-pm2 startOrReload ecosystem.config.cjs --update-env
-pm2 save
-echo "[DEPLOY] PM2 configuration reloaded and state saved."
+SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
+mkdir -p "$SYSTEMD_USER_DIR"
+
+echo "[DEPLOY] Installing DaantShaant systemd service units to $SYSTEMD_USER_DIR..."
+cp "$APP_DIR/deploy/systemd/daantshaant-orchestrator.service" "$SYSTEMD_USER_DIR/"
+cp "$APP_DIR/deploy/systemd/daantshaant-teeth-analyzer.service" "$SYSTEMD_USER_DIR/"
+cp "$APP_DIR/deploy/systemd/daantshaant-diagnosis.service" "$SYSTEMD_USER_DIR/"
+
+echo "[DEPLOY] Reloading systemd user daemon..."
+systemctl --user daemon-reload
 
 # ------------------------------------------------------------------------------
-# 9. Health Checks
+# 9. Migrate Legacy Python Processes off PM2 (Before starting systemd services)
+# ------------------------------------------------------------------------------
+if command -v pm2 >/dev/null 2>&1; then
+  echo "[DEPLOY] Inspecting PM2 for legacy Python processes to migrate..."
+  LEGACY_PM2_MIGRATED=0
+  for legacy_proc in daantshaant-orchestrator daantshaant-teeth-analyzer daantshaant-diagnosis; do
+    if pm2 describe "$legacy_proc" >/dev/null 2>&1; then
+      echo "[DEPLOY] Stopping and removing legacy PM2 process: $legacy_proc..."
+      pm2 stop "$legacy_proc" >/dev/null 2>&1 || true
+      pm2 delete "$legacy_proc" >/dev/null 2>&1 || true
+      LEGACY_PM2_MIGRATED=1
+    fi
+  done
+  if [ "$LEGACY_PM2_MIGRATED" -eq 1 ]; then
+    echo "[DEPLOY] Saving PM2 state after removing legacy Python processes..."
+    pm2 save
+  fi
+fi
+
+# ------------------------------------------------------------------------------
+# 10. Enable and Restart Systemd Python Microservices
+# ------------------------------------------------------------------------------
+echo "[DEPLOY] Enabling DaantShaant systemd user services..."
+systemctl --user enable daantshaant-orchestrator.service
+systemctl --user enable daantshaant-teeth-analyzer.service
+systemctl --user enable daantshaant-diagnosis.service
+
+echo "[DEPLOY] Restarting DaantShaant systemd user services..."
+systemctl --user restart daantshaant-orchestrator.service
+systemctl --user restart daantshaant-teeth-analyzer.service
+systemctl --user restart daantshaant-diagnosis.service
+
+# ------------------------------------------------------------------------------
+# 11. PM2 Process Management (Frontend Only)
+# ------------------------------------------------------------------------------
+echo "[DEPLOY] Reloading PM2 frontend service (daantshaant-web only)..."
+pm2 startOrReload ecosystem.config.cjs --only daantshaant-web --update-env
+pm2 save
+echo "[DEPLOY] PM2 frontend configuration reloaded and state saved."
+
+# ------------------------------------------------------------------------------
+# 12. Health Checks
 # ------------------------------------------------------------------------------
 echo "[DEPLOY] Health checks starting..."
 
@@ -251,32 +329,58 @@ check_endpoint() {
   return 1
 }
 
-HEALTH_FAILED=0
+FRONTEND_HEALTH=0
+ORCHESTRATOR_HEALTH=0
+TEETH_ANALYZER_HEALTH=0
+DIAGNOSIS_HEALTH=0
 
-check_endpoint "Orchestrator" "http://127.0.0.1:8107/health" || HEALTH_FAILED=1
-check_endpoint "Teeth Analyzer" "http://127.0.0.1:8108/health" || HEALTH_FAILED=1
-check_endpoint "Diagnosis" "http://127.0.0.1:8109/health" || HEALTH_FAILED=1
-check_endpoint "Frontend (Next.js)" "http://127.0.0.1:3107/" || HEALTH_FAILED=1
+check_endpoint "Orchestrator" "http://127.0.0.1:8107/health" || ORCHESTRATOR_HEALTH=1
+check_endpoint "Teeth Analyzer" "http://127.0.0.1:8108/health" || TEETH_ANALYZER_HEALTH=1
+check_endpoint "Diagnosis" "http://127.0.0.1:8109/health" || DIAGNOSIS_HEALTH=1
+check_endpoint "Frontend (Next.js)" "http://127.0.0.1:3107/" || FRONTEND_HEALTH=1
+
+HEALTH_FAILED=$((FRONTEND_HEALTH + ORCHESTRATOR_HEALTH + TEETH_ANALYZER_HEALTH + DIAGNOSIS_HEALTH))
 
 if [ "$HEALTH_FAILED" -ne 0 ]; then
   echo ""
   echo "[ERROR] One or more DaantShaant services failed health checks."
-  echo "[ERROR] Dumping PM2 status:"
-  pm2 status
-  echo ""
-  echo "[ERROR] Dumping recent logs for DaantShaant services:"
-  for p in daantshaant-web daantshaant-orchestrator daantshaant-teeth-analyzer daantshaant-diagnosis; do
-    echo "--- Last 30 lines for $p ---"
-    pm2 logs "$p" --lines 30 --nostream || true
-  done
+
+  if [ "$FRONTEND_HEALTH" -ne 0 ]; then
+    echo ""
+    echo "[DIAGNOSTIC] === DaantShaant Frontend (Next.js) Diagnostics ==="
+    pm2 describe daantshaant-web || true
+    pm2 logs daantshaant-web --lines 40 --nostream || true
+  fi
+
+  if [ "$ORCHESTRATOR_HEALTH" -ne 0 ]; then
+    echo ""
+    echo "[DIAGNOSTIC] === daantshaant-orchestrator Service Diagnostics ==="
+    systemctl --user status daantshaant-orchestrator.service --no-pager || true
+    journalctl --user-unit daantshaant-orchestrator.service -n 40 --no-pager || true
+  fi
+
+  if [ "$TEETH_ANALYZER_HEALTH" -ne 0 ]; then
+    echo ""
+    echo "[DIAGNOSTIC] === daantshaant-teeth-analyzer Service Diagnostics ==="
+    systemctl --user status daantshaant-teeth-analyzer.service --no-pager || true
+    journalctl --user-unit daantshaant-teeth-analyzer.service -n 40 --no-pager || true
+  fi
+
+  if [ "$DIAGNOSIS_HEALTH" -ne 0 ]; then
+    echo ""
+    echo "[DIAGNOSTIC] === daantshaant-diagnosis Service Diagnostics ==="
+    systemctl --user status daantshaant-diagnosis.service --no-pager || true
+    journalctl --user-unit daantshaant-diagnosis.service -n 40 --no-pager || true
+  fi
+
   exit 1
 fi
 
 echo "[DEPLOY] ======================================================"
 echo "[DEPLOY] Deployment successful!"
-echo "[DEPLOY] Next.js:          http://127.0.0.1:3107"
-echo "[DEPLOY] Orchestrator:     http://127.0.0.1:8107"
-echo "[DEPLOY] Teeth Analyzer:   http://127.0.0.1:8108"
-echo "[DEPLOY] Diagnosis:        http://127.0.0.1:8109"
-echo "[DEPLOY] Public URL:       https://daantshaant.codemelodies.com"
+echo "[DEPLOY] Next.js (PM2):               http://127.0.0.1:3107"
+echo "[DEPLOY] Orchestrator (systemd):      http://127.0.0.1:8107"
+echo "[DEPLOY] Teeth Analyzer (systemd):    http://127.0.0.1:8108"
+echo "[DEPLOY] Diagnosis (systemd):         http://127.0.0.1:8109"
+echo "[DEPLOY] Public URL:                  https://daantshaant.codemelodies.com"
 echo "[DEPLOY] ======================================================"
