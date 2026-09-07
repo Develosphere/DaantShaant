@@ -60,7 +60,7 @@ module.exports = {
       interpreter: 'none',
       instances: 1,
       autorestart: true,
-      max_memory_restart: '1.5G',
+      max_memory_restart: '1536M',
       env: {
         TEETH_ANALYZER_HOST: '127.0.0.1',
         TEETH_ANALYZER_PORT: '8108',
